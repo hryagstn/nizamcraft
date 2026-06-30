@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameRenderer } from './render/renderer.js?v=3';
 import { World } from './world/world.js?v=3';
 import { Player } from './player/player.js?v=3';
-import { Zombie, Creeper, Skeleton, Arrow, IronGolem } from './entities/mob.js?v=3';
+import { Zombie, Creeper, Skeleton, Arrow, IronGolem, SnowGolem, Chicken, Pig, Cow } from './entities/mob.js?v=3';
 import { PrimedTNT } from './entities/tnt.js?v=3';
 
 // Initialize Game State Object (shared with entity classes)
@@ -277,7 +277,7 @@ function selectHotbarSlot(index) {
     const activeSlot = hotbarSlots[index];
     activeSlot.classList.add('active');
     
-    const blockList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky'];
+    const blockList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'spawn_irongolem', 'spawn_snowgolem'];
     selectedBlockType = blockList[index];
     if (player && typeof player.updateHeldItem === 'function') {
         player.updateHeldItem(selectedBlockType);
@@ -310,7 +310,8 @@ window.addEventListener('keydown', (e) => {
         const keyMap = {
             '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6, '8': 7, '9': 8, '0': 9,
             '-': 10, '=': 11, 'l': 12, 'L': 12, 'q': 13, 'Q': 13,
-            'y': 14, 'Y': 14, 'u': 15, 'U': 15, 'i': 16, 'I': 16
+            'y': 14, 'Y': 14, 'u': 15, 'U': 15, 'i': 16, 'I': 16,
+            'o': 17, 'O': 17, 'p': 18, 'P': 18, 'g': 19, 'G': 19, 'h': 20, 'H': 20
         };
         if (keyMap[e.key] !== undefined) {
             selectHotbarSlot(keyMap[e.key]);
@@ -353,6 +354,94 @@ window.addEventListener('wheel', (e) => {
 }, { passive: true });
 
 
+// Golem Spawning & Seed Planting Helpers
+let activePlantTarget = null;
+const plantButtonContainer = document.getElementById('plant-button-container');
+const plantBtn = document.getElementById('plant-btn');
+
+function spawnGolemParticles(x, y, z, color) {
+    const count = 16;
+    const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    const particlesList = [];
+    
+    for (let i = 0; i < count; i++) {
+        const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(
+            x + (Math.random() - 0.5) * 0.8,
+            y + (Math.random() - 0.5) * 1.2,
+            z + (Math.random() - 0.5) * 0.8
+        );
+        
+        const speed = 2.0 + Math.random() * 2.5;
+        const velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 2.0,
+            (Math.random() * 2.0 + 1.0),
+            (Math.random() - 0.5) * 2.0
+        ).normalize().multiplyScalar(speed);
+        
+        scene.add(mesh);
+        particlesList.push({
+            mesh: mesh,
+            velocity: velocity,
+            life: 0.4 + Math.random() * 0.4,
+            elapsed: 0,
+            material: mat
+        });
+    }
+    game.particles.push(...particlesList);
+}
+
+function handleGolemSpawn(type, x, y, z) {
+    if (type === 'spawn_irongolem') {
+        const golem = new IronGolem(x, y + 0.5, z, scene, world, game);
+        game.mobs.push(golem);
+        sounds.playPlaceSound();
+        spawnGolemParticles(x, y + 0.5, z, 0xcccccc);
+        game.showNotification('Iron Golem Berhasil Dispawn! 🦾🛡️');
+        return true;
+    } else if (type === 'spawn_snowgolem') {
+        const golem = new SnowGolem(x, y + 0.5, z, scene, world, game);
+        game.mobs.push(golem);
+        sounds.playPlaceSound();
+        spawnGolemParticles(x, y + 0.5, z, 0xffffff);
+        game.showNotification('Snow Golem Berhasil Dispawn! ⛄❄️');
+        return true;
+    }
+    return false;
+}
+
+function updatePlantButtonVisibility(targetPos) {
+    if (!plantButtonContainer) return;
+    if (targetPos) {
+        activePlantTarget = targetPos;
+        plantButtonContainer.classList.add('show');
+    } else {
+        activePlantTarget = null;
+        plantButtonContainer.classList.remove('show');
+    }
+}
+
+function plantSeed() {
+    if (!activePlantTarget) return;
+    const { x, y, z } = activePlantTarget;
+    // Add crop block on top of the farmland block
+    world.addBlock(x, y + 1, z, 'crop');
+    game.showNotification('Benih ditanam! 🌱');
+}
+
+if (plantBtn) {
+    plantBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        plantSeed();
+    });
+    plantBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        plantSeed();
+    });
+}
+
+
 
 // 7. Raycasting for Dig & Build (Block Interaction) and Combat (Mob Attack)
 const raycaster = new THREE.Raycaster();
@@ -364,6 +453,7 @@ function updateTargeting() {
     // Only update highlight when playing (controls locked or touch active)
     if (!player.controls.isLocked && !player.isTouch) {
         world.highlightBox.visible = false;
+        updatePlantButtonVisibility(null);
         return null;
     }
 
@@ -402,6 +492,7 @@ function updateTargeting() {
             }
             if (targetedMob) {
                 world.highlightBox.visible = false; // Hide block outline when aiming at mob
+                updatePlantButtonVisibility(null);
                 return { type: 'mob', mob: targetedMob, intersect: closestMob };
             }
         }
@@ -411,9 +502,24 @@ function updateTargeting() {
     if (closestBlock && closestBlock.distance < 6.0) {
         const intersect = closestBlock;
         const targetPos = world.updateHighlight(intersect);
+        
+        // Contextual Farmland check
+        if (targetPos) {
+            const targetedBlockType = world.getBlockAt(targetPos.x, targetPos.y, targetPos.z);
+            if (targetedBlockType === 'farmland') {
+                const blockAbove = world.getBlockAt(targetPos.x, targetPos.y + 1, targetPos.z);
+                if (!blockAbove) {
+                    updatePlantButtonVisibility(targetPos);
+                    return { type: 'block', intersect, targetPos };
+                }
+            }
+        }
+        
+        updatePlantButtonVisibility(null);
         return { type: 'block', intersect, targetPos };
     } else {
         world.highlightBox.visible = false;
+        updatePlantButtonVisibility(null);
         return null;
     }
 }
@@ -615,10 +721,13 @@ window.addEventListener('mousedown', (e) => {
             }
 
             let blockToPlace = selectedBlockType;
-            if (blockToPlace === 'water') blockToPlace = 'water_source';
-            if (blockToPlace === 'lava') blockToPlace = 'lava_source';
-
-            world.addBlock(buildX, buildY, buildZ, blockToPlace);
+            if (blockToPlace === 'spawn_irongolem' || blockToPlace === 'spawn_snowgolem') {
+                handleGolemSpawn(blockToPlace, buildX, buildY, buildZ);
+            } else {
+                if (blockToPlace === 'water') blockToPlace = 'water_source';
+                if (blockToPlace === 'lava') blockToPlace = 'lava_source';
+                world.addBlock(buildX, buildY, buildZ, blockToPlace);
+            }
         }
     }
 });
@@ -699,10 +808,15 @@ if (mobileBuildBtn) {
 
             if (!(buildX === pX && buildZ === pZ && buildY >= pYMin && buildY <= pYMax)) {
                 let blockToPlace = selectedBlockType;
-                if (blockToPlace === 'water') blockToPlace = 'water_source';
-                if (blockToPlace === 'lava') blockToPlace = 'lava_source';
+                if (blockToPlace === 'spawn_irongolem' || blockToPlace === 'spawn_snowgolem') {
+                    handleGolemSpawn(blockToPlace, buildX, buildY, buildZ);
+                    built = true;
+                } else {
+                    if (blockToPlace === 'water') blockToPlace = 'water_source';
+                    if (blockToPlace === 'lava') blockToPlace = 'lava_source';
 
-                built = world.addBlock(buildX, buildY, buildZ, blockToPlace);
+                    built = world.addBlock(buildX, buildY, buildZ, blockToPlace);
+                }
             }
         }
         if (!built) {
@@ -735,6 +849,10 @@ function spawnMob(type) {
         else if (type === 'creeper') mobInstance = new Creeper(x, y + 1.2, z, scene, world, game);
         else if (type === 'skeleton') mobInstance = new Skeleton(x, y + 1.2, z, scene, world, game);
         else if (type === 'irongolem') mobInstance = new IronGolem(x, y + 1.5, z, scene, world, game);
+        else if (type === 'snowgolem') mobInstance = new SnowGolem(x, y + 1.2, z, scene, world, game);
+        else if (type === 'chicken') mobInstance = new Chicken(x, y + 1.0, z, scene, world, game);
+        else if (type === 'pig') mobInstance = new Pig(x, y + 1.1, z, scene, world, game);
+        else if (type === 'cow') mobInstance = new Cow(x, y + 1.2, z, scene, world, game);
         
         if (mobInstance) {
             game.mobs.push(mobInstance);
@@ -742,23 +860,34 @@ function spawnMob(type) {
     }
 }
 
-// Spawn initial mobs around the world
+// Spawn initial mobs and passive animals around the world
+for (let i = 0; i < 4; i++) {
+    const hostileTypes = ['zombie', 'creeper', 'skeleton'];
+    spawnMob(hostileTypes[i % hostileTypes.length]);
+}
 for (let i = 0; i < 6; i++) {
-    const types = ['zombie', 'creeper', 'skeleton'];
-    spawnMob(types[i % types.length]);
+    const animalTypes = ['chicken', 'pig', 'cow'];
+    spawnMob(animalTypes[i % animalTypes.length]);
 }
 
-// Periodically check and spawn mobs to populate the world (every 10 seconds)
+// Periodically check and spawn mobs to populate the world (every 8 seconds)
+// Increased mob limit to 15 to allow a lively mix of hostiles and peaceful animals
 setInterval(() => {
-    if (player.controls.isLocked && game.mobs.length < 8) {
-        if (Math.random() < 0.08) {
+    if (player.controls.isLocked && game.mobs.length < 15) {
+        const rand = Math.random();
+        if (rand < 0.05) {
             spawnMob('irongolem');
+        } else if (rand < 0.10) {
+            spawnMob('snowgolem');
+        } else if (rand < 0.40) {
+            const animalTypes = ['chicken', 'pig', 'cow'];
+            spawnMob(animalTypes[Math.floor(Math.random() * animalTypes.length)]);
         } else {
-            const types = ['zombie', 'creeper', 'skeleton'];
-            spawnMob(types[Math.floor(Math.random() * types.length)]);
+            const hostileTypes = ['zombie', 'creeper', 'skeleton'];
+            spawnMob(hostileTypes[Math.floor(Math.random() * hostileTypes.length)]);
         }
     }
-}, 10000);
+}, 8000);
 
 
 // 9. HUD Health UI Updater

@@ -2,10 +2,16 @@
 
 NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Game ini dikembangkan menggunakan Three.js dan berjalan langsung di web browser Anda tanpa memerlukan instalasi aplikasi tambahan. Gali, bangun, dan ciptakan dunia impian Anda!
 
+**Demo Live:** [https://nizamcraft.wanohdigital.biz.id](https://nizamcraft.wanohdigital.biz.id)
+
 ## Fitur Utama
 
 - **Eksplorasi Dunia 3D**: Jelajahi dunia voxel tak terbatas secara first-person (sudut pandang orang pertama).
 - **Interaksi Block Dinamis**: Pasang dan gali berbagai jenis block sesuka Anda.
+- **Golem Spawning via Hotbar**: Tambahkan slot hotbar baru untuk menelurkan (spawn) **Iron Golem** dan **Snow Golem** secara langsung menggunakan telur spawn visual yang realistis, lengkap dengan partikel spawn blocky kustom dan notifikasi.
+- **Block Magma**: Block magma vulkanik bersinar yang memberikan efek kerusakan (damage over time) sebesar 6 HP setiap 500ms saat pemain berdiri di atasnya, disertai dengan efek visual asap pembakaran.
+- **Hewan-Hewan Lucu & Sistem Pemulihan HP**: Hewan-hewan pasif yang menggemaskan (**Chicken**, **Pig**, **Cow**) yang berkeliaran damai di dunia. Mengalahkan mereka akan memulihkan HP pemain (Chicken: +15 HP, Pig: +25 HP, Cow: +35 HP) disertai efek visual kilatan healing hijau premium di layar.
+- **Tombol Tanam Kontekstual & Pertumbuhan Tanaman**: Tombol melayang bertema glassmorphic transparan "Tanam Benih (P)" yang muncul secara kontekstual saat mengarahkan pandangan ke block Ladang (Farmland). Benih tanaman gandum yang ditanam akan tumbuh secara bertahap dan matang dalam waktu 5 detik, ditandai dengan letupan partikel pertumbuhan hijau segar.
 - **Block TNT & Reaksi Berantai**: TNT dapat dinyalakan baik dengan dipukul (klik kiri/gali) maupun diinteraksi (klik kanan/pasang). Ledakan TNT juga memicu reaksi berantai pada block TNT di dekatnya dengan delay acak yang dinamis.
 - **Obsidian Hardness**: Block Obsidian didesain sangat keras dan membutuhkan **8 kali pukulan** untuk dihancurkan, disertai indikator progres tambang, partikel hancur, dan efek suara ketukan.
 - **Optimalisasi Aliran Lava & Cairan**: Batas rendering instanced mesh untuk Lava ditingkatkan hingga **15.000 block** untuk mencegah hilangnya visual (invisible block) saat lava mengalir luas di bawah tanah atau permukaan.
@@ -26,7 +32,8 @@ NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Gam
 - **Melompat**: Tombol `Spasi`
 - **Gali Block / Serang**: Klik Kiri Mouse
 - **Pasang Block**: Klik Kanan Mouse
-- **Pilih Jenis Block/Item**: Tombol `1` - `9`, `0`, `-`, `=`, `L` (Lava), `Q` (Quartz), `B` (Bow)
+- **Pilih Jenis Block/Item**: Tombol `1` - `9`, `0`, `-`, `=`, `L` (Lava), `Q` (Quartz), `B` (Bow), `O` (Magma), `P` (Crop/Tanam), `G` (Spawn Iron Golem), `H` (Spawn Snow Golem)
+- **Shortcut Kontekstual Tanam**: Tombol `P` saat membidik block Ladang (Farmland) yang kosong di atasnya
 - **Respawn (Kembali ke Spawn)**: Tombol `R`
 - **Regenerasi Dunia**: Tombol `Backspace` (mengatur ulang seluruh peta)
 

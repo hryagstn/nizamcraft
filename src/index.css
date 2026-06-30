@@ -401,6 +401,76 @@ canvas {
 .preview-sand { background-color: #e5cca4; }
 .preview-farmland { background-color: #4c321d; }
 .preview-lucky { background-color: #ffb703; }
+.preview-magma { background: radial-gradient(circle, #ff5500 20%, #7a0000 80%); }
+.preview-crop { background: linear-gradient(135deg, #aacc00, #2d6a4f); }
+.preview-spawn_irongolem { background: radial-gradient(circle at 30% 30%, #ff3333 15%, transparent 20%), radial-gradient(circle at 70% 70%, #ff3333 15%, transparent 20%), #cccccc; }
+.preview-spawn_snowgolem { background: radial-gradient(circle at 30% 70%, #ff7700 15%, transparent 20%), radial-gradient(circle at 70% 30%, #ff7700 15%, transparent 20%), #fbfbfb; }
+
+/* Floating Plant Button Styling */
+#plant-button-container {
+    position: absolute;
+    bottom: 165px; /* Above the health bar container */
+    left: 50%;
+    transform: translateX(-50%) scale(0.9);
+    z-index: 10;
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+#plant-button-container.show {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+    pointer-events: auto;
+}
+
+.glass-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16, 42, 24, 0.65); /* Vibrant dark green glass */
+    border: 1.5px solid rgba(46, 117, 89, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 8px 20px;
+    border-radius: 20px;
+    color: #e0fbf1;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 8px 32px rgba(0, 255, 128, 0.15), 
+                inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    transition: all 0.2s ease;
+    animation: breathing-glow 2.5s infinite alternate;
+}
+
+.glass-btn:hover {
+    background: rgba(22, 60, 35, 0.85);
+    border-color: rgba(57, 181, 126, 0.9);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(0, 255, 128, 0.25), 
+                inset 0 1px 1px rgba(255, 255, 255, 0.3);
+}
+
+.glass-btn:active {
+    transform: translateY(1px);
+}
+
+.plant-icon {
+    font-size: 1.15rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 255, 128, 0.4));
+}
+
+@keyframes breathing-glow {
+    0% {
+        box-shadow: 0 6px 20px rgba(0, 255, 128, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    }
+    100% {
+        box-shadow: 0 10px 30px rgba(0, 255, 128, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    }
+}
+
 .preview-bow {
     font-size: 1.2rem;
     display: flex;

@@ -977,3 +977,443 @@ export class IronGolem extends Mob {
         }
     }
 }
+
+// 5. SNOW GOLEM
+export class SnowGolem extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('snowgolem', x, y, z, scene, world, game);
+        this.hp = 150;
+        this.maxHp = 150;
+        this.width = 0.6;
+        this.height = 1.8;
+        this.speed = 1.5;
+        this.shootCooldown = 0;
+        this.targetMob = null;
+    }
+
+    initMesh() {
+        const snowMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+        const orangeMat = new THREE.MeshLambertMaterial({ color: 0xff7a00 }); // Pumpkin Orange
+        const stickMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b }); // Woody brown
+        snowMat.name = 'skin';
+        orangeMat.name = 'pumpkin';
+        stickMat.name = 'stick';
+        this.materialsToDispose.push(snowMat, orangeMat, stickMat);
+
+        // Lower body snowball (0.6 x 0.6 x 0.6)
+        const lowerGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+        const lowerBody = new THREE.Mesh(lowerGeo, snowMat);
+        lowerBody.position.set(0, 0.3, 0);
+        lowerBody.castShadow = true;
+        this.mesh.add(lowerBody);
+
+        // Upper body snowball (0.45 x 0.45 x 0.45)
+        const upperGeo = new THREE.BoxGeometry(0.45, 0.45, 0.45);
+        const upperBody = new THREE.Mesh(upperGeo, snowMat);
+        upperBody.position.set(0, 0.825, 0);
+        upperBody.castShadow = true;
+        this.mesh.add(upperBody);
+
+        // Pumpkin Head (0.38 x 0.38 x 0.38)
+        const headGeo = new THREE.BoxGeometry(0.38, 0.38, 0.38);
+        const head = new THREE.Mesh(headGeo, orangeMat);
+        head.position.set(0, 1.24, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        // Left arm stick (pointing outwards)
+        const lArmGeo = new THREE.BoxGeometry(0.4, 0.05, 0.05);
+        const lArm = new THREE.Mesh(lArmGeo, stickMat);
+        lArm.position.set(-0.38, 0.85, 0);
+        lArm.rotation.z = -0.2;
+        lArm.castShadow = true;
+        this.mesh.add(lArm);
+
+        // Right arm stick
+        const rArm = new THREE.Mesh(lArmGeo, stickMat);
+        rArm.position.set(0.38, 0.85, 0);
+        rArm.rotation.z = 0.2;
+        rArm.castShadow = true;
+        this.mesh.add(rArm);
+    }
+
+    updateAI(dt, isLiquid) {
+        if (this.shootCooldown > 0) this.shootCooldown -= dt;
+
+        // Find closest hostile mob
+        let closestMob = null;
+        let minDist = 15.0; // 15 blocks scan radius
+        
+        if (this.game.mobs) {
+            for (let i = 0; i < this.game.mobs.length; i++) {
+                const mob = this.game.mobs[i];
+                if (mob !== this && (mob.type === 'zombie' || mob.type === 'skeleton' || mob.type === 'creeper')) {
+                    const dist = this.position.distanceTo(mob.position);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestMob = mob;
+                    }
+                }
+            }
+        }
+
+        this.targetMob = closestMob;
+
+        if (this.targetMob) {
+            // Face target mob
+            const tPos = this.targetMob.position;
+            const dirX = tPos.x - this.position.x;
+            const dirZ = tPos.z - this.position.z;
+            const angle = Math.atan2(dirX, dirZ);
+            this.mesh.rotation.y = angle;
+
+            // Maintain distance (slowly walk towards or slide away)
+            const dist = this.position.distanceTo(tPos);
+            if (dist > 3.0) {
+                const currentSpeed = isLiquid ? this.speed * 0.4 : this.speed;
+                this.velocity.x = Math.sin(angle) * currentSpeed;
+                this.velocity.z = Math.cos(angle) * currentSpeed;
+            } else {
+                this.velocity.x *= 0.5;
+                this.velocity.z *= 0.5;
+            }
+
+            // Shoot snowballs!
+            if (this.shootCooldown <= 0 && dist < 10.0) {
+                this.shootCooldown = 1.0; // Shoot snowball every 1 second
+                this.shootSnowball();
+            }
+        } else {
+            // Peacefully wander
+            this.wanderTimer -= dt;
+            if (this.wanderTimer <= 0) {
+                this.wanderTimer = 3.0 + Math.random() * 4.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (this.speed * 0.4);
+            this.velocity.z = Math.cos(this.wanderAngle) * (this.speed * 0.4);
+            this.mesh.rotation.y = this.wanderAngle;
+        }
+
+        // Jump out of liquid
+        if (isLiquid && Math.random() < 0.05) {
+            this.velocity.y = 3.5;
+        }
+    }
+
+    shootSnowball() {
+        if (!this.targetMob) return;
+        const startPos = this.position.clone().setY(this.position.y + 0.85); // Chest level
+        const targetPos = this.targetMob.position.clone().setY(this.targetMob.position.y + 0.9);
+        
+        const snowball = new Snowball(startPos, targetPos, this.scene, this.world, this.game);
+        if (!this.game.arrows) this.game.arrows = []; // reuse arrow update loop for projectiles
+        this.game.arrows.push(snowball);
+    }
+}
+
+// Snowball projectile fired by Snow Golem
+export class Snowball {
+    constructor(startPos, targetPos, scene, world, game) {
+        this.scene = scene;
+        this.world = world;
+        this.game = game;
+
+        this.position = startPos.clone();
+        
+        // Compute direction
+        const dir = targetPos.clone().sub(startPos).normalize();
+        this.velocity = dir.multiplyScalar(16.0); // travel speed
+
+        this.life = 3.0; // disappears after 3 seconds
+        this.isStuck = false;
+
+        // Round-ish white snowball mesh (small box)
+        const geo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        this.mesh = new THREE.Mesh(geo, mat);
+        this.mesh.position.copy(this.position);
+        
+        this.scene.add(this.mesh);
+        sounds.playClickSound(); // light snap sound
+    }
+
+    update(dt) {
+        this.life -= dt;
+        if (this.life <= 0) {
+            this.destroy();
+            return false;
+        }
+
+        if (this.isStuck) return true;
+
+        // Apply slight gravity
+        this.velocity.y -= 1.5 * dt;
+
+        const nextPos = this.position.clone().addScaledVector(this.velocity, dt);
+
+        // Check block collision
+        const gridX = Math.round(nextPos.x);
+        const gridY = Math.round(nextPos.y);
+        const gridZ = Math.round(nextPos.z);
+        const block = this.world.getBlockAt(gridX, gridY, gridZ);
+        
+        if (block && !block.startsWith('water') && !block.startsWith('lava')) {
+            this.destroy();
+            return false; // disappears on block hit!
+        }
+
+        // Check hostile mob collision
+        if (this.game.mobs) {
+            for (let i = this.game.mobs.length - 1; i >= 0; i--) {
+                const mob = this.game.mobs[i];
+                if (mob.type === 'zombie' || mob.type === 'skeleton' || mob.type === 'creeper') {
+                    const mobPos = mob.position.clone();
+                    const mobWidth = 0.8;
+                    const mobHeight = 1.8;
+                    const mRadius = mobWidth / 2;
+                    const hitX = nextPos.x >= mobPos.x - mRadius && nextPos.x <= mobPos.x + mRadius;
+                    const hitZ = nextPos.z >= mobPos.z - mRadius && nextPos.z <= mobPos.z + mRadius;
+                    const hitY = nextPos.y >= mobPos.y && nextPos.y <= mobPos.y + mobHeight;
+
+                    if (hitX && hitY && hitZ) {
+                        mob.takeDamage(15); // snowballs deal 15 damage!
+                        
+                        // Push mob back slightly
+                        const pushVec = this.velocity.clone().setY(2.0).normalize();
+                        mob.velocity.addScaledVector(pushVec, 3.5);
+
+                        this.destroy();
+                        return false;
+                    }
+                }
+            }
+        }
+
+        this.position.copy(nextPos);
+        this.mesh.position.copy(this.position);
+        return true;
+    }
+
+    destroy() {
+        this.scene.remove(this.mesh);
+        this.mesh.geometry.dispose();
+        this.mesh.material.dispose();
+    }
+}
+
+// Base class for cute passive animals
+export class Animal extends Mob {
+    constructor(type, x, y, z, scene, world, game, healAmount) {
+        super(type, x, y, z, scene, world, game);
+        this.healAmount = healAmount;
+        this.speed = 1.0; // gentle slow pace
+    }
+
+    updateAI(dt, isLiquid) {
+        // Animals only wander peacefully, never chase the player
+        this.state = 'WANDER';
+        this.wanderTimer -= dt;
+        if (this.wanderTimer <= 0) {
+            this.wanderTimer = 2.5 + Math.random() * 4.0;
+            this.wanderAngle = Math.random() * Math.PI * 2;
+        }
+        
+        this.velocity.x = Math.sin(this.wanderAngle) * (this.speed * 0.5);
+        this.velocity.z = Math.cos(this.wanderAngle) * (this.speed * 0.5);
+        this.mesh.rotation.y = this.wanderAngle;
+
+        // Auto-jump out of water/lava
+        if (isLiquid && Math.random() < 0.05) {
+            this.velocity.y = 3.0;
+        }
+    }
+
+    die() {
+        // Heal player when killed!
+        if (this.game.player) {
+            this.game.player.heal(this.healAmount);
+            this.game.showNotification(`${this.type.toUpperCase()} dikalahkan! Memulihkan HP +${this.healAmount} ❤️`);
+        }
+        
+        super.die(); // triggers particles, clean remove, and sound
+    }
+}
+
+// 6. CHICKEN
+export class Chicken extends Animal {
+    constructor(x, y, z, scene, world, game) {
+        super('chicken', x, y, z, scene, world, game, 15); // Heals 15 HP
+        this.width = 0.4;
+        this.height = 0.6;
+    }
+
+    initMesh() {
+        const whiteMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+        const yellowMat = new THREE.MeshLambertMaterial({ color: 0xffb703 }); // beak/feet
+        const redMat = new THREE.MeshLambertMaterial({ color: 0xd90429 }); // comb
+        whiteMat.name = 'skin';
+        yellowMat.name = 'beak';
+        redMat.name = 'comb';
+        this.materialsToDispose.push(whiteMat, yellowMat, redMat);
+
+        // Body (0.3 x 0.3 x 0.4)
+        const bodyGeo = new THREE.BoxGeometry(0.3, 0.3, 0.4);
+        const body = new THREE.Mesh(bodyGeo, whiteMat);
+        body.position.set(0, 0.25, 0);
+        body.castShadow = true;
+        this.mesh.add(body);
+
+        // Head (0.18 x 0.22 x 0.18)
+        const headGeo = new THREE.BoxGeometry(0.18, 0.22, 0.18);
+        const head = new THREE.Mesh(headGeo, whiteMat);
+        head.position.set(0, 0.45, 0.1);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        // Beak (0.1 x 0.06 x 0.08)
+        const beakGeo = new THREE.BoxGeometry(0.1, 0.06, 0.08);
+        const beak = new THREE.Mesh(beakGeo, yellowMat);
+        beak.position.set(0, 0.43, 0.21);
+        this.mesh.add(beak);
+
+        // Red comb under beak (wattle)
+        const combGeo = new THREE.BoxGeometry(0.06, 0.08, 0.06);
+        const comb = new THREE.Mesh(combGeo, redMat);
+        comb.position.set(0, 0.37, 0.14);
+        this.mesh.add(comb);
+
+        // Two small legs (0.04 x 0.12 x 0.04)
+        const legGeo = new THREE.BoxGeometry(0.04, 0.12, 0.04);
+        const lLeg = new THREE.Mesh(legGeo, yellowMat);
+        lLeg.position.set(-0.08, 0.06, 0);
+        lLeg.castShadow = true;
+        this.mesh.add(lLeg);
+
+        const rLeg = new THREE.Mesh(legGeo, yellowMat);
+        rLeg.position.set(0.08, 0.06, 0);
+        rLeg.castShadow = true;
+        this.mesh.add(rLeg);
+    }
+}
+
+// 7. PIG
+export class Pig extends Animal {
+    constructor(x, y, z, scene, world, game) {
+        super('pig', x, y, z, scene, world, game, 25); // Heals 25 HP
+        this.width = 0.6;
+        this.height = 0.8;
+    }
+
+    initMesh() {
+        const pinkMat = new THREE.MeshLambertMaterial({ color: 0xffafcc });
+        const darkPinkMat = new THREE.MeshLambertMaterial({ color: 0xffc2d1 });
+        pinkMat.name = 'skin';
+        darkPinkMat.name = 'snout';
+        this.materialsToDispose.push(pinkMat, darkPinkMat);
+
+        // Body (0.45 x 0.4 x 0.65)
+        const bodyGeo = new THREE.BoxGeometry(0.45, 0.4, 0.65);
+        const body = new THREE.Mesh(bodyGeo, pinkMat);
+        body.position.set(0, 0.4, 0);
+        body.castShadow = true;
+        this.mesh.add(body);
+
+        // Head (0.3 x 0.3 x 0.3)
+        const headGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+        const head = new THREE.Mesh(headGeo, pinkMat);
+        head.position.set(0, 0.55, 0.35);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        // Snout snout (0.14 x 0.08 x 0.08)
+        const snoutGeo = new THREE.BoxGeometry(0.14, 0.08, 0.08);
+        const snout = new THREE.Mesh(snoutGeo, darkPinkMat);
+        snout.position.set(0, 0.48, 0.52);
+        this.mesh.add(snout);
+
+        // 4 legs (0.12 x 0.22 x 0.12)
+        const legGeo = new THREE.BoxGeometry(0.12, 0.22, 0.12);
+        const legOffsets = [
+            [-0.15, 0.11, 0.2],
+            [0.15, 0.11, 0.2],
+            [-0.15, 0.11, -0.2],
+            [0.15, 0.11, -0.2]
+        ];
+
+        legOffsets.forEach(([lx, ly, lz]) => {
+            const leg = new THREE.Mesh(legGeo, pinkMat);
+            leg.position.set(lx, ly, lz);
+            leg.castShadow = true;
+            this.mesh.add(leg);
+        });
+    }
+}
+
+// 8. COW
+export class Cow extends Animal {
+    constructor(x, y, z, scene, world, game) {
+        super('cow', x, y, z, scene, world, game, 35); // Heals 35 HP
+        this.width = 0.8;
+        this.height = 1.2;
+    }
+
+    initMesh() {
+        const brownMat = new THREE.MeshLambertMaterial({ color: 0x4a3b32 }); // Dark brown base
+        const whiteMat = new THREE.MeshLambertMaterial({ color: 0xffffff }); // horns/spots
+        brownMat.name = 'skin';
+        whiteMat.name = 'horns';
+        this.materialsToDispose.push(brownMat, whiteMat);
+
+        // Large Body (0.6 x 0.6 x 0.9)
+        const bodyGeo = new THREE.BoxGeometry(0.6, 0.6, 0.9);
+        const body = new THREE.Mesh(bodyGeo, brownMat);
+        body.position.set(0, 0.65, 0);
+        body.castShadow = true;
+        this.mesh.add(body);
+
+        // Head (0.32 x 0.32 x 0.32)
+        const headGeo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
+        const head = new THREE.Mesh(headGeo, brownMat);
+        head.position.set(0, 0.85, 0.45);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        // Snout
+        const snoutGeo = new THREE.BoxGeometry(0.18, 0.12, 0.08);
+        const pinkMat = new THREE.MeshLambertMaterial({ color: 0xffccd5 });
+        pinkMat.name = 'nose';
+        this.materialsToDispose.push(pinkMat);
+        const snout = new THREE.Mesh(snoutGeo, pinkMat);
+        snout.position.set(0, 0.78, 0.62);
+        this.mesh.add(snout);
+
+        // Two horns (0.04 x 0.12 x 0.04)
+        const hornGeo = new THREE.BoxGeometry(0.04, 0.12, 0.04);
+        const lHorn = new THREE.Mesh(hornGeo, whiteMat);
+        lHorn.position.set(-0.14, 1.04, 0.42);
+        lHorn.rotation.z = -0.15;
+        this.mesh.add(lHorn);
+
+        const rHorn = new THREE.Mesh(hornGeo, whiteMat);
+        rHorn.position.set(0.14, 1.04, 0.42);
+        rHorn.rotation.z = 0.15;
+        this.mesh.add(rHorn);
+
+        // 4 legs (0.16 x 0.38 x 0.16)
+        const legGeo = new THREE.BoxGeometry(0.16, 0.38, 0.16);
+        const legOffsets = [
+            [-0.2, 0.19, 0.3],
+            [0.2, 0.19, 0.3],
+            [-0.2, 0.19, -0.3],
+            [0.2, 0.19, -0.3]
+        ];
+
+        legOffsets.forEach(([lx, ly, lz]) => {
+            const leg = new THREE.Mesh(legGeo, brownMat);
+            leg.position.set(lx, ly, lz);
+            leg.castShadow = true;
+            this.mesh.add(leg);
+        });
+    }
+}

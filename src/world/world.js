@@ -21,7 +21,9 @@ export const BLOCK_TYPES = {
     quartz: { id: 14, name: 'Quartz', color: 0xf5f4f0 },
     sand: { id: 15, name: 'Sand', color: 0xe5cca4 },
     farmland: { id: 16, name: 'Farmland', color: 0x4c321d },
-    lucky: { id: 17, name: 'Lucky', color: 0xffb703 }
+    lucky: { id: 17, name: 'Lucky', color: 0xffb703 },
+    magma: { id: 18, name: 'Magma', color: 0xff3700 },
+    crop: { id: 19, name: 'Crop', color: 0x8fc93a }
 };
 
 export class World {
@@ -39,7 +41,7 @@ export class World {
 
         this.grid = new Array(this.width * this.height * this.depth);
         this.instancedMeshMap = new Map();
-        this.blockTypesList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky'];
+        this.blockTypesList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop'];
 
         // Highlight box helper for targeting
         this.highlightBox = null;
@@ -106,6 +108,18 @@ export class World {
         const farmlandSideMat = new THREE.MeshLambertMaterial({ map: textures.farmlandSide });
         const luckyMat = new THREE.MeshLambertMaterial({ map: textures.lucky });
 
+        const magmaMat = new THREE.MeshLambertMaterial({ 
+            map: textures.magma,
+            emissive: new THREE.Color(0xff2200),
+            emissiveIntensity: 0.6
+        });
+        const cropMat = new THREE.MeshLambertMaterial({ 
+            map: textures.crop,
+            transparent: true,
+            alphaTest: 0.15,
+            side: THREE.DoubleSide
+        });
+
         // Box Geometry for cubes
         const geometry = new THREE.BoxGeometry(1, 1, 1);
 
@@ -127,7 +141,9 @@ export class World {
             quartz: 5000,
             sand: 10000,
             farmland: 5000,
-            lucky: 2000
+            lucky: 2000,
+            magma: 5000,
+            crop: 5000
         };
 
         // Material arrays mapping (right, left, top, bottom, front, back)
@@ -148,7 +164,9 @@ export class World {
             quartz: quartzMat,
             sand: sandMat,
             farmland: [farmlandSideMat, farmlandSideMat, farmlandTopMat, dirtMat, farmlandSideMat, farmlandSideMat],
-            lucky: luckyMat
+            lucky: luckyMat,
+            magma: magmaMat,
+            crop: cropMat
         };
 
         // Initialize InstancedMesh for each block type
@@ -467,6 +485,28 @@ export class World {
         this.grid[idx] = finalType;
         this.updateMesh();
         sounds.playPlaceSound();
+
+        // Crop Growth Hook
+        if (finalType === 'crop') {
+            // Spark green planting particles immediately
+            setTimeout(() => {
+                this.spawnCropParticles(x, y, z, 0x2d6a4f); // dark green
+            }, 50);
+
+            // Timeout for growth (5 seconds)
+            setTimeout(() => {
+                const currentBlock = this.getBlockAt(x, y, z);
+                if (currentBlock === 'crop') {
+                    // Spark light green growth particles
+                    this.spawnCropParticles(x, y, z, 0x55a630); // vibrant light green
+                    sounds.playPlaceSound();
+                    if (this.game && typeof this.game.showNotification === 'function') {
+                        this.game.showNotification('Tanamanmu telah matang! 🌾');
+                    }
+                }
+            }, 5000);
+        }
+
         return true;
     }
 
@@ -514,6 +554,37 @@ export class World {
                 (Math.random() - 0.5) * 1.5
             ).normalize().multiplyScalar(speed);
             
+            this.scene.add(mesh);
+            particlesList.push({
+                mesh: mesh,
+                velocity: velocity,
+                life: 0.3 + Math.random() * 0.3,
+                elapsed: 0,
+                material: mat
+            });
+        }
+        this.game.particles.push(...particlesList);
+    }
+
+    spawnCropParticles(x, y, z, color) {
+        if (!this.game || !this.game.particles) return;
+        const count = 10;
+        const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const particlesList = [];
+        for (let i = 0; i < count; i++) {
+            const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(
+                x + (Math.random() - 0.5) * 0.5,
+                y + Math.random() * 0.5,
+                z + (Math.random() - 0.5) * 0.5
+            );
+            const speed = 1.0 + Math.random() * 1.5;
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 0.8,
+                (Math.random() * 1.0 + 0.5),
+                (Math.random() - 0.5) * 0.8
+            ).normalize().multiplyScalar(speed);
             this.scene.add(mesh);
             particlesList.push({
                 mesh: mesh,

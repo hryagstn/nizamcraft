@@ -25,6 +25,7 @@ export class Player {
         this.health = 100;
         this.maxHealth = 100;
         this.lavaDamageTimer = 0;
+        this.magmaDamageTimer = 0;
         
         // Settings
         this.walkSpeed = 4.5;
@@ -210,6 +211,25 @@ export class Player {
             this.lavaDamageTimer = 0;
         }
 
+        // Apply magma damage over time if standing on a magma block
+        if (this.isGrounded) {
+            const blockUnder = this.world.getBlockAt(Math.round(this.position.x), Math.round(this.position.y - 0.5), Math.round(this.position.z));
+            if (blockUnder === 'magma') {
+                this.magmaDamageTimer += dt;
+                if (this.magmaDamageTimer >= 0.5) { // every 500ms
+                    this.takeDamage(6); // Magma block deals 6 damage
+                    this.magmaDamageTimer = 0;
+                    if (this.world && typeof this.world.spawnBlockBreakParticles === 'function') {
+                        this.world.spawnBlockBreakParticles(Math.round(this.position.x), Math.round(this.position.y), Math.round(this.position.z), 'magma');
+                    }
+                }
+            } else {
+                this.magmaDamageTimer = 0;
+            }
+        } else {
+            this.magmaDamageTimer = 0;
+        }
+
         // 2. Adjust speeds and gravity based on environment
         let currentSpeed = this.walkSpeed;
         let currentGravity = this.gravity;
@@ -380,6 +400,31 @@ export class Player {
         if (this.health <= 0) {
             this.die();
         }
+    }
+
+    heal(amount) {
+        if (this.health <= 0) return;
+        this.health = Math.min(this.maxHealth, this.health + amount);
+        
+        // Green healing screen flash for premium aesthetics!
+        const flash = document.createElement('div');
+        flash.style.position = 'fixed';
+        flash.style.top = '0';
+        flash.style.left = '0';
+        flash.style.width = '100vw';
+        flash.style.height = '100vh';
+        flash.style.background = 'rgba(0, 255, 128, 0.15)';
+        flash.style.zIndex = '9999';
+        flash.style.pointerEvents = 'none';
+        flash.style.transition = 'opacity 0.2s ease-out';
+        document.body.appendChild(flash);
+
+        setTimeout(() => {
+            flash.style.opacity = '0';
+            setTimeout(() => {
+                if (flash.parentNode) flash.parentNode.removeChild(flash);
+            }, 200);
+        }, 100);
     }
 
     die() {
@@ -615,6 +660,39 @@ export class Player {
             this.heldItem = group;
             this.heldItem.position.set(-0.04, 0.05, -0.05);
             this.heldItem.rotation.set(0, Math.PI / 4, 0);
+            this.handContainer.add(this.heldItem);
+        } else if (type === 'spawn_irongolem' || type === 'spawn_snowgolem') {
+            const eggGroup = new THREE.Group();
+            
+            // Create a small blocky egg (overlapping layers)
+            const eggGeo = new THREE.BoxGeometry(0.05, 0.07, 0.05);
+            const eggMat = new THREE.MeshLambertMaterial({ 
+                color: type === 'spawn_irongolem' ? 0xdcdcdc : 0xe0e2db 
+            });
+            const eggMesh = new THREE.Mesh(eggGeo, eggMat);
+            eggGroup.add(eggMesh);
+            
+            // Add some spots to the spawn egg
+            const spotGeo = new THREE.BoxGeometry(0.015, 0.015, 0.015);
+            const spotMat = new THREE.MeshBasicMaterial({ 
+                color: type === 'spawn_irongolem' ? 0x990000 : 0xff7a00 
+            });
+            
+            const spot1 = new THREE.Mesh(spotGeo, spotMat);
+            spot1.position.set(0.015, 0.02, 0.015);
+            eggGroup.add(spot1);
+            
+            const spot2 = new THREE.Mesh(spotGeo, spotMat);
+            spot2.position.set(-0.015, -0.01, -0.015);
+            eggGroup.add(spot2);
+            
+            const spot3 = new THREE.Mesh(spotGeo, spotMat);
+            spot3.position.set(0.015, -0.02, -0.01);
+            eggGroup.add(spot3);
+            
+            this.heldItem = eggGroup;
+            this.heldItem.position.set(-0.02, 0.04, -0.06);
+            this.heldItem.rotation.set(0.2, 0.4, 0.1);
             this.handContainer.add(this.heldItem);
         } else {
             const baseType = type.split('_')[0];

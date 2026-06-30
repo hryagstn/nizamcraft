@@ -553,3 +553,56 @@ textures.lucky = createPixelTexture((ctx) => {
     ctx.fillRect(9, 9, 1, 1);
     ctx.fillRect(9, 11, 1, 2);
 });
+
+// 22. Magma Block
+textures.magma = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#1a0d00'; // Dark dark grey/black basalt base
+    ctx.fillRect(0, 0, 16, 16);
+    // Draw bright lava cracks
+    ctx.fillStyle = '#ff3700'; // Bright red
+    ctx.fillRect(2, 0, 2, 16);
+    ctx.fillRect(0, 5, 16, 2);
+    ctx.fillRect(10, 0, 2, 16);
+    ctx.fillRect(0, 11, 16, 2);
+    
+    // Glowing highlights
+    ctx.fillStyle = '#ffa200'; // Yellow-orange glowing highlights
+    ctx.fillRect(2, 2, 1, 1);
+    ctx.fillRect(3, 12, 1, 1);
+    ctx.fillRect(7, 5, 1, 1);
+    ctx.fillRect(11, 6, 1, 1);
+    ctx.fillRect(10, 14, 1, 1);
+    ctx.fillRect(13, 11, 1, 1);
+    
+    // Some darker spots
+    ctx.fillStyle = '#0a0500';
+    ctx.fillRect(5, 8, 2, 2);
+    ctx.fillRect(13, 2, 2, 2);
+});
+
+// 23. Crop (Wheat) block texture
+textures.crop = createPixelTexture((ctx) => {
+    ctx.clearRect(0, 0, 16, 16); // transparent background so we see the plant stalks
+    
+    // Some light green soil/moss highlights at base
+    ctx.fillStyle = '#4c321d';
+    ctx.fillRect(0, 15, 16, 1);
+    
+    ctx.fillStyle = '#55a630'; // green sprouts at the bottom
+    ctx.fillRect(2, 11, 1, 4);
+    ctx.fillRect(13, 10, 1, 5);
+    ctx.fillRect(6, 12, 1, 3);
+    ctx.fillRect(10, 11, 1, 4);
+
+    ctx.fillStyle = '#ffd166'; // yellow/golden wheat tips
+    ctx.fillRect(4, 4, 2, 11);
+    ctx.fillRect(9, 2, 2, 13);
+    
+    // Draw some little leaves/ears
+    ctx.fillStyle = '#fb8500'; // golden wheat grain leaves
+    ctx.fillRect(2, 6, 2, 2);
+    ctx.fillRect(11, 4, 2, 2);
+    ctx.fillRect(7, 8, 2, 2);
+    ctx.fillRect(6, 3, 2, 2);
+});
+

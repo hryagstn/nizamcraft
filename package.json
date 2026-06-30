@@ -1,0 +1,13 @@
+{
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "simplex-noise": "^4.0.3",
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

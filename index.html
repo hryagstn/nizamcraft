@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>NizamCraft - Game Voxel 3D Sederhana</title>
+    <meta name="description" content="NizamCraft adalah game voxel 3D interaktif mirip Minecraft yang berjalan langsung di browser. Gali dan bangun block sesukamu!">
+    <link rel="stylesheet" href="src/index.css?v=3">
+    
+    <!-- Import Map for Three.js and modules -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.152.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.152.0/examples/jsm/",
+          "simplex-noise": "https://unpkg.com/simplex-noise@4.0.3/dist/esm/simplex-noise.js"
+        }
+      }
+    </script>
+</head>
+<body>
+    <!-- Landscape Orientation Warning Overlay -->
+    <div id="orientation-warning">
+        <div class="warning-content">
+            <div class="rotate-device-icon">
+                <svg viewBox="0 0 24 24" width="80" height="80" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2" class="phone-icon" />
+                    <path d="M12 18h.01" />
+                    <path d="M17 4h.01M7 4h.01" />
+                </svg>
+            </div>
+            <h2>Mode Landscape Diperlukan</h2>
+            <p>NizamCraft memerlukan layar horizontal. Silakan putar HP Anda untuk bermain!</p>
+        </div>
+    </div>
+
+    <!-- Center Screen Crosshair -->
+    <div id="crosshair"></div>
+
+    <!-- Toast Notification Message -->
+    <div id="toast-msg">Notifikasi</div>
+
+    <!-- Play/Start screen Overlay -->
+    <div id="play-overlay">
+        <div id="overlay-container">
+            <div class="overlay-left">
+                <h1>NIZAMCRAFT</h1>
+                <p>Game Voxel 3D - Bangun & Gali Dunia Impianmu</p>
+                <button id="play-button" aria-label="Mulai Game">MULAI PETUALANGAN</button>
+            </div>
+            
+            <div class="overlay-right">
+                <!-- World Management Actions -->
+                <div class="overlay-actions">
+                    <div class="instructions-title">Penyimpanan Dunia</div>
+                    <div class="overlay-actions-row">
+                        <button id="overlay-save-btn" class="overlay-btn" aria-label="Simpan Dunia">
+                            <span>Simpan 💾</span>
+                        </button>
+                        <button id="overlay-load-btn" class="overlay-btn" aria-label="Muat Dunia">
+                            <span>Muat 📂</span>
+                        </button>
+                        <button id="overlay-fullscreen-btn" class="overlay-btn" aria-label="Layar Penuh">
+                            <span>Layar 📺</span>
+                        </button>
+                        <button id="overlay-reset-btn" class="overlay-btn danger" aria-label="Reset Dunia">
+                            <span>Reset 🔄</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="instructions">
+                    <div class="instructions-title">Kontrol Permainan</div>
+                    <div class="instruction-row">
+                        <span>Berjalan / Bergerak</span>
+                        <span class="key-tag">W</span> <span class="key-tag">A</span> <span class="key-tag">S</span> <span class="key-tag">D</span>
+                    </div>
+                    <div class="instruction-row">
+                        <span>Melihat Sekeliling</span>
+                        <span class="key-tag">Gerakan Mouse</span>
+                    </div>
+                    <div class="instruction-row">
+                        <span>Melompat (Jump)</span>
+                        <span class="key-tag">Spasi</span>
+                    </div>
+                    <div class="instruction-row">
+                        <span>Gali Block / Serang</span>
+                        <span class="key-tag">Klik Kiri</span>
+                    </div>
+                    <div class="instruction-row">
+                        <span>Pasang Block</span>
+                        <span class="key-tag">Klik Kanan</span> / <span class="key-tag">Ctrl+Klik</span>
+                    </div>
+                    <div class="instruction-row">
+                        <span>Menembak Panah 🏹</span>
+                        <span class="key-tag">F</span>
+                    </div>
+                    <div class="instruction-row">
+                        <span>Pilih Jenis Block</span>
+                        <span class="key-tag">1 - 9, 0, -, =</span>
+                    </div>
+                    <div class="instruction-row">
+                        <span>Reset Posisi / Respawn</span>
+                        <span class="key-tag">R</span>
+                    </div>
+                </div>
+                
+                <!-- Mobile Touch Controls instructions -->
+                <div class="mobile-instructions">
+                    <div class="instructions-title">Kontrol Layar Sentuh</div>
+                    <div class="instruction-row-mobile">
+                        <span>Berjalan</span>
+                        <span class="key-tag-mobile">Joystick Kiri</span>
+                    </div>
+                    <div class="instruction-row-mobile">
+                        <span>Melihat</span>
+                        <span class="key-tag-mobile">Seret Layar Kanan</span>
+                    </div>
+                    <div class="instruction-row-mobile">
+                        <span>Melompat / Berenang</span>
+                        <span class="key-tag-mobile">Tombol ▲</span>
+                    </div>
+                    <div class="instruction-row-mobile">
+                        <span>Gali / Pasang / Serang</span>
+                        <span class="key-tag-mobile">Tombol ⛏️ / 🧱</span>
+                    </div>
+                    <div class="instruction-row-mobile">
+                        <span>Pilih Block</span>
+                        <span class="key-tag-mobile">Geser & Ketuk Hotbar</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Left HUD: Guide & Stats -->
+    <div id="guide-panel" class="hud-panel">
+        <h3>NizamCraft v1.0</h3>
+        <div class="instruction-row" style="margin-bottom: 4px;">
+            <span>Gali:</span>
+            <span>Klik Kiri</span>
+        </div>
+        <div class="instruction-row" style="margin-bottom: 4px;">
+            <span>Pasang:</span>
+            <span>Klik Kanan</span>
+        </div>
+        <div class="instruction-row" style="margin-bottom: 4px;">
+            <span>Pilih Block:</span>
+            <span>Angka [1 - 9]</span>
+        </div>
+        <div class="instruction-row" style="margin-bottom: 4px;">
+            <span>Respawn:</span>
+            <span>Tombol [R]</span>
+        </div>
+        <div class="instruction-row" style="margin-bottom: 4px;">
+            <span>Reset Dunia:</span>
+            <span>[Backspace]</span>
+        </div>
+    </div>
+
+    <!-- Right HUD: Actions -->
+    <div id="actions-panel" class="hud-panel">
+        <button id="save-btn" class="action-btn" aria-label="Simpan Dunia">
+            <span>Simpan Dunia</span>
+            <span>💾</span>
+        </button>
+        <button id="load-btn" class="action-btn" aria-label="Muat Dunia">
+            <span>Muat Dunia</span>
+            <span>📂</span>
+        </button>
+        <button id="fullscreen-btn" class="action-btn" aria-label="Layar Penuh">
+            <span>Layar Penuh</span>
+            <span>📺</span>
+        </button>
+        <button id="respawn-btn" class="action-btn" aria-label="Kembali ke Spawn">
+            <span>Respawn Player</span>
+            <span>📍</span>
+        </button>
+        <button id="reset-btn" class="action-btn danger" aria-label="Reset Dunia">
+            <span>Regenerasi Dunia</span>
+            <span>🔄</span>
+        </button>
+        <button id="exit-btn" class="action-btn danger" aria-label="Keluar Game">
+            <span>Keluar Game</span>
+            <span>🚪</span>
+        </button>
+    </div>
+
+    <!-- HUD Health Bar -->
+    <div id="health-bar-container">
+        <span class="heart-icon">❤️</span>
+        <div id="health-bar">
+            <div id="health-fill"></div>
+        </div>
+        <span id="health-text">100 HP</span>
+    </div>
+
+    <!-- Bottom HUD: Hotbar Voxel Selection -->
+    <div id="hotbar-container">
+        <div class="hotbar-slot active" data-index="0" title="Grass Block">
+            <span class="slot-num">1</span>
+            <div class="block-preview preview-grass"></div>
+            <span class="block-name">Grass</span>
+        </div>
+        <div class="hotbar-slot" data-index="1" title="Dirt Block">
+            <span class="slot-num">2</span>
+            <div class="block-preview preview-dirt"></div>
+            <span class="block-name">Dirt</span>
+        </div>
+        <div class="hotbar-slot" data-index="2" title="Stone Block">
+            <span class="slot-num">3</span>
+            <div class="block-preview preview-stone"></div>
+            <span class="block-name">Stone</span>
+        </div>
+        <div class="hotbar-slot" data-index="3" title="Obsidian Block">
+            <span class="slot-num">4</span>
+            <div class="block-preview preview-obsidian"></div>
+            <span class="block-name">Obsidian</span>
+        </div>
+        <div class="hotbar-slot" data-index="4" title="Wood Block">
+            <span class="slot-num">5</span>
+            <div class="block-preview preview-wood"></div>
+            <span class="block-name">Wood</span>
+        </div>
+        <div class="hotbar-slot" data-index="5" title="Leaf Block">
+            <span class="slot-num">6</span>
+            <div class="block-preview preview-leaf"></div>
+            <span class="block-name">Leaf</span>
+        </div>
+        <div class="hotbar-slot" data-index="6" title="Brick Block">
+            <span class="slot-num">7</span>
+            <div class="block-preview preview-brick"></div>
+            <span class="block-name">Brick</span>
+        </div>
+        <div class="hotbar-slot" data-index="7" title="Emerald Block">
+            <span class="slot-num">8</span>
+            <div class="block-preview preview-emerald"></div>
+            <span class="block-name">Emerald</span>
+        </div>
+        <div class="hotbar-slot" data-index="8" title="Diamond Block">
+            <span class="slot-num">9</span>
+            <div class="block-preview preview-diamond"></div>
+            <span class="block-name">Diamond</span>
+        </div>
+        <div class="hotbar-slot" data-index="9" title="Ender Block">
+            <span class="slot-num">0</span>
+            <div class="block-preview preview-ender"></div>
+            <span class="block-name">Ender</span>
+        </div>
+        <div class="hotbar-slot" data-index="10" title="TNT Block">
+            <span class="slot-num">-</span>
+            <div class="block-preview preview-tnt"></div>
+            <span class="block-name">TNT</span>
+        </div>
+        <div class="hotbar-slot" data-index="11" title="Water Block">
+            <span class="slot-num">=</span>
+            <div class="block-preview preview-water"></div>
+            <span class="block-name">Water</span>
+        </div>
+        <div class="hotbar-slot" data-index="12" title="Lava Block">
+            <span class="slot-num">L</span>
+            <div class="block-preview preview-lava"></div>
+            <span class="block-name">Lava</span>
+        </div>
+        <div class="hotbar-slot" data-index="13" title="Quartz Block">
+            <span class="slot-num">Q</span>
+            <div class="block-preview preview-quartz"></div>
+            <span class="block-name">Quartz</span>
+        </div>
+        <div class="hotbar-slot" data-index="14" title="Sand Block">
+            <span class="slot-num">Y</span>
+            <div class="block-preview preview-sand"></div>
+            <span class="block-name">Sand</span>
+        </div>
+        <div class="hotbar-slot" data-index="15" title="Farmland Block">
+            <span class="slot-num">U</span>
+            <div class="block-preview preview-farmland"></div>
+            <span class="block-name">Farmland</span>
+        </div>
+        <div class="hotbar-slot" data-index="16" title="Lucky Block">
+            <span class="slot-num">I</span>
+            <div class="block-preview preview-lucky"></div>
+            <span class="block-name">Lucky</span>
+        </div>
+    </div>
+
+    <!-- Mobile HUD Controls (Only active on Mobile/Touch) -->
+    <div id="mobile-joystick-container">
+        <div id="mobile-joystick-base">
+            <div id="mobile-joystick-handle"></div>
+        </div>
+    </div>
+    
+    <div id="mobile-actions-container">
+        <div class="mobile-btn-group-right">
+            <button id="mobile-btn-shoot" class="mobile-action-btn" aria-label="Tembak Panah">🏹</button>
+            <button id="mobile-btn-attack" class="mobile-action-btn" aria-label="Serang Monster">⚔️</button>
+            <button id="mobile-btn-dig" class="mobile-action-btn" aria-label="Gali Block">⛏️</button>
+            <button id="mobile-btn-build" class="mobile-action-btn" aria-label="Pasang Block">🧱</button>
+            <button id="mobile-btn-jump" class="mobile-action-btn" aria-label="Melompat">▲</button>
+        </div>
+    </div>
+
+    <!-- Main Game Script Entry -->
+    <script type="module" src="src/main.js?v=3"></script>
+</body>
+</html>

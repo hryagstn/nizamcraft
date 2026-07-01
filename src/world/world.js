@@ -41,7 +41,7 @@ export class World {
 
         this.grid = new Array(this.width * this.height * this.depth);
         this.instancedMeshMap = new Map();
-        this.blockTypesList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop'];
+        this.blockTypesList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'coal_ore', 'iron_ore', 'gold_ore', 'chest'];
 
         // Highlight box helper for targeting
         this.highlightBox = null;
@@ -120,6 +120,14 @@ export class World {
             side: THREE.DoubleSide
         });
 
+        // New blocks materials
+        const coalOreMat = new THREE.MeshLambertMaterial({ map: textures.coalOre });
+        const ironOreMat = new THREE.MeshLambertMaterial({ map: textures.ironOre });
+        const goldOreMat = new THREE.MeshLambertMaterial({ map: textures.goldOre });
+        const chestSideMat = new THREE.MeshLambertMaterial({ map: textures.chestSide });
+        const chestTopMat = new THREE.MeshLambertMaterial({ map: textures.chestTop });
+        const chestFrontMat = new THREE.MeshLambertMaterial({ map: textures.chestFront });
+
         // Box Geometry for cubes
         const geometry = new THREE.BoxGeometry(1, 1, 1);
 
@@ -143,7 +151,11 @@ export class World {
             farmland: 5000,
             lucky: 2000,
             magma: 5000,
-            crop: 5000
+            crop: 5000,
+            coal_ore: 5000,
+            iron_ore: 5000,
+            gold_ore: 5000,
+            chest: 2000
         };
 
         // Material arrays mapping (right, left, top, bottom, front, back)
@@ -166,7 +178,11 @@ export class World {
             farmland: [farmlandSideMat, farmlandSideMat, farmlandTopMat, dirtMat, farmlandSideMat, farmlandSideMat],
             lucky: luckyMat,
             magma: magmaMat,
-            crop: cropMat
+            crop: cropMat,
+            coal_ore: coalOreMat,
+            iron_ore: ironOreMat,
+            gold_ore: goldOreMat,
+            chest: [chestSideMat, chestSideMat, chestTopMat, chestTopMat, chestFrontMat, chestSideMat]
         };
 
         // Initialize InstancedMesh for each block type
@@ -232,7 +248,16 @@ export class World {
                         } else if (y < terrainH && y >= terrainH - 3) {
                             this.grid[idx] = 'sand';
                         } else if (y < terrainH - 3) {
-                            this.grid[idx] = 'stone';
+                            const r = Math.random();
+                            if (r < 0.05) {
+                                this.grid[idx] = 'coal_ore';
+                            } else if (r < 0.03) {
+                                this.grid[idx] = 'iron_ore';
+                            } else if (r < 0.015) {
+                                this.grid[idx] = 'gold_ore';
+                            } else {
+                                this.grid[idx] = 'stone';
+                            }
                         }
                     }
                 } else {
@@ -252,7 +277,16 @@ export class World {
                             if (y <= 1 && Math.random() < 0.15) {
                                 this.grid[idx] = 'obsidian';
                             } else {
-                                this.grid[idx] = 'stone';
+                                const r = Math.random();
+                                if (r < 0.05) {
+                                    this.grid[idx] = 'coal_ore';
+                                } else if (r < 0.03) {
+                                    this.grid[idx] = 'iron_ore';
+                                } else if (r < 0.015) {
+                                    this.grid[idx] = 'gold_ore';
+                                } else {
+                                    this.grid[idx] = 'stone';
+                                }
                             }
                         }
                     }
@@ -627,6 +661,34 @@ export class World {
             for (let y = 0; y < this.height; y++) {
                 for (let z = 0; z < this.depth; z++) {
                     const type = this.grid[idx];
+                    if (type && type.startsWith('lava_')) {
+                        // Check if water is adjacent
+                        let hasWaterNeighbor = false;
+                        const adj = [];
+                        if (x > 0) adj.push(idx - this.height * this.depth);
+                        if (x < this.width - 1) adj.push(idx + this.height * this.depth);
+                        if (z > 0) adj.push(idx - 1);
+                        if (z < this.depth - 1) adj.push(idx + 1);
+                        if (y > 0) adj.push(idx - this.depth);
+                        if (y < this.height - 1) adj.push(idx + this.depth);
+                        
+                        for (const nIdx of adj) {
+                            const nBlock = this.grid[nIdx];
+                            if (nBlock && nBlock.startsWith('water_')) {
+                                hasWaterNeighbor = true;
+                                break;
+                            }
+                        }
+                        
+                        if (hasWaterNeighbor) {
+                            toRemove.push(idx);
+                            newAdditions.push({ idx: idx, type: 'obsidian' });
+                            changed = true;
+                            idx++;
+                            continue;
+                        }
+                    }
+
                     if (type && (type.startsWith('water_') || type.startsWith('lava_'))) {
                         const parts = type.split('_');
                         const baseType = parts[0];

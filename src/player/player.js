@@ -26,6 +26,26 @@ export class Player {
         this.maxHealth = 100;
         this.lavaDamageTimer = 0;
         this.magmaDamageTimer = 0;
+        this.witherTimer = 0;
+
+        // Tas (Inventory) - 24 slots
+        this.inventory = Array(24).fill(null);
+        // Default starting items
+        this.inventory[0] = { type: 'golden_apple', count: 5 };
+        this.inventory[1] = { type: 'chest', count: 4 };
+        this.inventory[2] = { type: 'helmet_iron', count: 1 };
+        this.inventory[3] = { type: 'chestplate_iron', count: 1 };
+        this.inventory[4] = { type: 'coal', count: 8 };
+        this.inventory[5] = { type: 'diamond', count: 2 };
+        this.inventory[6] = { type: 'boots_iron', count: 1 };
+
+        // Armor slots
+        this.armor = {
+            helmet: null,
+            chestplate: null,
+            leggings: null,
+            boots: null
+        };
         
         // Settings
         this.walkSpeed = 4.5;
@@ -181,6 +201,10 @@ export class Player {
         const overlay = document.getElementById('play-overlay');
         if (overlay && overlay.style.display !== 'none') return;
 
+        // Stop movement if inventory is open
+        const invModal = document.getElementById('inventory-modal');
+        if (invModal && invModal.style.display !== 'none') return;
+
         // Allow movement either if pointer is locked OR if we are on a mobile device where pointer lock is skipped
         if (!this.controls.isLocked && !this.isTouch) return;
 
@@ -228,6 +252,39 @@ export class Player {
             }
         } else {
             this.magmaDamageTimer = 0;
+        }
+
+        // Apply Wither Decay damage over time
+        if (this.witherTimer > 0) {
+            this.witherTimer -= dt;
+            if (!this.witherDamageAccumulator) this.witherDamageAccumulator = 0;
+            this.witherDamageAccumulator += dt;
+            if (this.witherDamageAccumulator >= 0.75) { // every 750ms deal 4 damage
+                this.takeDamage(4);
+                this.witherDamageAccumulator = 0;
+                
+                // Dark wither screen flash
+                const flash = document.createElement('div');
+                flash.style.position = 'fixed';
+                flash.style.top = '0';
+                flash.style.left = '0';
+                flash.style.width = '100vw';
+                flash.style.height = '100vh';
+                flash.style.background = 'rgba(10, 10, 10, 0.45)';
+                flash.style.zIndex = '9999';
+                flash.style.pointerEvents = 'none';
+                flash.style.transition = 'opacity 0.2s ease-out';
+                document.body.appendChild(flash);
+                setTimeout(() => {
+                    flash.style.opacity = '0';
+                    setTimeout(() => {
+                        if (flash.parentNode) flash.parentNode.removeChild(flash);
+                    }, 200);
+                }, 80);
+            }
+        } else {
+            this.witherTimer = 0;
+            this.witherDamageAccumulator = 0;
         }
 
         // 2. Adjust speeds and gravity based on environment
@@ -370,9 +427,40 @@ export class Player {
         }
     }
 
+    getArmorReduction() {
+        let reduction = 0;
+        if (this.armor) {
+            for (const slot in this.armor) {
+                const item = this.armor[slot];
+                if (item) {
+                    if (item.type.includes('diamond')) {
+                        if (slot === 'helmet') reduction += 0.15;
+                        else if (slot === 'chestplate') reduction += 0.25;
+                        else if (slot === 'leggings') reduction += 0.20;
+                        else if (slot === 'boots') reduction += 0.10;
+                    } else if (item.type.includes('iron')) {
+                        if (slot === 'helmet') reduction += 0.10;
+                        else if (slot === 'chestplate') reduction += 0.15;
+                        else if (slot === 'leggings') reduction += 0.10;
+                        else if (slot === 'boots') reduction += 0.05;
+                    } else if (item.type.includes('gold')) {
+                        if (slot === 'helmet') reduction += 0.07;
+                        else if (slot === 'chestplate') reduction += 0.12;
+                        else if (slot === 'leggings') reduction += 0.07;
+                        else if (slot === 'boots') reduction += 0.04;
+                    }
+                }
+            }
+        }
+        return reduction;
+    }
+
     takeDamage(amount) {
         if (this.health <= 0) return;
-        this.health -= amount;
+        
+        const reduction = this.getArmorReduction();
+        const finalDamage = amount * (1 - reduction);
+        this.health -= finalDamage;
         if (this.health < 0) this.health = 0;
         
         sounds.playHurtSound();

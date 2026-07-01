@@ -606,3 +606,136 @@ textures.crop = createPixelTexture((ctx) => {
     ctx.fillRect(6, 3, 2, 2);
 });
 
+// 24. Coal Ore
+textures.coalOre = createPixelTexture((ctx) => {
+    // Stone background
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const rand = Math.random();
+            if (rand < 0.15) {
+                ctx.fillStyle = '#6e6e6e';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (rand < 0.25) {
+                ctx.fillStyle = '#a6a6a6';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    // Coal spots (black/dark grey)
+    ctx.fillStyle = '#262626';
+    const spots = [[2,3], [3,3], [3,4], [7,8], [8,8], [8,9], [11,3], [12,4], [5,12], [6,12], [6,13], [10,11], [11,12]];
+    spots.forEach(([sx, sy]) => {
+        ctx.fillRect(sx, sy, 2, 1);
+        ctx.fillRect(sx+1, sy+1, 1, 1);
+    });
+});
+
+// 25. Iron Ore
+textures.ironOre = createPixelTexture((ctx) => {
+    // Stone background
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const rand = Math.random();
+            if (rand < 0.15) {
+                ctx.fillStyle = '#6e6e6e';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (rand < 0.25) {
+                ctx.fillStyle = '#a6a6a6';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    // Iron spots (peach/orange-brown)
+    ctx.fillStyle = '#d4a373';
+    const spots = [[3,2], [4,3], [7,6], [8,6], [12,5], [11,6], [5,11], [6,11], [10,10], [9,11]];
+    spots.forEach(([sx, sy]) => {
+        ctx.fillRect(sx, sy, 2, 1);
+        ctx.fillRect(sx+1, sy+1, 1, 1);
+    });
+});
+
+// 26. Gold Ore
+textures.goldOre = createPixelTexture((ctx) => {
+    // Stone background
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const rand = Math.random();
+            if (rand < 0.15) {
+                ctx.fillStyle = '#6e6e6e';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (rand < 0.25) {
+                ctx.fillStyle = '#a6a6a6';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    // Gold spots (bright yellow/gold)
+    ctx.fillStyle = '#ffb703';
+    const spots = [[2,4], [3,4], [7,7], [8,7], [13,4], [12,5], [4,12], [5,12], [11,11], [10,12]];
+    spots.forEach(([sx, sy]) => {
+        ctx.fillRect(sx, sy, 2, 1);
+        ctx.fillRect(sx+1, sy+1, 1, 1);
+    });
+});
+
+// 27. Chest Side
+textures.chestSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#a06a42'; // Wood brown
+    ctx.fillRect(0, 0, 16, 16);
+    // Dark brown border lines
+    ctx.fillStyle = '#5c3a21';
+    ctx.fillRect(0, 0, 16, 1);
+    ctx.fillRect(0, 0, 1, 16);
+    ctx.fillRect(15, 0, 1, 16);
+    ctx.fillRect(0, 15, 16, 1);
+    
+    // Wood grain detail
+    ctx.fillStyle = '#784f30';
+    ctx.fillRect(2, 4, 12, 1);
+    ctx.fillRect(2, 8, 12, 1);
+    ctx.fillRect(2, 12, 12, 1);
+});
+
+// 28. Chest Top
+textures.chestTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#8c5b36'; // Darker wood brown
+    ctx.fillRect(0, 0, 16, 16);
+    // Outer border
+    ctx.fillStyle = '#4a2e1a';
+    ctx.fillRect(0, 0, 16, 2);
+    ctx.fillRect(0, 0, 2, 16);
+    ctx.fillRect(14, 0, 2, 16);
+    ctx.fillRect(0, 14, 16, 2);
+});
+
+// 29. Chest Front
+textures.chestFront = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#a06a42'; // Wood brown
+    ctx.fillRect(0, 0, 16, 16);
+    
+    // Dark brown border lines
+    ctx.fillStyle = '#5c3a21';
+    ctx.fillRect(0, 0, 16, 1);
+    ctx.fillRect(0, 0, 1, 16);
+    ctx.fillRect(15, 0, 1, 16);
+    ctx.fillRect(0, 15, 16, 1);
+    
+    // Wood grain lines
+    ctx.fillStyle = '#784f30';
+    ctx.fillRect(2, 4, 12, 1);
+    ctx.fillRect(2, 8, 12, 1);
+    ctx.fillRect(2, 12, 12, 1);
+    
+    // Silver Lock Latch
+    ctx.fillStyle = '#cccccc';
+    ctx.fillRect(7, 6, 2, 4);
+    ctx.fillStyle = '#fb8500'; // Gold keyhole pin
+    ctx.fillRect(7, 8, 2, 1);
+});
+

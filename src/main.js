@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameRenderer } from './render/renderer.js?v=3';
 import { World } from './world/world.js?v=3';
 import { Player } from './player/player.js?v=3';
-import { Zombie, Creeper, Skeleton, Arrow, IronGolem, SnowGolem, Chicken, Pig, Cow } from './entities/mob.js?v=3';
+import { Zombie, Creeper, Skeleton, Arrow, IronGolem, SnowGolem, Chicken, Pig, Cow, BloodGolem, GiantIronGolem, WitherSkeleton } from './entities/mob.js?v=3';
 import { PrimedTNT } from './entities/tnt.js?v=3';
 
 // Initialize Game State Object (shared with entity classes)
@@ -13,6 +13,7 @@ const game = {
     tnts: [],
     particles: [],
     arrows: [],
+    chests: {},
     showNotification: function(message) {
         if (this.player) {
             this.player.showNotification(message);
@@ -167,9 +168,12 @@ function handleSave() {
         // Save player state
         const playerState = {
             position: { x: player.position.x, y: player.position.y, z: player.position.z },
-            health: player.health
+            health: player.health,
+            inventory: player.inventory,
+            armor: player.armor
         };
         localStorage.setItem('nizamcraft-player', JSON.stringify(playerState));
+        localStorage.setItem('nizamcraft-chests', JSON.stringify(game.chests));
         game.showNotification('Dunia berhasil disimpan! 💾');
     } else {
         game.showNotification('Gagal menyimpan dunia! ❌');
@@ -189,9 +193,18 @@ function handleLoad() {
             player.health = data.health !== undefined ? data.health : 100;
             player.velocity.set(0, 0, 0);
             player.isGrounded = false;
+            
+            if (data.inventory) player.inventory = data.inventory;
+            if (data.armor) player.armor = data.armor;
         } else {
             player.respawn();
         }
+        
+        // Restore chest inventories
+        const chestsSaved = localStorage.getItem('nizamcraft-chests');
+        game.chests = chestsSaved ? JSON.parse(chestsSaved) : {};
+        
+        updateInventoryUI();
         game.showNotification('Dunia berhasil dimuat! 📂');
     } else {
         game.showNotification('Tidak ada data tersimpan! ❌');
@@ -277,7 +290,7 @@ function selectHotbarSlot(index) {
     const activeSlot = hotbarSlots[index];
     activeSlot.classList.add('active');
     
-    const blockList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'spawn_irongolem', 'spawn_snowgolem'];
+    const blockList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'spawn_irongolem', 'spawn_snowgolem', 'coal_ore', 'iron_ore', 'gold_ore', 'chest'];
     selectedBlockType = blockList[index];
     if (player && typeof player.updateHeldItem === 'function') {
         player.updateHeldItem(selectedBlockType);
@@ -306,6 +319,15 @@ hotbarSlots.forEach(slot => {
 
 // Keyboard controls for hotbar and shortcuts
 window.addEventListener('keydown', (e) => {
+    if (e.key === 'e' || e.key === 'E' || e.key === 'i' || e.key === 'I') {
+        const overlay = document.getElementById('play-overlay');
+        if (!overlay || overlay.style.display === 'none') {
+            toggleInventory();
+            e.preventDefault();
+            return;
+        }
+    }
+
     if (player.controls.isLocked) {
         const keyMap = {
             '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6, '8': 7, '9': 8, '0': 9,
@@ -579,6 +601,8 @@ function handleBlockDig(targetPos) {
         return;
     }
 
+    let blockDestroyed = false;
+
     if (blockType === 'obsidian') {
         const coordKey = `${tx},${ty},${tz}`;
         if (!game.blockHits) game.blockHits = {};
@@ -592,20 +616,60 @@ function handleBlockDig(targetPos) {
         if (hits >= 8) {
             world.removeBlock(tx, ty, tz);
             delete game.blockHits[coordKey];
+            blockDestroyed = true;
         } else {
             game.showNotification(`Menambang Obsidian... (${hits}/8)`);
         }
-        return;
-    }
-
-    if (blockType === 'lucky') {
+    } else if (blockType === 'lucky') {
         world.removeBlock(tx, ty, tz);
         triggerLuckyEvent(tx, ty, tz);
-        return;
+        blockDestroyed = true;
+    } else {
+        // Normal block dig
+        world.removeBlock(tx, ty, tz);
+        blockDestroyed = true;
     }
 
-    // Normal block dig
-    world.removeBlock(tx, ty, tz);
+    if (blockDestroyed) {
+        if (blockType === 'chest') {
+            const key = `${tx},${ty},${tz}`;
+            const chestInv = game.chests[key];
+            if (chestInv) {
+                let transferredAny = false;
+                chestInv.forEach(item => {
+                    if (item) {
+                        addItemToInventory(item.type, item.count);
+                        transferredAny = true;
+                    }
+                });
+                if (transferredAny) {
+                    game.showNotification("Peti hancur! Isi peti dipindahkan ke tas.");
+                }
+                delete game.chests[key];
+            }
+        }
+        
+        let itemToGive = blockType;
+        if (blockType.startsWith('water')) itemToGive = 'water';
+        else if (blockType.startsWith('lava')) itemToGive = 'lava';
+        else if (blockType === 'grass') itemToGive = 'dirt';
+        
+        if (blockType === 'leaf') {
+            const r = Math.random();
+            if (r < 0.15) {
+                itemToGive = 'golden_apple';
+                game.showNotification("Mendapatkan Apel Emas dari dedaunan! 🍎✨");
+            } else if (r < 0.3) {
+                itemToGive = 'crop';
+            }
+        }
+
+        if (blockType === 'coal_ore') itemToGive = 'coal';
+
+        if (itemToGive !== 'lucky' && !itemToGive.includes('spawner')) {
+            addItemToInventory(itemToGive, 1);
+        }
+    }
 }
 
 // Interactive Randomized Lucky Block Break Events!
@@ -697,6 +761,10 @@ window.addEventListener('mousedown', (e) => {
             
             // If right clicking an existing TNT block, ignite it!
             const targetedBlockType = world.getBlockAt(targetPos.x, targetPos.y, targetPos.z);
+            if (targetedBlockType === 'chest') {
+                openChestStorage(targetPos.x, targetPos.y, targetPos.z);
+                return;
+            }
             if (targetedBlockType === 'tnt') {
                 world.removeBlock(targetPos.x, targetPos.y, targetPos.z, true);
                 const primedTnt = new PrimedTNT(targetPos.x, targetPos.y, targetPos.z, scene, world, game);
@@ -788,6 +856,10 @@ if (mobileBuildBtn) {
 
             // If right clicking/building on an existing TNT block, ignite it!
             const targetedBlockType = world.getBlockAt(targetPos.x, targetPos.y, targetPos.z);
+            if (targetedBlockType === 'chest') {
+                openChestStorage(targetPos.x, targetPos.y, targetPos.z);
+                return;
+            }
             if (targetedBlockType === 'tnt') {
                 world.removeBlock(targetPos.x, targetPos.y, targetPos.z, true);
                 const primedTnt = new PrimedTNT(targetPos.x, targetPos.y, targetPos.z, scene, world, game);
@@ -853,6 +925,9 @@ function spawnMob(type) {
         else if (type === 'chicken') mobInstance = new Chicken(x, y + 1.0, z, scene, world, game);
         else if (type === 'pig') mobInstance = new Pig(x, y + 1.1, z, scene, world, game);
         else if (type === 'cow') mobInstance = new Cow(x, y + 1.2, z, scene, world, game);
+        else if (type === 'bloodgolem') mobInstance = new BloodGolem(x, y + 1.5, z, scene, world, game);
+        else if (type === 'giantirongolem') mobInstance = new GiantIronGolem(x, y + 3.0, z, scene, world, game);
+        else if (type === 'witherskeleton') mobInstance = new WitherSkeleton(x, y + 1.2, z, scene, world, game);
         
         if (mobInstance) {
             game.mobs.push(mobInstance);
@@ -862,32 +937,506 @@ function spawnMob(type) {
 
 // Spawn initial mobs and passive animals around the world
 for (let i = 0; i < 4; i++) {
-    const hostileTypes = ['zombie', 'creeper', 'skeleton'];
+    const hostileTypes = ['zombie', 'creeper', 'skeleton', 'witherskeleton'];
     spawnMob(hostileTypes[i % hostileTypes.length]);
 }
 for (let i = 0; i < 6; i++) {
     const animalTypes = ['chicken', 'pig', 'cow'];
     spawnMob(animalTypes[i % animalTypes.length]);
 }
+// Spawn 1 Giant Iron Golem and 1 Blood Golem at start
+spawnMob('giantirongolem');
+spawnMob('bloodgolem');
 
 // Periodically check and spawn mobs to populate the world (every 8 seconds)
-// Increased mob limit to 15 to allow a lively mix of hostiles and peaceful animals
 setInterval(() => {
-    if (player.controls.isLocked && game.mobs.length < 15) {
+    const invModal = document.getElementById('inventory-modal');
+    const isInvOpen = invModal && invModal.style.display !== 'none';
+    if ((player.controls.isLocked || isInvOpen) && game.mobs.length < 18) {
         const rand = Math.random();
-        if (rand < 0.05) {
+        if (rand < 0.03) {
+            spawnMob('giantirongolem');
+        } else if (rand < 0.07) {
+            spawnMob('bloodgolem');
+        } else if (rand < 0.12) {
             spawnMob('irongolem');
-        } else if (rand < 0.10) {
+        } else if (rand < 0.17) {
             spawnMob('snowgolem');
-        } else if (rand < 0.40) {
+        } else if (rand < 0.45) {
             const animalTypes = ['chicken', 'pig', 'cow'];
             spawnMob(animalTypes[Math.floor(Math.random() * animalTypes.length)]);
         } else {
-            const hostileTypes = ['zombie', 'creeper', 'skeleton'];
+            const hostileTypes = ['zombie', 'creeper', 'skeleton', 'witherskeleton'];
             spawnMob(hostileTypes[Math.floor(Math.random() * hostileTypes.length)]);
         }
     }
 }, 8000);
+
+
+// Inventory & Storage State Registry
+let currentChestPos = null;
+let selectedInventorySlot = null;
+
+const itemInfo = {
+    grass: { name: 'Rumput', emoji: '🌱' },
+    dirt: { name: 'Tanah', emoji: '🟫' },
+    stone: { name: 'Batu', emoji: '🪨' },
+    obsidian: { name: 'Obsidian', emoji: '🔮' },
+    wood: { name: 'Kayu', emoji: '🪵' },
+    leaf: { name: 'Daun', emoji: '🍃' },
+    brick: { name: 'Bata', emoji: '🧱' },
+    emerald: { name: 'Zamrud', emoji: '💚' },
+    diamond: { name: 'Berlian', emoji: '💎' },
+    ender: { name: 'Ender Block', emoji: '👁️' },
+    tnt: { name: 'TNT', emoji: '🧨' },
+    water: { name: 'Air', emoji: '💧' },
+    lava: { name: 'Lava', emoji: '🔥' },
+    quartz: { name: 'Kuarsa', emoji: '🤍' },
+    sand: { name: 'Pasir', emoji: '⏳' },
+    farmland: { name: 'Ladang', emoji: '🚜' },
+    lucky: { name: 'Lucky Block', emoji: '❓' },
+    magma: { name: 'Magma', emoji: '🌋' },
+    crop: { name: 'Bibit Gandum', emoji: '🌾' },
+    coal: { name: 'Batu Bara', emoji: '⚫' },
+    coal_ore: { name: 'Bijih Batu Bara', emoji: '🪨⚫' },
+    iron_ore: { name: 'Bijih Besi', emoji: '🪨🟫' },
+    gold_ore: { name: 'Bijih Emas', emoji: '🪨🪙' },
+    chest: { name: 'Peti', emoji: '📦' },
+    golden_apple: { name: 'Apel Emas', emoji: '🍎' },
+    helmet_iron: { name: 'Helm Besi', emoji: '🪖' },
+    chestplate_iron: { name: 'Zirah Besi', emoji: '👕' },
+    leggings_iron: { name: 'Celana Besi', emoji: '👖' },
+    boots_iron: { name: 'Sepatu Besi', emoji: '🥾' },
+    helmet_gold: { name: 'Helm Emas', emoji: '🪖' },
+    chestplate_gold: { name: 'Zirah Emas', emoji: '👕' },
+    leggings_gold: { name: 'Celana Emas', emoji: '👖' },
+    boots_gold: { name: 'Sepatu Emas', emoji: '🥾' },
+    helmet_diamond: { name: 'Helm Berlian', emoji: '🪖' },
+    chestplate_diamond: { name: 'Zirah Berlian', emoji: '👕' },
+    leggings_diamond: { name: 'Celana Berlian', emoji: '👖' },
+    boots_diamond: { name: 'Sepatu Berlian', emoji: '🥾' }
+};
+
+function addItemToInventory(type, count = 1) {
+    if (!player || !player.inventory) return false;
+    
+    const isStackable = !type.startsWith('helmet_') && 
+                        !type.startsWith('chestplate_') && 
+                        !type.startsWith('leggings_') && 
+                        !type.startsWith('boots_');
+    
+    let remaining = count;
+    
+    if (isStackable) {
+        for (let i = 0; i < player.inventory.length; i++) {
+            const item = player.inventory[i];
+            if (item && item.type === type && item.count < 64) {
+                const addAmount = Math.min(remaining, 64 - item.count);
+                item.count += addAmount;
+                remaining -= addAmount;
+                if (remaining <= 0) break;
+            }
+        }
+    }
+    
+    if (remaining > 0) {
+        for (let i = 0; i < player.inventory.length; i++) {
+            if (player.inventory[i] === null) {
+                const addAmount = Math.min(remaining, isStackable ? 64 : 1);
+                player.inventory[i] = { type: type, count: addAmount };
+                remaining -= addAmount;
+                if (remaining <= 0) break;
+            }
+        }
+    }
+    
+    if (remaining > 0) {
+        game.showNotification("Tas Penuh!");
+        return false;
+    }
+    
+    updateInventoryUI();
+    return true;
+}
+
+function updateInventoryUI() {
+    const bagGrid = document.getElementById('bag-grid');
+    const chestGrid = document.getElementById('chest-grid');
+    
+    if (!bagGrid) return;
+    
+    bagGrid.innerHTML = '';
+    
+    for (let i = 0; i < player.inventory.length; i++) {
+        const item = player.inventory[i];
+        const slotEl = document.createElement('div');
+        slotEl.className = 'inv-slot';
+        slotEl.dataset.index = i;
+        
+        if (selectedInventorySlot === i) {
+            slotEl.classList.add('selected');
+        }
+        
+        if (item) {
+            const info = itemInfo[item.type] || { name: item.type, emoji: '📦' };
+            slotEl.title = `${info.name} (${item.count})`;
+            
+            if (item.type === 'golden_apple' || item.type.includes('diamond')) {
+                slotEl.classList.add('rare-item');
+            }
+            
+            slotEl.innerHTML = `
+                <div class="item-visual">${info.emoji}</div>
+                <div class="item-count">${item.count}</div>
+            `;
+            
+            slotEl.addEventListener('click', () => {
+                handleSlotClick('bag', i);
+            });
+        } else {
+            slotEl.innerHTML = `<div class="empty-slot"></div>`;
+        }
+        bagGrid.appendChild(slotEl);
+    }
+    
+    if (currentChestPos && chestGrid) {
+        chestGrid.innerHTML = '';
+        const key = `${currentChestPos.x},${currentChestPos.y},${currentChestPos.z}`;
+        if (!game.chests[key]) {
+            game.chests[key] = Array(18).fill(null);
+        }
+        const chestInv = game.chests[key];
+        
+        for (let i = 0; i < chestInv.length; i++) {
+            const item = chestInv[i];
+            const slotEl = document.createElement('div');
+            slotEl.className = 'inv-slot';
+            slotEl.dataset.index = i;
+            
+            if (item) {
+                const info = itemInfo[item.type] || { name: item.type, emoji: '📦' };
+                slotEl.title = `${info.name} (${item.count})`;
+                
+                if (item.type === 'golden_apple' || item.type.includes('diamond')) {
+                    slotEl.classList.add('rare-item');
+                }
+                
+                slotEl.innerHTML = `
+                    <div class="item-visual">${info.emoji}</div>
+                    <div class="item-count">${item.count}</div>
+                `;
+                
+                slotEl.addEventListener('click', () => {
+                    handleSlotClick('chest', i);
+                });
+            } else {
+                slotEl.innerHTML = `<div class="empty-slot"></div>`;
+            }
+            chestGrid.appendChild(slotEl);
+        }
+    }
+    
+    const armorSlots = ['helmet', 'chestplate', 'leggings', 'boots'];
+    armorSlots.forEach(slotName => {
+        const slotEl = document.querySelector(`.armor-slot[data-slot="${slotName}"]`);
+        if (slotEl) {
+            const slotItemContainer = slotEl.querySelector('.slot-item');
+            const placeholderEl = slotEl.querySelector('.slot-placeholder');
+            const item = player.armor[slotName];
+            
+            if (item) {
+                const info = itemInfo[item.type] || { name: item.type, emoji: '🛡️' };
+                slotEl.title = `${info.name} (Terpasang)`;
+                placeholderEl.style.display = 'none';
+                slotItemContainer.innerHTML = `<div class="item-visual">${info.emoji}</div>`;
+                slotItemContainer.style.display = 'block';
+                
+                slotItemContainer.onclick = (e) => {
+                    e.stopPropagation();
+                    unequipArmor(slotName);
+                };
+            } else {
+                slotEl.title = `${slotName.toUpperCase()} Slot`;
+                placeholderEl.style.display = 'block';
+                slotItemContainer.innerHTML = '';
+                slotItemContainer.style.display = 'none';
+                slotItemContainer.onclick = null;
+            }
+        }
+    });
+    
+    const statsHp = document.getElementById('stats-hp');
+    const statsDef = document.getElementById('stats-def');
+    if (statsHp) statsHp.textContent = `❤️ HP: ${Math.round(player.health)}/${player.maxHealth}`;
+    if (statsDef) {
+        const defPercent = Math.round(player.getArmorReduction() * 100);
+        statsDef.textContent = `🛡️ DEF: ${defPercent}%`;
+    }
+    
+    const eatBtn = document.getElementById('eat-apple-btn');
+    if (eatBtn) {
+        if (selectedInventorySlot !== null) {
+            const selectedItem = player.inventory[selectedInventorySlot];
+            if (selectedItem && selectedItem.type === 'golden_apple') {
+                eatBtn.style.display = 'block';
+            } else {
+                eatBtn.style.display = 'none';
+            }
+        } else {
+            eatBtn.style.display = 'none';
+        }
+    }
+    
+    updateArmorUI();
+}
+
+function handleSlotClick(source, index) {
+    if (source === 'bag') {
+        const item = player.inventory[index];
+        if (!item) return;
+        
+        if (currentChestPos) {
+            const key = `${currentChestPos.x},${currentChestPos.y},${currentChestPos.z}`;
+            const chestInv = game.chests[key];
+            let moved = false;
+            
+            for (let i = 0; i < chestInv.length; i++) {
+                const cItem = chestInv[i];
+                if (cItem && cItem.type === item.type && cItem.count < 64) {
+                    const countToAdd = Math.min(item.count, 64 - cItem.count);
+                    cItem.count += countToAdd;
+                    item.count -= countToAdd;
+                    if (item.count <= 0) {
+                        player.inventory[index] = null;
+                    }
+                    moved = true;
+                    break;
+                }
+            }
+            
+            if (!moved) {
+                for (let i = 0; i < chestInv.length; i++) {
+                    if (chestInv[i] === null) {
+                        chestInv[i] = { type: item.type, count: item.count };
+                        player.inventory[index] = null;
+                        moved = true;
+                        break;
+                    }
+                }
+            }
+            if (moved) {
+                sounds.playClickSound();
+            } else {
+                game.showNotification("Peti penuh!");
+            }
+            selectedInventorySlot = null;
+        } else {
+            if (item.type.startsWith('helmet_') || item.type.startsWith('chestplate_') || item.type.startsWith('leggings_') || item.type.startsWith('boots_')) {
+                equipArmor(index);
+            } else {
+                if (selectedInventorySlot === index) {
+                    selectedInventorySlot = null;
+                } else {
+                    selectedInventorySlot = index;
+                }
+            }
+        }
+    } else if (source === 'chest') {
+        const key = `${currentChestPos.x},${currentChestPos.y},${currentChestPos.z}`;
+        const chestInv = game.chests[key];
+        const item = chestInv[index];
+        if (!item) return;
+        
+        let moved = false;
+        for (let i = 0; i < player.inventory.length; i++) {
+            const bItem = player.inventory[i];
+            if (bItem && bItem.type === item.type && bItem.count < 64) {
+                const countToAdd = Math.min(item.count, 64 - bItem.count);
+                bItem.count += countToAdd;
+                item.count -= countToAdd;
+                if (item.count <= 0) {
+                    chestInv[index] = null;
+                }
+                moved = true;
+                break;
+            }
+        }
+        if (!moved) {
+            for (let i = 0; i < player.inventory.length; i++) {
+                if (player.inventory[i] === null) {
+                    player.inventory[i] = { type: item.type, count: item.count };
+                    chestInv[index] = null;
+                    moved = true;
+                    break;
+                }
+            }
+        }
+        if (moved) {
+            sounds.playClickSound();
+        } else {
+            game.showNotification("Tas penuh!");
+        }
+    }
+    updateInventoryUI();
+}
+
+function equipArmor(slotIndex) {
+    const item = player.inventory[slotIndex];
+    if (!item) return;
+    
+    let slotName = '';
+    if (item.type.includes('helmet')) slotName = 'helmet';
+    else if (item.type.includes('chestplate')) slotName = 'chestplate';
+    else if (item.type.includes('leggings')) slotName = 'leggings';
+    else if (item.type.includes('boots')) slotName = 'boots';
+    
+    if (!slotName) return;
+    
+    const temp = player.armor[slotName];
+    player.armor[slotName] = { type: item.type, count: 1 };
+    player.inventory[slotIndex] = temp;
+    
+    sounds.playClickSound();
+    game.showNotification(`Memasang ${itemInfo[item.type].name}! 🛡️`);
+}
+
+function unequipArmor(slotName) {
+    const item = player.armor[slotName];
+    if (!item) return;
+    
+    let foundSlot = -1;
+    for (let i = 0; i < player.inventory.length; i++) {
+        if (player.inventory[i] === null) {
+            foundSlot = i;
+            break;
+        }
+    }
+    
+    if (foundSlot > -1) {
+        player.inventory[foundSlot] = { type: item.type, count: 1 };
+        player.armor[slotName] = null;
+        sounds.playClickSound();
+        game.showNotification(`Melepas ${itemInfo[item.type].name}.`);
+    } else {
+        game.showNotification("Tas penuh! Kosongkan tas untuk melepas armor.");
+    }
+    updateInventoryUI();
+}
+
+function eatGoldenApple(slotIndex) {
+    const item = player.inventory[slotIndex];
+    if (item && item.type === 'golden_apple') {
+        item.count--;
+        if (item.count <= 0) {
+            player.inventory[slotIndex] = null;
+        }
+        
+        player.health = Math.min(player.maxHealth, player.health + 50);
+        updateHealthUI();
+        
+        sounds.playClickSound();
+        
+        const flash = document.createElement('div');
+        flash.style.position = 'fixed';
+        flash.style.top = '0';
+        flash.style.left = '0';
+        flash.style.width = '100vw';
+        flash.style.height = '100vh';
+        flash.style.background = 'rgba(255, 215, 0, 0.35)';
+        flash.style.zIndex = '9999';
+        flash.style.pointerEvents = 'none';
+        flash.style.transition = 'opacity 0.3s ease-out';
+        document.body.appendChild(flash);
+
+        setTimeout(() => {
+            flash.style.opacity = '0';
+            setTimeout(() => {
+                if (flash.parentNode) flash.parentNode.removeChild(flash);
+            }, 300);
+        }, 150);
+        
+        game.showNotification("Mengonsumsi Apel Emas! Memulihkan 50 HP ❤️");
+        selectedInventorySlot = null;
+        updateInventoryUI();
+    }
+}
+
+function toggleInventory() {
+    const modal = document.getElementById('inventory-modal');
+    if (!modal) return;
+    
+    const isVisible = modal.style.display !== 'none';
+    if (isVisible) {
+        modal.style.display = 'none';
+        currentChestPos = null;
+        selectedInventorySlot = null;
+        
+        if (!player.isTouch) {
+            player.controls.lock();
+        }
+    } else {
+        modal.style.display = 'flex';
+        const chestSec = document.getElementById('chest-storage-section');
+        if (chestSec) chestSec.style.display = 'none';
+        
+        const title = document.getElementById('inventory-title');
+        if (title) title.textContent = "🎒 Tas & Perlengkapan";
+        
+        selectedInventorySlot = null;
+        updateInventoryUI();
+        
+        player.controls.unlock();
+    }
+}
+
+function openChestStorage(x, y, z) {
+    const modal = document.getElementById('inventory-modal');
+    if (!modal) return;
+    
+    currentChestPos = { x, y, z };
+    modal.style.display = 'flex';
+    
+    const chestSec = document.getElementById('chest-storage-section');
+    if (chestSec) chestSec.style.display = 'block';
+    
+    const title = document.getElementById('inventory-title');
+    if (title) title.textContent = "📦 Peti Penyimpanan";
+    
+    selectedInventorySlot = null;
+    updateInventoryUI();
+    
+    player.controls.unlock();
+}
+
+// Main HUD Armor UI Updater
+const armorBarContainer = document.getElementById('armor-bar-container');
+const armorFill = document.getElementById('armor-fill');
+const armorText = document.getElementById('armor-text');
+
+function updateArmorUI() {
+    if (armorBarContainer && armorFill && armorText && player) {
+        const reduction = player.getArmorReduction();
+        const percentage = Math.round(reduction * 100);
+        if (percentage > 0) {
+            armorBarContainer.style.display = 'flex';
+            armorFill.style.width = `${percentage}%`;
+            armorText.textContent = `${percentage}% DEF`;
+        } else {
+            armorBarContainer.style.display = 'none';
+        }
+    }
+}
+
+// Bind UI actions for inventory modal
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('close-inventory-btn')?.addEventListener('click', toggleInventory);
+    document.getElementById('inventory-btn')?.addEventListener('click', toggleInventory);
+    document.getElementById('eat-apple-btn')?.addEventListener('click', () => {
+        if (selectedInventorySlot !== null) {
+            eatGoldenApple(selectedInventorySlot);
+        }
+    });
+});
 
 
 // 9. HUD Health UI Updater

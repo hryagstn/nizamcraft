@@ -197,6 +197,15 @@
         <span id="health-text">100 HP</span>
     </div>
 
+    <!-- HUD Armor Bar -->
+    <div id="armor-bar-container" style="display: none;">
+        <span class="shield-icon">🛡️</span>
+        <div id="armor-bar">
+            <div id="armor-fill"></div>
+        </div>
+        <span id="armor-text">0% DEF</span>
+    </div>
+
     <!-- Bottom HUD: Hotbar Voxel Selection -->
     <div id="hotbar-container">
         <div class="hotbar-slot active" data-index="0" title="Grass Block">
@@ -304,6 +313,26 @@
             <div class="block-preview preview-spawn_snowgolem"></div>
             <span class="block-name">G. Snow</span>
         </div>
+        <div class="hotbar-slot" data-index="21" title="Coal Ore">
+            <span class="slot-num">K</span>
+            <div class="block-preview preview-coal_ore"></div>
+            <span class="block-name">Coal Ore</span>
+        </div>
+        <div class="hotbar-slot" data-index="22" title="Iron Ore">
+            <span class="slot-num">J</span>
+            <div class="block-preview preview-iron_ore"></div>
+            <span class="block-name">Iron Ore</span>
+        </div>
+        <div class="hotbar-slot" data-index="23" title="Gold Ore">
+            <span class="slot-num">N</span>
+            <div class="block-preview preview-gold_ore"></div>
+            <span class="block-name">Gold Ore</span>
+        </div>
+        <div class="hotbar-slot" data-index="24" title="Peti Penyimpanan">
+            <span class="slot-num">C</span>
+            <div class="block-preview preview-chest"></div>
+            <span class="block-name">Chest</span>
+        </div>
     </div>
 
     <!-- Floating Plant Button above Health Bar -->
@@ -312,6 +341,77 @@
             <span class="plant-icon">🌱</span>
             <span class="plant-text">Tanam Benih (P)</span>
         </button>
+    </div>
+
+    <!-- Floating Inventory/Bag Button -->
+    <div id="inventory-button-container">
+        <button id="inventory-btn" class="glass-btn">
+            <span class="bag-icon">🎒</span>
+            <span class="bag-text">Tas (E)</span>
+        </button>
+    </div>
+
+    <!-- Inventory & Storage UI Modal -->
+    <div id="inventory-modal" class="modal-overlay" style="display: none;">
+        <div class="inventory-container glass-panel">
+            <div class="inventory-header">
+                <h2 id="inventory-title">🎒 Tas & Perlengkapan</h2>
+                <button id="close-inventory-btn" class="close-btn">&times;</button>
+            </div>
+            
+            <div class="inventory-content">
+                <!-- Chest Storage Area (Only visible when interacting with a chest) -->
+                <div id="chest-storage-section" class="storage-section" style="display: none;">
+                    <h3>📦 Peti Penyimpanan</h3>
+                    <div id="chest-grid" class="inventory-grid"></div>
+                </div>
+
+                <div class="player-and-bag-section">
+                    <!-- Left: Player Equipment (Armor) -->
+                    <div class="equipment-section">
+                        <h3>🛡️ Status & Armor</h3>
+                        <div class="player-preview-box">
+                            <div class="player-silhouette">👤</div>
+                            <div class="armor-stats">
+                                <div id="stats-hp">❤️ HP: 100/100</div>
+                                <div id="stats-def">🛡️ DEF: 0%</div>
+                            </div>
+                        </div>
+                        <div class="armor-slots-container">
+                            <div class="armor-slot" data-slot="helmet" title="Helmet">
+                                <span class="slot-placeholder">🪖</span>
+                                <div class="slot-item"></div>
+                            </div>
+                            <div class="armor-slot" data-slot="chestplate" title="Chestplate">
+                                <span class="slot-placeholder">👕</span>
+                                <div class="slot-item"></div>
+                            </div>
+                            <div class="armor-slot" data-slot="leggings" title="Leggings">
+                                <span class="slot-placeholder">👖</span>
+                                <div class="slot-item"></div>
+                            </div>
+                            <div class="armor-slot" data-slot="boots" title="Boots">
+                                <span class="slot-placeholder">🥾</span>
+                                <div class="slot-item"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Player Bag Inventory -->
+                    <div class="bag-section">
+                        <h3>🎒 Tas Pemain</h3>
+                        <div id="bag-grid" class="inventory-grid"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="inventory-footer">
+                <span class="info-tip">Tip: Klik barang untuk memindahkan/menggunakan! Klik 'Makan' untuk Apel Emas.</span>
+                <div class="footer-actions">
+                    <button id="eat-apple-btn" class="action-btn heal-btn" style="display: none;">🍎 Makan Apel Emas</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Mobile HUD Controls (Only active on Mobile/Touch) -->

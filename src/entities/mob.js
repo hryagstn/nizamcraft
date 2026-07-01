@@ -64,6 +64,41 @@ function createMobFaceTexture(type) {
         ctx.fillRect(0, 0, 8, 1);
         ctx.fillRect(0, 1, 1, 2);
         ctx.fillRect(7, 0, 1, 3);
+    } else if (type === 'bloodgolem') {
+        ctx.fillStyle = '#660708'; // Crimson/dark red
+        ctx.fillRect(0, 0, 8, 8);
+        
+        // Glowing red/yellow eyes
+        ctx.fillStyle = '#ffb703';
+        ctx.fillRect(1, 4, 1, 1);
+        ctx.fillRect(6, 4, 1, 1);
+        
+        // Darker pupils
+        ctx.fillStyle = '#ba181b';
+        ctx.fillRect(2, 4, 1, 1);
+        ctx.fillRect(5, 4, 1, 1);
+        
+        // Dark veins on face
+        ctx.fillStyle = '#0b090a';
+        ctx.fillRect(0, 0, 8, 1);
+        ctx.fillRect(0, 1, 1, 2);
+        ctx.fillRect(7, 0, 1, 3);
+    } else if (type === 'witherskeleton') {
+        ctx.fillStyle = '#1e1f22'; // Charred dark grey
+        ctx.fillRect(0, 0, 8, 8);
+        
+        // Hollow white glowing eyes
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(1, 3, 2, 2);
+        ctx.fillRect(5, 3, 2, 2);
+        
+        // Nose socket
+        ctx.fillStyle = '#090a0f';
+        ctx.fillRect(3, 5, 2, 1);
+        
+        // Dark mouth grate
+        ctx.fillStyle = '#090a0f';
+        ctx.fillRect(2, 6, 4, 1);
     }
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -297,12 +332,18 @@ export class Mob {
                     mat.color.setHex(0x2d6a4f);
                 } else if (this.type === 'skeleton') {
                     mat.color.setHex(0xd3d3d3);
-                } else if (this.type === 'irongolem') {
+                } else if (this.type === 'irongolem' || this.type === 'giantirongolem') {
                     if (mat.name === 'skin' || mat.name === 'iron') mat.color.setHex(0xdedede);
                     if (mat.name === 'nose') mat.color.setHex(0x9a8880);
                     if (mat.name === 'eyes') mat.color.setHex(0x990000);
                     if (mat.name === 'vines') mat.color.setHex(0x2d6a4f);
                     if (mat.name === 'rose') mat.color.setHex(0xd90429);
+                } else if (this.type === 'bloodgolem') {
+                    if (mat.name === 'crimson') mat.color.setHex(0x660708);
+                    if (mat.name === 'red') mat.color.setHex(0xba181b);
+                    if (mat.name === 'dark') mat.color.setHex(0x161a1d);
+                } else if (this.type === 'witherskeleton') {
+                    mat.color.setHex(0x1e1f22);
                 }
             });
         }
@@ -1400,15 +1441,6 @@ export class Cow extends Animal {
         rHorn.rotation.z = 0.15;
         this.mesh.add(rHorn);
 
-        // 4 legs (0.16 x 0.38 x 0.16)
-        const legGeo = new THREE.BoxGeometry(0.16, 0.38, 0.16);
-        const legOffsets = [
-            [-0.2, 0.19, 0.3],
-            [0.2, 0.19, 0.3],
-            [-0.2, 0.19, -0.3],
-            [0.2, 0.19, -0.3]
-        ];
-
         legOffsets.forEach(([lx, ly, lz]) => {
             const leg = new THREE.Mesh(legGeo, brownMat);
             leg.position.set(lx, ly, lz);
@@ -1417,3 +1449,471 @@ export class Cow extends Animal {
         });
     }
 }
+
+// 7. BLOOD GOLEM (Aggressive crimson monster)
+export class BloodGolem extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('bloodgolem', x, y, z, scene, world, game);
+        this.hp = 400;
+        this.maxHp = 400;
+        this.width = 1.2;
+        this.height = 2.6;
+        this.speed = 1.8;
+        this.attackCooldown = 0;
+        this.attackAnimTimer = 0;
+        this.targetMob = null;
+    }
+
+    initMesh() {
+        const crimsonMat = new THREE.MeshLambertMaterial({ color: 0x660708 });
+        const redMat = new THREE.MeshLambertMaterial({ color: 0xba181b });
+        const darkMat = new THREE.MeshLambertMaterial({ color: 0x161a1d });
+        crimsonMat.name = 'crimson';
+        redMat.name = 'red';
+        darkMat.name = 'dark';
+        this.materialsToDispose.push(crimsonMat, redMat, darkMat);
+
+        const faceTex = createMobFaceTexture('bloodgolem');
+        const faceMat = new THREE.MeshLambertMaterial({ map: faceTex });
+        faceMat.name = 'headFace';
+        this.materialsToDispose.push(faceMat);
+
+        const faceMats = [
+            crimsonMat, crimsonMat, crimsonMat, crimsonMat, faceMat, crimsonMat
+        ];
+
+        const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const head = new THREE.Mesh(headGeo, faceMats);
+        head.position.set(0, 2.3, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        const noseGeo = new THREE.BoxGeometry(0.08, 0.2, 0.08);
+        const nose = new THREE.Mesh(noseGeo, darkMat);
+        nose.position.set(0, 2.25, 0.28);
+        this.mesh.add(nose);
+
+        const torsoGeo = new THREE.BoxGeometry(0.9, 1.1, 0.5);
+        const torso = new THREE.Mesh(torsoGeo, crimsonMat);
+        torso.position.set(0, 1.45, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        const heartGeo = new THREE.BoxGeometry(0.15, 0.15, 0.05);
+        const heart = new THREE.Mesh(heartGeo, redMat);
+        heart.position.set(0.18, 1.6, 0.26);
+        this.mesh.add(heart);
+
+        const lArmGroup = new THREE.Group();
+        lArmGroup.position.set(-0.54, 1.8, 0);
+        const armGeo = new THREE.BoxGeometry(0.18, 1.2, 0.18);
+        const lArmMesh = new THREE.Mesh(armGeo, crimsonMat);
+        lArmMesh.position.set(0, -0.55, 0);
+        lArmMesh.castShadow = true;
+        lArmGroup.add(lArmMesh);
+        this.mesh.add(lArmGroup);
+        this.lArm = lArmGroup;
+
+        const rArmGroup = new THREE.Group();
+        rArmGroup.position.set(0.54, 1.8, 0);
+        const rArmMesh = new THREE.Mesh(armGeo, crimsonMat);
+        rArmMesh.position.set(0, -0.55, 0);
+        rArmMesh.castShadow = true;
+        rArmGroup.add(rArmMesh);
+        this.mesh.add(rArmGroup);
+        this.rArm = rArmGroup;
+
+        const legGeo = new THREE.BoxGeometry(0.22, 0.9, 0.22);
+        const lLeg = new THREE.Mesh(legGeo, darkMat);
+        lLeg.position.set(-0.22, 0.45, 0);
+        lLeg.castShadow = true;
+        this.mesh.add(lLeg);
+
+        const rLeg = new THREE.Mesh(legGeo, darkMat);
+        rLeg.position.set(0.22, 0.45, 0);
+        rLeg.castShadow = true;
+        this.mesh.add(rLeg);
+    }
+    
+    updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        if (this.attackAnimTimer > 0) {
+            this.attackAnimTimer -= dt;
+            const progress = this.attackAnimTimer / 0.5;
+            const angle = -Math.sin(progress * Math.PI) * 1.5;
+            this.lArm.rotation.x = angle;
+            this.rArm.rotation.x = angle;
+        } else {
+            this.lArm.rotation.x = 0;
+            this.rArm.rotation.x = 0;
+        }
+
+        let target = null;
+        let minDist = 18.0;
+
+        const playerPos = this.game.player.position.clone();
+        const distToPlayer = this.position.distanceTo(playerPos);
+        if (distToPlayer < minDist) {
+            minDist = distToPlayer;
+            target = { type: 'player', position: playerPos };
+        }
+
+        if (this.game.mobs) {
+            for (let i = 0; i < this.game.mobs.length; i++) {
+                const mob = this.game.mobs[i];
+                if (mob !== this && (mob.type === 'irongolem' || mob.type === 'giantirongolem' || mob.type === 'pig' || mob.type === 'cow' || mob.type === 'chicken')) {
+                    const dist = this.position.distanceTo(mob.position);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        target = { type: 'mob', mob: mob, position: mob.position.clone() };
+                    }
+                }
+            }
+        }
+
+        if (target) {
+            const tPos = target.position;
+            const dirX = tPos.x - this.position.x;
+            const dirZ = tPos.z - this.position.z;
+            const angle = Math.atan2(dirX, dirZ);
+            this.mesh.rotation.y = angle;
+
+            const currentSpeed = isLiquid ? this.speed * 0.4 : this.speed;
+            this.velocity.x = Math.sin(angle) * currentSpeed;
+            this.velocity.z = Math.cos(angle) * currentSpeed;
+
+            const dist = this.position.distanceTo(tPos);
+            if (dist < 2.0 && this.attackCooldown <= 0) {
+                this.attackCooldown = 0.8;
+                this.attackAnimTimer = 0.5;
+                
+                if (target.type === 'player') {
+                    this.game.player.takeDamage(30);
+                } else {
+                    target.mob.takeDamage(50);
+                    target.mob.velocity.y = 8.0;
+                    const pushDir = tPos.clone().sub(this.position).setY(0).normalize();
+                    target.mob.velocity.addScaledVector(pushDir, 4.0);
+                }
+                sounds.playHurtSound();
+            }
+        } else {
+            this.wanderTimer -= dt;
+            if (this.wanderTimer <= 0) {
+                this.wanderTimer = 2.0 + Math.random() * 4.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (this.speed * 0.4);
+            this.velocity.z = Math.cos(this.wanderAngle) * (this.speed * 0.4);
+            this.mesh.rotation.y = this.wanderAngle;
+        }
+
+        if (isLiquid && Math.random() < 0.05) {
+            this.velocity.y = 3.5;
+        }
+    }
+}
+
+// 8. GIANT IRON GOLEM (Friendly protector boss)
+export class GiantIronGolem extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('giantirongolem', x, y, z, scene, world, game);
+        this.hp = 1000;
+        this.maxHp = 1000;
+        this.width = 2.5;
+        this.height = 6.0;
+        this.speed = 0.9;
+        this.attackCooldown = 0;
+        this.attackAnimTimer = 0;
+        this.targetMob = null;
+    }
+
+    initMesh() {
+        const ironMat = new THREE.MeshLambertMaterial({ color: 0xdedede });
+        const roseMat = new THREE.MeshLambertMaterial({ color: 0xd90429 });
+        ironMat.name = 'iron';
+        roseMat.name = 'rose';
+        this.materialsToDispose.push(ironMat, roseMat);
+
+        const faceTex = createMobFaceTexture('irongolem');
+        const faceMat = new THREE.MeshLambertMaterial({ map: faceTex });
+        faceMat.name = 'headFace';
+        this.materialsToDispose.push(faceMat);
+
+        const faceMats = [
+            ironMat, ironMat, ironMat, ironMat, faceMat, ironMat
+        ];
+
+        const headGeo = new THREE.BoxGeometry(1.1, 1.1, 1.1);
+        const head = new THREE.Mesh(headGeo, faceMats);
+        head.position.set(0, 5.4, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        const noseGeo = new THREE.BoxGeometry(0.2, 0.45, 0.2);
+        const noseMat = new THREE.MeshLambertMaterial({ color: 0x9a8880 });
+        noseMat.name = 'nose';
+        this.materialsToDispose.push(noseMat);
+        const nose = new THREE.Mesh(noseGeo, noseMat);
+        nose.position.set(0, 5.3, 0.625);
+        this.mesh.add(nose);
+
+        const torsoGeo = new THREE.BoxGeometry(2.0, 2.5, 1.1);
+        const torso = new THREE.Mesh(torsoGeo, ironMat);
+        torso.position.set(0, 3.4, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        const flowerGeo = new THREE.BoxGeometry(0.3, 0.3, 0.1);
+        const flower = new THREE.Mesh(flowerGeo, roseMat);
+        flower.position.set(0.38, 3.75, 0.6);
+        this.mesh.add(flower);
+
+        const lArmGroup = new THREE.Group();
+        lArmGroup.position.set(-1.2, 4.25, 0);
+        const armGeo = new THREE.BoxGeometry(0.4, 2.75, 0.4);
+        const lArmMesh = new THREE.Mesh(armGeo, ironMat);
+        lArmMesh.position.set(0, -1.25, 0);
+        lArmMesh.castShadow = true;
+        lArmGroup.add(lArmMesh);
+        this.mesh.add(lArmGroup);
+        this.lArm = lArmGroup;
+
+        const rArmGroup = new THREE.Group();
+        rArmGroup.position.set(1.2, 4.25, 0);
+        const rArmMesh = new THREE.Mesh(armGeo, ironMat);
+        rArmMesh.position.set(0, -1.25, 0);
+        rArmMesh.castShadow = true;
+        rArmGroup.add(rArmMesh);
+        this.mesh.add(rArmGroup);
+        this.rArm = rArmGroup;
+
+        const legGeo = new THREE.BoxGeometry(0.5, 2.0, 0.5);
+        const lLeg = new THREE.Mesh(legGeo, ironMat);
+        lLeg.position.set(-0.5, 1.0, 0);
+        lLeg.castShadow = true;
+        this.mesh.add(lLeg);
+
+        const rLeg = new THREE.Mesh(legGeo, ironMat);
+        rLeg.position.set(0.5, 1.0, 0);
+        rLeg.castShadow = true;
+        this.mesh.add(rLeg);
+    }
+
+    updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        if (this.attackAnimTimer > 0) {
+            this.attackAnimTimer -= dt;
+            const progress = this.attackAnimTimer / 0.6;
+            const angle = -Math.sin(progress * Math.PI) * 1.5;
+            this.lArm.rotation.x = angle;
+            this.rArm.rotation.x = angle;
+        } else {
+            this.lArm.rotation.x = 0;
+            this.rArm.rotation.x = 0;
+        }
+
+        let closestMob = null;
+        let minDist = 25.0;
+        
+        if (this.game.mobs) {
+            for (let i = 0; i < this.game.mobs.length; i++) {
+                const mob = this.game.mobs[i];
+                if (mob !== this && (mob.type === 'zombie' || mob.type === 'skeleton' || mob.type === 'creeper' || mob.type === 'bloodgolem' || mob.type === 'witherskeleton')) {
+                    const dist = this.position.distanceTo(mob.position);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestMob = mob;
+                    }
+                }
+            }
+        }
+
+        this.targetMob = closestMob;
+
+        if (this.targetMob) {
+            const tPos = this.targetMob.position;
+            const dirX = tPos.x - this.position.x;
+            const dirZ = tPos.z - this.position.z;
+            const angle = Math.atan2(dirX, dirZ);
+            this.mesh.rotation.y = angle;
+
+            const currentSpeed = isLiquid ? this.speed * 0.4 : this.speed;
+            this.velocity.x = Math.sin(angle) * currentSpeed;
+            this.velocity.z = Math.cos(angle) * currentSpeed;
+
+            const dist = this.position.distanceTo(tPos);
+            if (dist < 3.2 && this.attackCooldown <= 0) {
+                this.attackCooldown = 1.6;
+                this.attackAnimTimer = 0.6;
+                
+                this.targetMob.takeDamage(120);
+                
+                this.targetMob.velocity.y = 15.0; 
+                const pushDir = tPos.clone().sub(this.position).setY(0).normalize();
+                this.targetMob.velocity.addScaledVector(pushDir, 7.0);
+                
+                sounds.playClickSound();
+            }
+        } else {
+            this.wanderTimer -= dt;
+            if (this.wanderTimer <= 0) {
+                this.wanderTimer = 3.0 + Math.random() * 4.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (this.speed * 0.4);
+            this.velocity.z = Math.cos(this.wanderAngle) * (this.speed * 0.4);
+            this.mesh.rotation.y = this.wanderAngle;
+        }
+
+        if (isLiquid && Math.random() < 0.05) {
+            this.velocity.y = 3.5;
+        }
+    }
+}
+
+// 9. WITHER SKELETON (Hostile melee boss skeleton)
+export class WitherSkeleton extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('witherskeleton', x, y, z, scene, world, game);
+        this.hp = 150;
+        this.maxHp = 150;
+        this.width = 0.7;
+        this.height = 2.4;
+        this.speed = 1.8;
+        this.attackCooldown = 0;
+    }
+
+    initMesh() {
+        const coalMat = new THREE.MeshLambertMaterial({ color: 0x1e1f22 });
+        coalMat.name = 'skin';
+        this.materialsToDispose.push(coalMat);
+
+        const faceTex = createMobFaceTexture('witherskeleton');
+        const faceMat = new THREE.MeshLambertMaterial({ map: faceTex });
+        faceMat.name = 'headFace';
+        this.materialsToDispose.push(faceMat);
+
+        const faceMats = [
+            coalMat, coalMat, coalMat, coalMat, faceMat, coalMat
+        ];
+
+        const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const head = new THREE.Mesh(headGeo, faceMats);
+        head.position.set(0, 2.05, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        const bodyGeo = new THREE.BoxGeometry(0.28, 1.0, 0.14);
+        const body = new THREE.Mesh(bodyGeo, coalMat);
+        body.position.set(0, 1.25, 0);
+        body.castShadow = true;
+        this.mesh.add(body);
+
+        const armGroup = new THREE.Group();
+        armGroup.position.set(0, 1.45, 0);
+
+        const armGeo = new THREE.BoxGeometry(0.08, 0.08, 0.6);
+        const lArm = new THREE.Mesh(armGeo, coalMat);
+        lArm.position.set(-0.22, 0, 0.25);
+        lArm.castShadow = true;
+        armGroup.add(lArm);
+
+        const rArm = new THREE.Mesh(armGeo, coalMat);
+        rArm.position.set(0.22, 0, 0.25);
+        rArm.castShadow = true;
+        armGroup.add(rArm);
+
+        const swordGroup = new THREE.Group();
+        const bladeGeo = new THREE.BoxGeometry(0.04, 0.04, 0.6);
+        const stoneMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+        stoneMat.name = 'sword_blade';
+        this.materialsToDispose.push(stoneMat);
+        const blade = new THREE.Mesh(bladeGeo, stoneMat);
+        blade.position.set(0, 0, 0.3);
+        swordGroup.add(blade);
+
+        const handleGeo = new THREE.BoxGeometry(0.02, 0.02, 0.15);
+        const woodMat = new THREE.MeshLambertMaterial({ color: 0x5c3a21 });
+        woodMat.name = 'sword_handle';
+        this.materialsToDispose.push(woodMat);
+        const handle = new THREE.Mesh(handleGeo, woodMat);
+        handle.position.set(0, 0, -0.05);
+        swordGroup.add(handle);
+
+        swordGroup.position.set(0.22, -0.02, 0.45);
+        armGroup.add(swordGroup);
+        this.mesh.add(armGroup);
+        this.arms = armGroup;
+
+        const legGeo = new THREE.BoxGeometry(0.08, 0.75, 0.08);
+        const lLeg = new THREE.Mesh(legGeo, coalMat);
+        lLeg.position.set(-0.12, 0.38, 0);
+        lLeg.castShadow = true;
+        this.mesh.add(lLeg);
+
+        const rLeg = new THREE.Mesh(legGeo, coalMat);
+        rLeg.position.set(0.12, 0.38, 0);
+        rLeg.castShadow = true;
+        this.mesh.add(rLeg);
+    }
+
+    updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+
+        const playerPos = this.game.player.position.clone();
+        const dist = this.position.distanceTo(playerPos);
+
+        if (dist < 12.0) {
+            this.state = 'CHASE';
+        } else {
+            this.state = 'WANDER';
+        }
+
+        if (this.state === 'WANDER') {
+            this.wanderTimer -= dt;
+            if (this.wanderTimer <= 0) {
+                this.wanderTimer = 2.0 + Math.random() * 3.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (this.speed * 0.4);
+            this.velocity.z = Math.cos(this.wanderAngle) * (this.speed * 0.4);
+            this.mesh.rotation.y = this.wanderAngle;
+        } else if (this.state === 'CHASE') {
+            const dirX = playerPos.x - this.position.x;
+            const dirZ = playerPos.z - this.position.z;
+            const angle = Math.atan2(dirX, dirZ);
+            this.mesh.rotation.y = angle;
+
+            const currentSpeed = isLiquid ? this.speed * 0.4 : this.speed;
+            this.velocity.x = Math.sin(angle) * currentSpeed;
+            this.velocity.z = Math.cos(angle) * currentSpeed;
+
+            if (dist < 1.8 && this.attackCooldown <= 0) {
+                this.attackCooldown = 1.2;
+                
+                // Swing sword animation
+                const origY = this.arms.position.y;
+                let t = 0;
+                const swingInt = setInterval(() => {
+                    t += 0.05;
+                    if (t >= 0.3) {
+                        this.arms.rotation.x = 0;
+                        clearInterval(swingInt);
+                    } else {
+                        this.arms.rotation.x = -Math.sin((t / 0.3) * Math.PI) * 0.8;
+                    }
+                }, 30);
+
+                this.game.player.takeDamage(20);
+                this.game.player.witherTimer = 5.0; // Wither Decay
+                this.game.showNotification("Terkena efek Wither Decay! 🖤☠️");
+            }
+        }
+
+        if (isLiquid && Math.random() < 0.05) {
+            this.velocity.y = 3.5;
+        }
+    }
+}
+

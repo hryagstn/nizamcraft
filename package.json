@@ -1,4 +1,8 @@
 {
+  "name": "nizamcraft",
+  "version": "3.0.0",
+  "description": "Game Voxel 3D interaktif berbasis WebGL/Three.js",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"

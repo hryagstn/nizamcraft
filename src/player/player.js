@@ -127,10 +127,7 @@ export class Player {
                 case 'Space':
                     this.keys.jump = true;
                     break;
-                case 'KeyR':
-                    // Press R to respawn if stuck
-                    this.respawn();
-                    break;
+
             }
         };
 

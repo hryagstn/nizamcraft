@@ -319,7 +319,7 @@ hotbarSlots.forEach(slot => {
 
 // Keyboard controls for hotbar and shortcuts
 window.addEventListener('keydown', (e) => {
-    if (e.key === 'e' || e.key === 'E' || e.key === 'i' || e.key === 'I') {
+    if (e.key === 'e' || e.key === 'E') {
         const overlay = document.getElementById('play-overlay');
         if (!overlay || overlay.style.display === 'none') {
             toggleInventory();
@@ -333,7 +333,11 @@ window.addEventListener('keydown', (e) => {
             '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6, '8': 7, '9': 8, '0': 9,
             '-': 10, '=': 11, 'l': 12, 'L': 12, 'q': 13, 'Q': 13,
             'y': 14, 'Y': 14, 'u': 15, 'U': 15, 'i': 16, 'I': 16,
-            'o': 17, 'O': 17, 'p': 18, 'P': 18, 'g': 19, 'G': 19, 'h': 20, 'H': 20
+            'o': 17, 'O': 17, 'p': 18, 'P': 18, 'g': 19, 'G': 19, 'h': 20, 'H': 20,
+            'k': 21, 'K': 21, 'j': 22, 'J': 22, 'n': 23, 'N': 23,
+            'c': 24, 'C': 24, 'v': 25, 'V': 25, 'x': 26, 'X': 26,
+            'z': 27, 'Z': 27, 'm': 28, 'M': 28, 'b': 29, 'B': 29,
+            't': 30, 'T': 30, 'r': 31, 'R': 31
         };
         if (keyMap[e.key] !== undefined) {
             selectHotbarSlot(keyMap[e.key]);

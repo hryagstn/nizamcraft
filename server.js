@@ -20,6 +20,8 @@ const server = http.createServer((req, res) => {
                 const extname = path.extname(filePath);
                 const contentType = extname === '.js' ? 'application/javascript' : 
                                   extname === '.css' ? 'text/css' : 
+                                  extname === '.json' ? 'application/json' :
+                                  extname === '.svg' ? 'image/svg+xml' :
                                   'text/html';
                 res.writeHead(200, { 'Content-Type': contentType });
                 res.end(content);

@@ -28,6 +28,7 @@ NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Gam
 - **Efek Partikel Hancur**: Setiap block yang digali akan menyemburkan pecahan partikel dengan warna yang sesuai sebelum menghilang.
 - **Sistem Pertempuran Jarak Jauh**: Gunakan **Busur Panah (Bow)** untuk menembak zombie dan skeleton dari jarak jauh dengan efek dorongan balik (knockback).
 - **Optimasi Mobile & Touch Screen**: Gamepad sentuh bawaan (joystick gerak, tombol gali, pasang, serang, melompat, serta hotbar yang adaptif) dengan pemosisian ergonomis yang mencegah tombol saling bertumpang-tindih di berbagai resolusi layar.
+- **Dukungan PWA & Akses Offline**: Integrasi penuh Service Worker (`sw.js`) dengan strategi caching pintar (cache-first) dan Web App Manifest (`manifest.json`) agar game dapat diinstal ke home screen perangkat Anda dan dimainkan secara instan tanpa koneksi internet.
 - **Optimalisasi iOS Safari**: Layout game didesain menggunakan CSS Dynamic Viewport Height (`100dvh`) agar pas di layar tanpa terpotong bar navigasi Safari. Dilengkapi pula dengan deteksi otomatis dan petunjuk toast layar penuh jika Fullscreen API dibatasi oleh sistem iOS.
 - **Kompatibilitas MacBook Trackpad**: Mendukung klik kiri (ketuk satu jari) dan klik kanan (ketuk dua jari) trackpad MacBook secara lancar tanpa terganggu menu konteks browser.
 - **Penyimpanan Dunia Otomatis**: Simpan dan muat progres dunia Anda (termasuk posisi, HP, isi tas/inventaris pemain, armor terpasang, serta seluruh inventaris peti) menggunakan LocalStorage di browser. Dunia Anda otomatis tersimpan saat Anda menutup halaman game atau menekan tombol simpan.
@@ -41,10 +42,9 @@ NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Gam
 - **Melompat**: Tombol `Spasi`
 - **Gali Block / Serang**: Klik Kiri Mouse
 - **Pasang Block / Buka Peti**: Klik Kanan Mouse
-- **Buka/Tutup Tas (Inventaris)**: Tombol `E` atau `I`
-- **Pilih Jenis Block/Item**: Tombol `1` - `9`, `0`, `-`, `=`, `L` (Lava), `Q` (Quartz), `B` (Bow), `O` (Magma), `P` (Crop/Tanam), `G` (Spawn Iron Golem), `H` (Spawn Snow Golem), `K` (Coal Ore), `J` (Iron Ore), `N` (Gold Ore), `C` (Chest)
+- **Buka/Tutup Tas (Inventaris)**: Tombol `E` (Tombol `I` dibebaskan untuk pintasan Lucky Block)
+- **Pilih Jenis Block/Item**: Tombol `1` - `9`, `0`, `-`, `=`, `L` (Lava), `Q` (Quartz), `Y` (Pasir), `U` (Ladang), `I` (Lucky Block), `O` (Magma), `P` (Crop/Tanam), `G` (Spawn Iron Golem), `H` (Spawn Snow Golem), `K` (Coal Ore), `J` (Iron Ore), `N` (Gold Ore), `C` (Chest), `V` (Crafting Table), `X` (Piston), `Z` (Rail), `M` (Pressure Plate), `B` (Button), `T` (Lever), `R` (Dispenser)
 - **Shortcut Kontekstual Tanam**: Tombol `P` saat membidik block Ladang (Farmland) yang kosong di atasnya
-- **Respawn (Kembali ke Spawn)**: Tombol `R`
 - **Regenerasi Dunia**: Tombol `Backspace` (mengatur ulang seluruh peta)
 
 ### Mobile (Layar Sentuh)
@@ -95,6 +95,81 @@ NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Gam
 - **Web Audio API** (Sintesis audio real-time)
 - **Simplex Noise** (Algoritma pembuatan lanskap dunia voxel)
 - **HTML5 / CSS3 / JavaScript (ES6 Modules)**
+
+## Riwayat Perubahan (Changelog)
+
+Seluruh riwayat rilis dan catatan pembaruan proyek dikonsolidasikan di bawah ini:
+
+### [3.1.0] - 2026-07-03
+#### Added
+- **Dukungan PWA & Akses Offline**: Integrasi Service Worker (`sw.js`) dengan strategi cache-first serta Web App Manifest (`manifest.json`) dan logo ikon PWA (`src/assets/icon.svg`) agar game dapat diinstal dan dimainkan secara offline.
+- **Pintasan Keyboard Hotbar Lengkap**: Menambahkan pintasan keyboard untuk seluruh 32 slot hotbar (indeks 21 hingga 31).
+- **Perbaikan Bentrokan Tombol**:
+  - Membatasi tombol `I` / `i` hanya untuk memilih slot Lucky Block (inventaris sekarang murni dibuka via tombol `E` / `e`).
+  - Menghapus pintasan keyboard `R` untuk stuck-respawn agar tidak bertabrakan dengan pemilihan slot Dispenser.
+
+#### Fixed
+- **Visual Icon Hotbar**: Menambahkan visual emoji representatif pada 32 slot hotbar untuk mempermudah navigasi visual item.
+
+---
+
+### [3.0.0] - 2026-07-01
+#### Added
+- **Karakter Mobs Baru**:
+  - **Blood Golem**: Monster crimson bermata merah (400 HP, speed 1.8) yang sangat agresif menyerang pemain dan hewan pasif.
+  - **Giant Iron Golem**: Golem pelindung raksasa (tinggi 6m, 1000 HP) yang bersahabat kepada pemain dan membasmi monster jahat dengan melempar mereka ke udara (120 damage).
+  - **Wither Skeleton**: Skeleton hitam bermutasi (150 HP, bersenjatakan pedang batu) yang memberikan efek debuff **Wither Decay** (kilatan layar redup gelap, damage berkelanjutan selama 5 detik).
+- **Sistem Inventaris Tas (24 Slot)**:
+  - Tombol keyboard `E` / `I` dan tombol melayang 🎒 untuk membuka/menutup antarmuka Tas.
+  - Layout slot grid glassmorphism premium lengkap dengan jumlah tumpukan item (stack max 64) dan sorotan slot aktif terpilih.
+- **Mekanik Armor & HUD Shield**:
+  - Slot perlengkapan: Helmet, Chestplate, Leggings, dan Boots.
+  - Pengurangan damage masuk pada `takeDamage()` dihitung dinamis dari total armor terpasang.
+  - Penambahan visual Bar Pertahanan HUD (Armor Bar) dengan gradasi biru tameng.
+- **Peti Penyimpanan (Chest Storage)**:
+  - Penempatan blok peti (`chest`) kustom.
+  - Klik kanan (atau tombol aksi mobile) pada blok peti membuka menu penyimpanan 18 slot yang interaktif untuk memindahkan barang satu arah/dua arah dengan cepat.
+- **Dropping Item Hasil Tambang**:
+  - Blok tambang (Batu bara, besi, emas, tanah, dll.) yang dihancurkan akan masuk langsung ke Tas pemain.
+  - Menambang daun (`leaf`) berpeluang 15% menjatuhkan **Apel Emas (Golden Apple)**.
+  - Menghancurkan peti yang berisi barang otomatis mengeluarkan isi peti kembali ke Tas pemain.
+- **Konsumsi Apel Emas**: Memulihkan **+50 HP** secara instan dengan efek transisi kilatan layar emas premium.
+- **Konversi Dinamis Lava**: Lava yang bersentuhan dengan Air yang mengalir di sekelilingnya seketika bertransformasi menjadi blok keras **Obsidian**.
+- **Sinkronisasi LocalStorage**: Menyimpan otomatis posisi, sisa HP, isi Tas pemain, perlengkapan Armor, dan seluruh isi Peti berdasarkan koordinat saat menutup halaman atau menekan simpan.
+
+---
+
+### [2.0.0] - 2026-06-15
+#### Added
+- **Blok Magma Vulkanik**: Memberikan efek damage over time sebesar 6 HP setiap 500ms saat pemain menginjaknya, lengkap dengan partikel asap pembakaran hitam.
+- **Hewan Pasif (Chicken, Pig, Cow)**:
+  - Berkeliaran dengan damai di dunia voxel.
+  - Mengalahkan hewan memberikan asupan pemulihan HP (Chicken: +15 HP, Pig: +25 HP, Cow: +35 HP) disertai kilatan hijau penyembuhan di layar.
+- **Pertumbuhan Tanaman Kontekstual**:
+  - Tombol kontekstual melayang "Tanam Benih (P)" saat memandang ke blok Farmland kosong.
+  - Bibit gandum tumbuh secara bertahap dan matang penuh dalam 5 detik, diselimuti partikel pertumbuhan hijau cerah.
+- **Chain Reaction Ledakan TNT**: Ledakan satu TNT akan memicu ledakan berantai pada blok TNT tetangga dengan delay waktu acak yang realistis.
+- **Dukungan Mobile & Touch Screen**:
+  - Virtual joystick pergerakan yang mulus.
+  - Tombol aksi mobile terpisah (Shoot Arrow 🏹, Attack ⚔️, Dig ⛏️, Build 🧱, Jump ▲) dengan tata letak ergonomis.
+- **Optimasi iOS Safari & Macbook**:
+  - Menggunakan CSS dynamic viewport height (`100dvh`) agar tidak terpotong address bar.
+  - Blokir context menu mouse kanan untuk trackpad Macbook.
+- **Sound Effect Sintetis**: Generator suara real-time berbasis Web Audio API (tanpa file audio luar).
+- **Lava Rendering Boost**: Meningkatkan batas instanced mesh lava hingga 15.000 blok.
+
+---
+
+### [1.0.0] - 2026-05-20
+#### Added
+- Rilis awal game voxel 3D NizamCraft berbasis browser.
+- Pembangkitan terrain tak terbatas menggunakan algoritma Simplex Noise.
+- Navigasi kamera first-person dengan controls Pointer Lock.
+- Menaruh dan memecahkan blok dasar (Grass, Dirt, Stone, Wood, Brick, dll.).
+- Model tangan 3D pertama dengan animasi ayunan saat menggali blok.
+- Sistem penyimpanan LocalStorage sederhana untuk koordinat dan status dunia.
+
+---
 
 ## Lisensi
 

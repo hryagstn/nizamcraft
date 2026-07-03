@@ -205,6 +205,29 @@ export class Player {
         const invModal = document.getElementById('inventory-modal');
         if (invModal && invModal.style.display !== 'none') return;
 
+        if (this.ridingMinecart) {
+            // Check if player wants to exit minecart (e.g. jumps)
+            if (this.keys.jump) {
+                this.ridingMinecart.rider = null;
+                this.ridingMinecart = null;
+                this.position.y += 1.0; // pop up slightly
+                if (sounds && typeof sounds.playClickSound === 'function') {
+                    sounds.playClickSound();
+                }
+                return;
+            }
+
+            // Update minecart movement from keys
+            this.ridingMinecart.updateFromRider(dt, this.keys);
+            
+            // Align player position to the minecart
+            this.position.copy(this.ridingMinecart.position);
+            this.position.y += 0.5; // sit slightly on top
+            this.velocity.set(0, 0, 0);
+            this.isGrounded = true;
+            return;
+        }
+
         // Allow movement either if pointer is locked OR if we are on a mobile device where pointer lock is skipped
         if (!this.controls.isLocked && !this.isTouch) return;
 

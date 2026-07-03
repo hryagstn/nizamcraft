@@ -409,6 +409,13 @@ canvas {
 .preview-iron_ore { background-color: #b5a499; border: 1px solid #7c685c; }
 .preview-gold_ore { background-color: #ecc055; border: 1px solid #b58824; }
 .preview-chest { background-color: #a06a42; border: 1px solid #5c3a21; }
+.preview-crafting { background-color: #b07d56; border: 1px solid #5c3d24; }
+.preview-piston { background-color: #7c7c7c; border: 2px solid #d7b899; }
+.preview-rail { background-color: #9c6644; border: 1px dashed #cccccc; }
+.preview-pressure_plate { background-color: #8c5b36; border: 1px solid #d7b899; border-radius: 4px; }
+.preview-button { background-color: #9c6644; border: 2px solid #5c3d24; border-radius: 2px; width: 12px; height: 12px; margin: auto; }
+.preview-lever { background-color: #5c3d24; border: 2px solid #7c7c7c; }
+.preview-dispenser { background-color: #7c7c7c; border: 2px double #1e1e1e; }
 
 /* Floating Plant Button Styling */
 #plant-button-container {
@@ -1425,3 +1432,91 @@ body.is-mobile #mobile-actions-container {
         font-size: 1.3rem;
     }
 }
+
+/* Crafting Table Premium Recipe UI */
+.recipe-card {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.25s ease;
+    backdrop-filter: blur(10px);
+}
+
+.recipe-card:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #3a86ff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(58, 134, 255, 0.15);
+}
+
+.recipe-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.recipe-icon {
+    font-size: 1.8rem;
+}
+
+.recipe-title {
+    font-weight: bold;
+    color: #fff;
+    font-size: 1rem;
+}
+
+.recipe-ingredients {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.ingredient-item {
+    font-size: 0.85rem;
+    color: #bbb;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ingredient-item.satisfied {
+    color: #10b981;
+}
+
+.ingredient-item.missing {
+    color: #ef4444;
+}
+
+.craft-btn {
+    background: linear-gradient(135deg, #3a86ff, #00f5d4);
+    border: none;
+    border-radius: 6px;
+    color: #000;
+    font-weight: bold;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.craft-btn:hover {
+    transform: scale(1.03);
+    box-shadow: 0 0 12px rgba(58, 134, 255, 0.4);
+}
+
+.craft-btn:disabled {
+    background: rgba(255, 255, 255, 0.1);
+    color: #777;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+

@@ -739,3 +739,189 @@ textures.chestFront = createPixelTexture((ctx) => {
     ctx.fillRect(7, 8, 2, 1);
 });
 
+// 30. Crafting Table Top
+textures.craftingTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#b07d56'; // Oak wood base
+    ctx.fillRect(0, 0, 16, 16);
+    // Draw 3x3 crafting grid
+    ctx.fillStyle = '#5c3d24'; // Dark lines
+    ctx.fillRect(0, 0, 16, 1);
+    ctx.fillRect(0, 15, 16, 1);
+    ctx.fillRect(0, 0, 1, 16);
+    ctx.fillRect(15, 0, 1, 16);
+    
+    // Draw grid slots
+    ctx.fillStyle = '#4a2e1a';
+    ctx.strokeRect(3, 3, 10, 10);
+    ctx.fillRect(6, 3, 1, 10);
+    ctx.fillRect(10, 3, 1, 10);
+    ctx.fillRect(3, 6, 10, 1);
+    ctx.fillRect(3, 10, 10, 1);
+    
+    // Draw some mini tools in slots
+    ctx.fillStyle = '#ffb703'; // gold/brass
+    ctx.fillRect(4, 4, 1, 1);
+    ctx.fillStyle = '#7c7c7c'; // iron
+    ctx.fillRect(11, 11, 2, 2);
+});
+
+// 31. Crafting Table Side
+textures.craftingSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#8c5b36'; // Oak side
+    ctx.fillRect(0, 0, 16, 16);
+    
+    // Borders
+    ctx.fillStyle = '#5c3d24';
+    ctx.fillRect(0, 0, 16, 1);
+    ctx.fillRect(0, 15, 16, 1);
+    ctx.fillRect(0, 0, 1, 16);
+    ctx.fillRect(15, 0, 1, 16);
+    
+    // Draw hanging tools (saw & hammer)
+    ctx.fillStyle = '#7c7c7c'; // Metal part of saw
+    ctx.fillRect(3, 4, 1, 8);
+    ctx.fillRect(4, 5, 1, 6);
+    ctx.fillStyle = '#d7b899'; // Wood handle of saw
+    ctx.fillRect(3, 12, 2, 2);
+    
+    ctx.fillStyle = '#ff5500'; // Hammer head
+    ctx.fillRect(10, 5, 4, 2);
+    ctx.fillStyle = '#d7b899'; // Hammer handle
+    ctx.fillRect(11, 7, 1, 6);
+});
+
+// 32. Piston Top (Wooden Head)
+textures.pistonTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#d7b899'; // Oak planks look
+    ctx.fillRect(0, 0, 16, 16);
+    // Draw rings or grid of wooden head
+    ctx.fillStyle = '#8c5b36';
+    ctx.strokeRect(2, 2, 12, 12);
+    ctx.fillRect(7, 2, 2, 12);
+    ctx.fillRect(2, 7, 12, 2);
+    
+    // Steel center
+    ctx.fillStyle = '#7c7c7c';
+    ctx.fillRect(6, 6, 4, 4);
+});
+
+// 33. Piston Side
+textures.pistonSide = createPixelTexture((ctx) => {
+    // Top 4 pixels is wood plate
+    ctx.fillStyle = '#d7b899';
+    ctx.fillRect(0, 0, 16, 4);
+    ctx.fillStyle = '#8c5b36';
+    ctx.fillRect(0, 3, 16, 1);
+    
+    // Bottom is cobblestone
+    ctx.fillStyle = '#7c7c7c';
+    ctx.fillRect(0, 4, 16, 12);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 4; y < 16; y++) {
+            if (Math.random() < 0.2) {
+                ctx.fillStyle = '#555555';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    
+    // Draw iron shaft mechanism in middle
+    ctx.fillStyle = '#cccccc';
+    ctx.fillRect(6, 4, 4, 8);
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(5, 5, 1, 6);
+    ctx.fillRect(10, 5, 1, 6);
+});
+
+// 34. Piston Top Extended (Shows Piston shaft hole)
+textures.pistonExtendedTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#7c7c7c'; // Basalt body
+    ctx.fillRect(0, 0, 16, 16);
+    // Central hole
+    ctx.fillStyle = '#101010';
+    ctx.fillRect(4, 4, 8, 8);
+    ctx.fillStyle = '#cccccc'; // Shaft end
+    ctx.fillRect(6, 6, 4, 4);
+});
+
+// 35. Rail Top
+textures.railTop = createPixelTexture((ctx) => {
+    ctx.clearRect(0, 0, 16, 16); // transparent background so we see block beneath it
+    
+    // Base wood sleepers/ties
+    ctx.fillStyle = '#5c3d24'; // dark wood
+    ctx.fillRect(1, 2, 14, 2);
+    ctx.fillRect(1, 6, 14, 2);
+    ctx.fillRect(1, 10, 14, 2);
+    ctx.fillRect(1, 14, 14, 2);
+    
+    // Steel rails on left & right sides (column 3 and column 12)
+    ctx.fillStyle = '#cccccc';
+    ctx.fillRect(2, 0, 2, 16);
+    ctx.fillRect(12, 0, 2, 16);
+    // Highlights
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(3, 0, 1, 16);
+    ctx.fillRect(13, 0, 1, 16);
+});
+
+// 36. Pressure Plate Top
+textures.pressurePlateTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#8c5b36'; // Oak wood plate
+    ctx.fillRect(0, 0, 16, 16);
+    
+    // Inset edge
+    ctx.fillStyle = '#5c3d24';
+    ctx.strokeRect(2, 2, 12, 12);
+    
+    ctx.fillStyle = '#b07d56'; // highlighted center
+    ctx.fillRect(3, 3, 10, 10);
+});
+
+// 37. Button Top
+textures.buttonTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#7c7c7c'; // stone button
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#9c6644'; // wood button center
+    ctx.fillRect(5, 5, 6, 6);
+    ctx.fillStyle = '#6d4c33';
+    ctx.strokeRect(5, 5, 6, 6);
+});
+
+// 38. Lever Top
+textures.leverTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#5c3d24'; // wood base
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#7c7c7c'; // cobblestone block base
+    ctx.fillRect(4, 4, 8, 8);
+    // Draw handle pointing diagonally
+    ctx.fillStyle = '#cccccc'; // iron shaft
+    ctx.fillRect(7, 2, 2, 6);
+    ctx.fillStyle = '#ff5500'; // red handle tip
+    ctx.fillRect(7, 0, 2, 2);
+});
+
+// 39. Dispenser Front
+textures.dispenserFront = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#7c7c7c'; // Cobblestone background
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            if (Math.random() < 0.2) {
+                ctx.fillStyle = '#555555';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    // Draw the dispenser circle face mouth (diameter 6)
+    ctx.fillStyle = '#1e1e1e'; // deep mouth hole
+    ctx.fillRect(5, 5, 6, 6);
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(6, 6, 4, 4);
+    
+    // Draw redstone detail eyes
+    ctx.fillStyle = '#d90429'; // redstone red
+    ctx.fillRect(3, 11, 2, 2);
+    ctx.fillRect(11, 11, 2, 2);
+});
+

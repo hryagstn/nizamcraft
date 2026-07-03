@@ -337,6 +337,41 @@
             <div class="block-preview preview-chest"></div>
             <span class="block-name">Chest</span>
         </div>
+        <div class="hotbar-slot" data-index="25" title="Meja Crafting">
+            <span class="slot-num">V</span>
+            <div class="block-preview preview-crafting"></div>
+            <span class="block-name">Crafting</span>
+        </div>
+        <div class="hotbar-slot" data-index="26" title="Block Piston">
+            <span class="slot-num">X</span>
+            <div class="block-preview preview-piston"></div>
+            <span class="block-name">Piston</span>
+        </div>
+        <div class="hotbar-slot" data-index="27" title="Rel Kereta">
+            <span class="slot-num">Z</span>
+            <div class="block-preview preview-rail"></div>
+            <span class="block-name">Rail</span>
+        </div>
+        <div class="hotbar-slot" data-index="28" title="Pelat Tekanan">
+            <span class="slot-num">M</span>
+            <div class="block-preview preview-pressure_plate"></div>
+            <span class="block-name">Plate</span>
+        </div>
+        <div class="hotbar-slot" data-index="29" title="Tombol Tekan">
+            <span class="slot-num">B</span>
+            <div class="block-preview preview-button"></div>
+            <span class="block-name">Button</span>
+        </div>
+        <div class="hotbar-slot" data-index="30" title="Tuas Saklar">
+            <span class="slot-num">T</span>
+            <div class="block-preview preview-lever"></div>
+            <span class="block-name">Lever</span>
+        </div>
+        <div class="hotbar-slot" data-index="31" title="Dispenser">
+            <span class="slot-num">R</span>
+            <div class="block-preview preview-dispenser"></div>
+            <span class="block-name">Dispenser</span>
+        </div>
     </div>
 
     <!-- Floating Plant Button above Health Bar -->
@@ -414,6 +449,25 @@
                 <div class="footer-actions">
                     <button id="eat-apple-btn" class="action-btn heal-btn" style="display: none;">🍎 Makan Apel Emas</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Crafting Table UI Modal -->
+    <div id="crafting-modal" class="modal-overlay" style="display: none;">
+        <div class="inventory-container glass-panel">
+            <div class="inventory-header">
+                <h2>🛠️ Meja Crafting</h2>
+                <button id="close-crafting-btn" class="close-btn">&times;</button>
+            </div>
+            <div class="inventory-content" style="flex-direction: column; overflow-y: auto; max-height: 60vh;">
+                <p style="margin: 0 0 12px 0; color: #ddd; font-size: 14px; text-align: center;">Buat barang-barang canggih dengan bahan yang Anda miliki!</p>
+                <div id="recipes-list" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; width: 100%; padding: 4px;">
+                    <!-- Dynamic Recipes will be loaded here -->
+                </div>
+            </div>
+            <div class="inventory-footer">
+                <span class="info-tip">Tip: Klik tombol "CRAFT" jika bahan dalam Tas sudah mencukupi!</span>
             </div>
         </div>
     </div>

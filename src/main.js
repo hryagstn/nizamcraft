@@ -290,7 +290,7 @@ function selectHotbarSlot(index) {
     const activeSlot = hotbarSlots[index];
     activeSlot.classList.add('active');
     
-    const blockList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'spawn_irongolem', 'spawn_snowgolem', 'coal_ore', 'iron_ore', 'gold_ore', 'chest'];
+    const blockList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'spawn_irongolem', 'spawn_snowgolem', 'coal_ore', 'iron_ore', 'gold_ore', 'chest', 'crafting', 'piston', 'rail', 'pressure_plate', 'button', 'lever', 'dispenser'];
     selectedBlockType = blockList[index];
     if (player && typeof player.updateHeldItem === 'function') {
         player.updateHeldItem(selectedBlockType);
@@ -549,6 +549,18 @@ function updateTargeting() {
 function performAttack(mob) {
     if (!mob) return;
     
+    if (mob.type === 'minecart') {
+        sounds.playDigSound();
+        addItemToInventory('minecart', 1);
+        
+        scene.remove(mob.mesh);
+        const idx = game.mobs.indexOf(mob);
+        if (idx !== -1) game.mobs.splice(idx, 1);
+        
+        game.showNotification("Minecart diambil kembali! 🛒");
+        return;
+    }
+    
     // Mob takes damage
     mob.takeDamage(25);
     
@@ -754,15 +766,38 @@ window.addEventListener('mousedown', (e) => {
         } else if (target.type === 'block') {
             handleBlockDig(target.targetPos);
         }
-    } else if (isRightClick) { // Right click (or Ctrl+click): Build Block
+    } else if (isRightClick) { // Right click (or Ctrl+click): Build Block or Interact
+        if (target.type === 'mob' && target.mob.type === 'minecart') {
+            target.mob.rider = player;
+            player.ridingMinecart = target.mob;
+            game.showNotification("Menaiki Minecart! Tekan W/S untuk meluncur, SPASI untuk keluar. 🛒");
+            sounds.playClickSound();
+            return;
+        }
+
         if (target.type === 'block') {
             const intersect = target.intersect;
             const targetPos = target.targetPos;
             
-            // If right clicking an existing TNT block, ignite it!
             const targetedBlockType = world.getBlockAt(targetPos.x, targetPos.y, targetPos.z);
             if (targetedBlockType === 'chest') {
                 openChestStorage(targetPos.x, targetPos.y, targetPos.z);
+                return;
+            }
+            if (targetedBlockType === 'crafting') {
+                openCraftingMenu();
+                return;
+            }
+            if (targetedBlockType === 'lever' || targetedBlockType === 'lever_on') {
+                toggleLever(targetPos.x, targetPos.y, targetPos.z);
+                return;
+            }
+            if (targetedBlockType === 'button' || targetedBlockType === 'button_pressed') {
+                pressButton(targetPos.x, targetPos.y, targetPos.z);
+                return;
+            }
+            if (targetedBlockType === 'dispenser') {
+                activateDispenser(targetPos.x, targetPos.y, targetPos.z);
                 return;
             }
             if (targetedBlockType === 'tnt') {
@@ -791,6 +826,20 @@ window.addEventListener('mousedown', (e) => {
             let blockToPlace = selectedBlockType;
             if (blockToPlace === 'spawn_irongolem' || blockToPlace === 'spawn_snowgolem') {
                 handleGolemSpawn(blockToPlace, buildX, buildY, buildZ);
+            } else if (blockToPlace === 'minecart') {
+                // Placing Minecart on Rail
+                const blockUnder = world.getBlockAt(targetPos.x, targetPos.y, targetPos.z);
+                if (blockUnder === 'rail') {
+                    import('./entities/mob.js?v=3').then(module => {
+                        const cart = new module.Minecart(targetPos.x, targetPos.y + 0.1, targetPos.z, scene, world, game);
+                        if (!game.mobs) game.mobs = [];
+                        game.mobs.push(cart);
+                        sounds.playPlaceSound();
+                        game.showNotification("Minecart diletakkan! Klik kanan untuk menaikinya. 🛒");
+                    });
+                } else {
+                    game.showNotification("Minecart hanya bisa diletakkan di atas Rel! 🛤️");
+                }
             } else {
                 if (blockToPlace === 'water') blockToPlace = 'water_source';
                 if (blockToPlace === 'lava') blockToPlace = 'lava_source';
@@ -850,14 +899,38 @@ if (mobileBuildBtn) {
         if (player && typeof player.swing === 'function') player.swing();
         const target = updateTargeting();
         let built = false;
+
+        if (target && target.type === 'mob' && target.mob.type === 'minecart') {
+            target.mob.rider = player;
+            player.ridingMinecart = target.mob;
+            game.showNotification("Menaiki Minecart! Tekan W/S untuk meluncur, SPASI untuk keluar. 🛒");
+            sounds.playClickSound();
+            return;
+        }
+
         if (target && target.type === 'block') {
             const intersect = target.intersect;
             const targetPos = target.targetPos;
 
-            // If right clicking/building on an existing TNT block, ignite it!
             const targetedBlockType = world.getBlockAt(targetPos.x, targetPos.y, targetPos.z);
             if (targetedBlockType === 'chest') {
                 openChestStorage(targetPos.x, targetPos.y, targetPos.z);
+                return;
+            }
+            if (targetedBlockType === 'crafting') {
+                openCraftingMenu();
+                return;
+            }
+            if (targetedBlockType === 'lever' || targetedBlockType === 'lever_on') {
+                toggleLever(targetPos.x, targetPos.y, targetPos.z);
+                return;
+            }
+            if (targetedBlockType === 'button' || targetedBlockType === 'button_pressed') {
+                pressButton(targetPos.x, targetPos.y, targetPos.z);
+                return;
+            }
+            if (targetedBlockType === 'dispenser') {
+                activateDispenser(targetPos.x, targetPos.y, targetPos.z);
                 return;
             }
             if (targetedBlockType === 'tnt') {
@@ -883,6 +956,21 @@ if (mobileBuildBtn) {
                 if (blockToPlace === 'spawn_irongolem' || blockToPlace === 'spawn_snowgolem') {
                     handleGolemSpawn(blockToPlace, buildX, buildY, buildZ);
                     built = true;
+                } else if (blockToPlace === 'minecart') {
+                    // Placing Minecart on Rail
+                    const blockUnder = world.getBlockAt(targetPos.x, targetPos.y, targetPos.z);
+                    if (blockUnder === 'rail') {
+                        import('./entities/mob.js?v=3').then(module => {
+                            const cart = new module.Minecart(targetPos.x, targetPos.y + 0.1, targetPos.z, scene, world, game);
+                            if (!game.mobs) game.mobs = [];
+                            game.mobs.push(cart);
+                            sounds.playPlaceSound();
+                            game.showNotification("Minecart diletakkan! Klik kanan untuk menaikinya. 🛒");
+                        });
+                        built = true;
+                    } else {
+                        game.showNotification("Minecart hanya bisa diletakkan di atas Rel! 🛤️");
+                    }
                 } else {
                     if (blockToPlace === 'water') blockToPlace = 'water_source';
                     if (blockToPlace === 'lava') blockToPlace = 'lava_source';
@@ -891,7 +979,7 @@ if (mobileBuildBtn) {
                 }
             }
         }
-        if (!built) {
+        if (!built && (!target || target.type !== 'mob')) {
             sounds.playClickSound(); // Swing sound on miss
         }
     });
@@ -1530,9 +1618,464 @@ function animate() {
         }
     }
 
-    // H. Render frame
+    // H. Update pressure plates
+    checkPressurePlates();
+
+    // I. Render frame
     gameRenderer.render();
 }
+
+// ==========================================
+// CRAFTING TABLE & RECIPE SYSTEM
+// ==========================================
+
+const CRAFTING_RECIPES = [
+    {
+        result: 'helmet_diamond',
+        resultName: 'Helm Diamond 💎',
+        resultCount: 1,
+        ingredients: { diamond: 5 },
+        description: 'Helm pelindung super kuat dari Diamond murni.'
+    },
+    {
+        result: 'chestplate_diamond',
+        resultName: 'Baju Zirah Diamond 💎',
+        resultCount: 1,
+        ingredients: { diamond: 8 },
+        description: 'Pelindung dada terkuat di dunia NizamCraft.'
+    },
+    {
+        result: 'leggings_diamond',
+        resultName: 'Celana Diamond 💎',
+        resultCount: 1,
+        ingredients: { diamond: 7 },
+        description: 'Celana pelindung premium dari Diamond.'
+    },
+    {
+        result: 'boots_diamond',
+        resultName: 'Sepatu Boots Diamond 💎',
+        resultCount: 1,
+        ingredients: { diamond: 4 },
+        description: 'Sepatu premium dengan proteksi maksimal.'
+    },
+    {
+        result: 'crafting',
+        resultName: 'Meja Crafting 🛠️',
+        resultCount: 1,
+        ingredients: { wood: 4 },
+        description: 'Digunakan untuk merakit barang-barang canggih.'
+    },
+    {
+        result: 'piston',
+        resultName: 'Piston Penggerak 🧱',
+        resultCount: 1,
+        ingredients: { stone: 4, wood: 2, coal: 1 },
+        description: 'Block mekanis yang bisa mendorong block lain.'
+    },
+    {
+        result: 'rail',
+        resultName: 'Rel Kereta 🛤️',
+        resultCount: 16,
+        ingredients: { stone: 4, wood: 1 },
+        description: 'Jalur besi tempat Minecart bisa berjalan.'
+    },
+    {
+        result: 'minecart',
+        resultName: 'Minecart Kereta 🛒',
+        resultCount: 1,
+        ingredients: { stone: 5 },
+        description: 'Kendaraan minecart untuk meluncur di atas rel.'
+    },
+    {
+        result: 'pressure_plate',
+        resultName: 'Pelat Tekanan 🪵',
+        resultCount: 1,
+        ingredients: { wood: 2 },
+        description: 'Mengaktifkan redstone saat diinjak pemain.'
+    },
+    {
+        result: 'button',
+        resultName: 'Tombol Batu 🪨',
+        resultCount: 1,
+        ingredients: { stone: 1 },
+        description: 'Tombol tekan yang memicu daya redstone sesaat.'
+    },
+    {
+        result: 'lever',
+        resultName: 'Tuas Saklar 🕹️',
+        resultCount: 1,
+        ingredients: { stone: 1, wood: 1 },
+        description: 'Saklar on/off permanen untuk memberi daya.'
+    },
+    {
+        result: 'dispenser',
+        resultName: 'Dispenser Otomatis 🏹',
+        resultCount: 1,
+        ingredients: { stone: 7, coal: 1, wood: 1 },
+        description: 'Bisa meluncurkan Armor Diamond langsung ke pemain!'
+    }
+];
+
+function getInventoryCounts() {
+    const counts = {};
+    if (!player || !player.inventory) return counts;
+    player.inventory.forEach(item => {
+        if (item) {
+            counts[item.type] = (counts[item.type] || 0) + item.count;
+        }
+    });
+    return counts;
+}
+
+function canCraftRecipe(recipe) {
+    const counts = getInventoryCounts();
+    for (const [ingredient, reqCount] of Object.entries(recipe.ingredients)) {
+        if ((counts[ingredient] || 0) < reqCount) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function craftRecipe(recipe) {
+    if (!canCraftRecipe(recipe)) {
+        game.showNotification("Bahan tidak cukup! ❌");
+        return;
+    }
+
+    // Deduct ingredients from player inventory
+    for (const [ingredient, reqCount] of Object.entries(recipe.ingredients)) {
+        let remainingToDeduct = reqCount;
+        for (let i = 0; i < player.inventory.length; i++) {
+            const item = player.inventory[i];
+            if (item && item.type === ingredient) {
+                if (item.count >= remainingToDeduct) {
+                    item.count -= remainingToDeduct;
+                    if (item.count === 0) {
+                        player.inventory[i] = null;
+                    }
+                    break;
+                } else {
+                    remainingToDeduct -= item.count;
+                    player.inventory[i] = null;
+                }
+            }
+        }
+    }
+
+    // Grant crafted item
+    addItemToInventory(recipe.result, recipe.resultCount);
+    sounds.playPlaceSound();
+    game.showNotification(`Berhasil membuat ${recipe.resultName}! 🎉`);
+    
+    // Update UIs
+    updateInventoryUI();
+    renderCraftingRecipes();
+}
+
+function openCraftingMenu() {
+    if (document.pointerLockElement === document.body) {
+        document.exitPointerLock();
+    }
+    
+    const modal = document.getElementById('crafting-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        renderCraftingRecipes();
+    }
+}
+
+function closeCraftingMenu() {
+    const modal = document.getElementById('crafting-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function renderCraftingRecipes() {
+    const recipesListEl = document.getElementById('recipes-list');
+    if (!recipesListEl) return;
+    recipesListEl.innerHTML = '';
+
+    const invCounts = getInventoryCounts();
+
+    CRAFTING_RECIPES.forEach(recipe => {
+        const recipeCard = document.createElement('div');
+        recipeCard.className = 'recipe-card';
+        recipeCard.style.cssText = `
+            background: rgba(30, 30, 30, 0.85);
+            border: 2px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+        `;
+
+        const craftable = canCraftRecipe(recipe);
+        if (craftable) {
+            recipeCard.style.borderColor = 'rgba(0, 245, 212, 0.35)';
+            recipeCard.style.background = 'linear-gradient(135deg, rgba(20, 42, 35, 0.9), rgba(28, 28, 28, 0.95))';
+            recipeCard.style.boxShadow = '0 8px 20px rgba(0, 245, 212, 0.15)';
+        }
+
+        let ingredientsHTML = '';
+        for (const [ingredient, count] of Object.entries(recipe.ingredients)) {
+            const has = invCounts[ingredient] || 0;
+            const color = has >= count ? '#00f5d4' : '#ff5500';
+            ingredientsHTML += `
+                <div style="font-size: 11px; margin: 4px 0; color: #ddd; display: flex; justify-content: space-between;">
+                    <span>• ${ingredient.replace('_', ' ').toUpperCase()}</span>
+                    <span style="font-weight: bold; color: ${color};">${has}/${count}</span>
+                </div>
+            `;
+        }
+
+        recipeCard.innerHTML = `
+            <div style="text-align: center; width: 100%;">
+                <div style="font-size: 16px; font-weight: bold; margin-bottom: 6px; color: ${craftable ? '#00f5d4' : '#fff'}; text-shadow: ${craftable ? '0 0 10px rgba(0,245,212,0.3)' : 'none'};">${recipe.resultName}</div>
+                <div style="font-size: 11px; color: #bbb; margin-bottom: 12px; font-style: italic; min-height: 32px; line-height: 1.4;">${recipe.description}</div>
+                <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px; width: 100%; text-align: left;">
+                    <div style="font-size: 10px; font-weight: bold; color: #9c6644; margin-bottom: 4px; letter-spacing: 0.5px;">BAHAN YANG DIBUTUHKAN:</div>
+                    ${ingredientsHTML}
+                </div>
+            </div>
+            <button class="craft-btn" ${craftable ? '' : 'disabled'} style="
+                margin-top: 14px;
+                padding: 8px 16px;
+                background: ${craftable ? 'linear-gradient(135deg, #00f5d4, #00bbf9)' : 'rgba(80, 80, 80, 0.25)'};
+                color: ${craftable ? '#023e8a' : '#888'};
+                border: none;
+                border-radius: 6px;
+                font-weight: bold;
+                cursor: ${craftable ? 'pointer' : 'not-allowed'};
+                width: 100%;
+                transition: all 0.2s ease;
+                font-size: 12px;
+                box-shadow: ${craftable ? '0 4px 10px rgba(0, 245, 212, 0.25)' : 'none'};
+            ">
+                ${craftable ? '🛠️ CRAFT SEKARANG' : '❌ BAHAN BELUM CUKUP'}
+            </button>
+        `;
+
+        if (craftable) {
+            const btn = recipeCard.querySelector('.craft-btn');
+            btn.addEventListener('mouseenter', () => {
+                btn.style.transform = 'translateY(-2px)';
+                btn.style.boxShadow = '0 6px 14px rgba(0, 245, 212, 0.4)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.transform = 'translateY(0)';
+                btn.style.boxShadow = '0 4px 10px rgba(0, 245, 212, 0.25)';
+            });
+            btn.addEventListener('click', () => {
+                craftRecipe(recipe);
+            });
+        }
+
+        recipesListEl.appendChild(recipeCard);
+    });
+}
+
+// ==========================================
+// REDSTONE & INTERACTIVE BLOCKS ENGINE
+// ==========================================
+
+function toggleLever(x, y, z) {
+    const currentBlock = world.getBlockAt(x, y, z);
+    const isOn = currentBlock === 'lever_on';
+    const newBlock = isOn ? 'lever' : 'lever_on';
+    
+    world.addBlock(x, y, z, newBlock);
+    sounds.playClickSound();
+    
+    const statusText = !isOn ? "Aktif 🟩" : "Mati 🟥";
+    game.showNotification(`Tuas Saklar: ${statusText}`);
+    
+    triggerRedstoneSignal(x, y, z, !isOn);
+}
+
+function pressButton(x, y, z) {
+    const currentBlock = world.getBlockAt(x, y, z);
+    if (currentBlock === 'button_pressed') return;
+    
+    world.addBlock(x, y, z, 'button_pressed');
+    sounds.playClickSound();
+    game.showNotification("Tombol Ditekan! 🟩");
+    
+    triggerRedstoneSignal(x, y, z, true);
+    
+    setTimeout(() => {
+        const blockNow = world.getBlockAt(x, y, z);
+        if (blockNow === 'button_pressed') {
+            world.addBlock(x, y, z, 'button');
+            sounds.playClickSound();
+            triggerRedstoneSignal(x, y, z, false);
+        }
+    }, 1000);
+}
+
+function activateDispenser(x, y, z) {
+    sounds.playClickSound();
+    
+    // Spawn cool smoke release particles
+    world.spawnBlockBreakParticles(x, y, z, 'dispenser');
+    
+    // Check player distance (within 4 blocks triggers auto-equip)
+    const dispenserPos = new THREE.Vector3(x, y, z);
+    const dist = player.position.distanceTo(dispenserPos);
+    
+    if (dist < 4.0) {
+        let equippedAny = false;
+        const armorPieces = {
+            helmet: 'helmet_diamond',
+            chestplate: 'chestplate_diamond',
+            leggings: 'leggings_diamond',
+            boots: 'boots_diamond'
+        };
+        
+        for (const [slot, type] of Object.entries(armorPieces)) {
+            if (!player.armor[slot]) {
+                player.armor[slot] = { type: type, count: 1 };
+                equippedAny = true;
+            } else {
+                addItemToInventory(type, 1);
+            }
+        }
+        
+        updateArmorUI();
+        updateInventoryUI();
+        
+        if (equippedAny) {
+            game.showNotification("Dispenser meluncurkan & memasang Full Armor Diamond ke tubuhmu! 💎🛡️✨");
+        } else {
+            game.showNotification("Dispenser menembakkan Armor Diamond langsung ke Tasmu! 💎🎒");
+        }
+    } else {
+        game.showNotification("Dispenser berbunyi KLIK! (Terlalu jauh dari dispenser) 🏹");
+    }
+}
+
+function triggerRedstoneSignal(x, y, z, active) {
+    const neighbors = [
+        { x: x + 1, y: y, z: z },
+        { x: x - 1, y: y, z: z },
+        { x: x, y: y + 1, z: z },
+        { x: x, y: y - 1, z: z },
+        { x: x, y: y, z: z + 1 },
+        { x: x, y: y, z: z - 1 }
+    ];
+    
+    neighbors.forEach(n => {
+        const block = world.getBlockAt(n.x, n.y, n.z);
+        if (!block) return;
+        
+        const base = block.split('_')[0];
+        
+        if (base === 'piston') {
+            if (active) {
+                // Extend Piston
+                world.addBlock(n.x, n.y, n.z, 'piston_extended');
+                sounds.playPlaceSound();
+                
+                // Pushing block logic in front of the piston
+                const dx = n.x - x;
+                const dz = n.z - z;
+                const pushTargetX = n.x + dx;
+                const pushTargetY = n.y;
+                const pushTargetZ = n.z + dz;
+                
+                const pushBlock = world.getBlockAt(pushTargetX, pushTargetY, pushTargetZ);
+                if (pushBlock && pushBlock !== 'obsidian' && !pushBlock.startsWith('water') && !pushBlock.startsWith('lava')) {
+                    const destinationX = pushTargetX + dx;
+                    const destinationY = pushTargetY;
+                    const destinationZ = pushTargetZ + dz;
+                    
+                    const destBlock = world.getBlockAt(destinationX, destinationY, destinationZ);
+                    if (!destBlock) {
+                        world.removeBlock(pushTargetX, pushTargetY, pushTargetZ, true);
+                        world.addBlock(destinationX, destinationY, destinationZ, pushBlock);
+                        world.spawnBlockBreakParticles(pushTargetX, pushTargetY, pushTargetZ, pushBlock);
+                        game.showNotification("Piston mendorong block! 🧱💨");
+                    }
+                }
+            } else {
+                // Retract Piston
+                world.addBlock(n.x, n.y, n.z, 'piston');
+                sounds.playPlaceSound();
+            }
+        } else if (base === 'dispenser') {
+            if (active) {
+                activateDispenser(n.x, n.y, n.z);
+            }
+        }
+    });
+}
+
+// ==========================================
+// PRESSURE PLATE PHYSICS ENGINE
+// ==========================================
+
+let activePressurePlates = {};
+
+function checkPressurePlates() {
+    if (!player) return;
+    
+    const px = Math.round(player.position.x);
+    const py = Math.round(player.position.y);
+    const pz = Math.round(player.position.z);
+    
+    let plateFound = false;
+    let plateX, plateY, plateZ;
+    
+    // Search small bounding area under and around feet
+    for (let dx of [0, -1, 1]) {
+        for (let dz of [0, -1, 1]) {
+            const block = world.getBlockAt(px + dx, py, pz + dz);
+            if (block === 'pressure_plate' || block === 'pressure_plate_on') {
+                plateFound = true;
+                plateX = px + dx;
+                plateY = py;
+                plateZ = pz + dz;
+                break;
+            }
+        }
+        if (plateFound) break;
+    }
+    
+    if (plateFound) {
+        const key = `${plateX},${plateY},${plateZ}`;
+        if (!activePressurePlates[key]) {
+            world.addBlock(plateX, plateY, plateZ, 'pressure_plate_on');
+            sounds.playClickSound();
+            game.showNotification("Pelat Tekanan diinjak! 🟩");
+            triggerRedstoneSignal(plateX, plateY, plateZ, true);
+            activePressurePlates[key] = true;
+        }
+    } else {
+        for (const key in activePressurePlates) {
+            const [x, y, z] = key.split(',').map(Number);
+            const block = world.getBlockAt(x, y, z);
+            if (block === 'pressure_plate_on') {
+                world.addBlock(x, y, z, 'pressure_plate');
+                sounds.playClickSound();
+                triggerRedstoneSignal(x, y, z, false);
+            }
+            delete activePressurePlates[key];
+        }
+    }
+}
+
+// Close Crafting Table button handler
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('close-crafting-btn')?.addEventListener('click', closeCraftingMenu);
+});
 
 // Start loop
 animate();

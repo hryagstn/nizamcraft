@@ -23,7 +23,14 @@ export const BLOCK_TYPES = {
     farmland: { id: 16, name: 'Farmland', color: 0x4c321d },
     lucky: { id: 17, name: 'Lucky', color: 0xffb703 },
     magma: { id: 18, name: 'Magma', color: 0xff3700 },
-    crop: { id: 19, name: 'Crop', color: 0x8fc93a }
+    crop: { id: 19, name: 'Crop', color: 0x8fc93a },
+    crafting: { id: 20, name: 'Crafting Table', color: 0xb07d56 },
+    piston: { id: 21, name: 'Piston', color: 0x7c7c7c },
+    rail: { id: 22, name: 'Rail', color: 0xcccccc },
+    pressure_plate: { id: 23, name: 'Pressure Plate', color: 0x8c5b36 },
+    button: { id: 24, name: 'Button', color: 0x7c7c7c },
+    lever: { id: 25, name: 'Lever', color: 0x5c3d24 },
+    dispenser: { id: 26, name: 'Dispenser', color: 0x7c7c7c }
 };
 
 export class World {
@@ -41,7 +48,7 @@ export class World {
 
         this.grid = new Array(this.width * this.height * this.depth);
         this.instancedMeshMap = new Map();
-        this.blockTypesList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'coal_ore', 'iron_ore', 'gold_ore', 'chest'];
+        this.blockTypesList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'coal_ore', 'iron_ore', 'gold_ore', 'chest', 'crafting', 'piston', 'rail', 'pressure_plate', 'button', 'lever', 'dispenser'];
 
         // Highlight box helper for targeting
         this.highlightBox = null;
@@ -128,6 +135,32 @@ export class World {
         const chestTopMat = new THREE.MeshLambertMaterial({ map: textures.chestTop });
         const chestFrontMat = new THREE.MeshLambertMaterial({ map: textures.chestFront });
 
+        // Crafting, Piston, Rail, Plate, Button, Lever, Dispenser materials
+        const craftingSideMat = new THREE.MeshLambertMaterial({ map: textures.craftingSide });
+        const craftingTopMat = new THREE.MeshLambertMaterial({ map: textures.craftingTop });
+        
+        const pistonSideMat = new THREE.MeshLambertMaterial({ map: textures.pistonSide });
+        const pistonTopMat = new THREE.MeshLambertMaterial({ map: textures.pistonTop });
+        
+        const railTopMat = new THREE.MeshLambertMaterial({ 
+            map: textures.railTop, 
+            transparent: true, 
+            alphaTest: 0.15 
+        });
+        const railSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide, transparent: true, opacity: 0 });
+        
+        const pressurePlateTopMat = new THREE.MeshLambertMaterial({ map: textures.pressurePlateTop });
+        const pressurePlateSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide, transparent: true, opacity: 0 });
+        
+        const buttonTopMat = new THREE.MeshLambertMaterial({ map: textures.buttonTop });
+        const buttonSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide, transparent: true, opacity: 0 });
+        
+        const leverTopMat = new THREE.MeshLambertMaterial({ map: textures.leverTop });
+        const leverSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide, transparent: true, opacity: 0 });
+        
+        const dispenserFrontMat = new THREE.MeshLambertMaterial({ map: textures.dispenserFront });
+        const dispenserSideMat = new THREE.MeshLambertMaterial({ map: textures.stone });
+
         // Box Geometry for cubes
         const geometry = new THREE.BoxGeometry(1, 1, 1);
 
@@ -155,7 +188,14 @@ export class World {
             coal_ore: 5000,
             iron_ore: 5000,
             gold_ore: 5000,
-            chest: 2000
+            chest: 2000,
+            crafting: 2000,
+            piston: 2000,
+            rail: 5000,
+            pressure_plate: 2000,
+            button: 2000,
+            lever: 2000,
+            dispenser: 2000
         };
 
         // Material arrays mapping (right, left, top, bottom, front, back)
@@ -182,7 +222,14 @@ export class World {
             coal_ore: coalOreMat,
             iron_ore: ironOreMat,
             gold_ore: goldOreMat,
-            chest: [chestSideMat, chestSideMat, chestTopMat, chestTopMat, chestFrontMat, chestSideMat]
+            chest: [chestSideMat, chestSideMat, chestTopMat, chestTopMat, chestFrontMat, chestSideMat],
+            crafting: [craftingSideMat, craftingSideMat, craftingTopMat, woodTopMat, craftingSideMat, craftingSideMat],
+            piston: [pistonSideMat, pistonSideMat, pistonTopMat, stoneMat, pistonSideMat, pistonSideMat],
+            rail: [railSideMat, railSideMat, railTopMat, railSideMat, railSideMat, railSideMat],
+            pressure_plate: [pressurePlateSideMat, pressurePlateSideMat, pressurePlateTopMat, pressurePlateSideMat, pressurePlateSideMat, pressurePlateSideMat],
+            button: [buttonSideMat, buttonSideMat, buttonTopMat, buttonSideMat, buttonSideMat, buttonSideMat],
+            lever: [leverSideMat, leverSideMat, leverTopMat, leverSideMat, leverSideMat, leverSideMat],
+            dispenser: [dispenserSideMat, dispenserSideMat, dispenserSideMat, dispenserSideMat, dispenserFrontMat, dispenserSideMat]
         };
 
         // Initialize InstancedMesh for each block type
@@ -393,7 +440,7 @@ export class World {
     isTransparent(type) {
         if (!type) return true;
         const baseType = type.split('_')[0];
-        return baseType === 'water' || baseType === 'leaf';
+        return baseType === 'water' || baseType === 'leaf' || baseType === 'rail' || baseType === 'pressure_plate' || baseType === 'button' || baseType === 'lever' || baseType === 'crop';
     }
 
     isBlockVisible(x, y, z) {

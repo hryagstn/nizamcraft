@@ -1441,6 +1441,15 @@ export class Cow extends Animal {
         rHorn.rotation.z = 0.15;
         this.mesh.add(rHorn);
 
+        // 4 legs (0.16 x 0.38 x 0.16)
+        const legGeo = new THREE.BoxGeometry(0.16, 0.38, 0.16);
+        const legOffsets = [
+            [-0.2, 0.19, 0.3],
+            [0.2, 0.19, 0.3],
+            [-0.2, 0.19, -0.3],
+            [0.2, 0.19, -0.3]
+        ];
+
         legOffsets.forEach(([lx, ly, lz]) => {
             const leg = new THREE.Mesh(legGeo, brownMat);
             leg.position.set(lx, ly, lz);
@@ -1913,6 +1922,147 @@ export class WitherSkeleton extends Mob {
 
         if (isLiquid && Math.random() < 0.05) {
             this.velocity.y = 3.5;
+        }
+    }
+}
+
+export class Minecart extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('minecart', x, y, z, scene, world, game);
+        this.width = 0.8;
+        this.height = 0.5;
+        this.rider = null;
+    }
+
+    initMesh() {
+        const ironMat = new THREE.MeshLambertMaterial({ color: 0x888888, roughness: 0.5 });
+        this.materialsToDispose.push(ironMat);
+
+        // 1. Base Plate of the cart
+        const baseGeo = new THREE.BoxGeometry(0.7, 0.05, 0.7);
+        const baseMesh = new THREE.Mesh(baseGeo, ironMat);
+        baseMesh.position.set(0, 0.025, 0);
+        baseMesh.castShadow = true;
+        baseMesh.receiveShadow = true;
+        this.mesh.add(baseMesh);
+
+        // 2. Front & Back Walls
+        const wallGeoFB = new THREE.BoxGeometry(0.7, 0.3, 0.05);
+        const frontWall = new THREE.Mesh(wallGeoFB, ironMat);
+        frontWall.position.set(0, 0.15, 0.325);
+        frontWall.castShadow = true;
+        frontWall.receiveShadow = true;
+        this.mesh.add(frontWall);
+
+        const backWall = new THREE.Mesh(wallGeoFB, ironMat);
+        backWall.position.set(0, 0.15, -0.325);
+        backWall.castShadow = true;
+        backWall.receiveShadow = true;
+        this.mesh.add(backWall);
+
+        // 3. Left & Right Walls
+        const wallGeoLR = new THREE.BoxGeometry(0.05, 0.3, 0.6);
+        const leftWall = new THREE.Mesh(wallGeoLR, ironMat);
+        leftWall.position.set(0.325, 0.15, 0);
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
+        this.mesh.add(leftWall);
+
+        const rightWall = new THREE.Mesh(wallGeoLR, ironMat);
+        rightWall.position.set(-0.325, 0.15, 0);
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
+        this.mesh.add(rightWall);
+    }
+
+    update(dt) {
+        if (this.rider) {
+            // Already updated directly by the rider (player)
+            return;
+        }
+
+        // Check if on rail block
+        const rx = Math.round(this.position.x);
+        const ry = Math.round(this.position.y);
+        const rz = Math.round(this.position.z);
+        const block = this.world.getBlockAt(rx, ry, rz);
+
+        if (block === 'rail') {
+            this.velocity.set(0, 0, 0);
+        } else {
+            // Apply normal gravity physics
+            this.velocity.y += this.gravity * dt;
+            const nextPos = this.position.clone();
+            nextPos.y += this.velocity.y * dt;
+            if (this.checkCollisions(nextPos)) {
+                if (this.velocity.y < 0) {
+                    nextPos.y = Math.ceil(nextPos.y);
+                    this.isGrounded = true;
+                }
+                this.velocity.y = 0;
+            }
+            this.position.y = nextPos.y;
+            this.mesh.position.copy(this.position);
+        }
+    }
+
+    updateAI() {
+        // Minecarts do not have AI decisions
+    }
+
+    updateFromRider(dt, keys) {
+        const camDir = new THREE.Vector3();
+        this.game.player.camera.getWorldDirection(camDir);
+        camDir.y = 0;
+        camDir.normalize();
+
+        let dirX = 0;
+        let dirZ = 0;
+        if (Math.abs(camDir.x) > Math.abs(camDir.z)) {
+            dirX = Math.sign(camDir.x);
+        } else {
+            dirZ = Math.sign(camDir.z);
+        }
+
+        if (keys.backward) {
+            dirX = -dirX;
+            dirZ = -dirZ;
+        }
+
+        if (!keys.forward && !keys.backward) {
+            return;
+        }
+
+        const speed = 6.0;
+        const stepX = dirX * speed * dt;
+        const stepZ = dirZ * speed * dt;
+
+        let nextX = this.position.x + stepX;
+        let nextZ = this.position.z + stepZ;
+
+        const rx = Math.round(nextX);
+        const rz = Math.round(nextZ);
+        const ry = Math.round(this.position.y);
+
+        let foundRail = false;
+        let railY = ry;
+
+        // Check current level, down 1 level, up 1 level
+        for (let dy of [0, -1, 1]) {
+            const block = this.world.getBlockAt(rx, ry + dy, rz);
+            if (block === 'rail') {
+                foundRail = true;
+                railY = ry + dy;
+                break;
+            }
+        }
+
+        if (foundRail) {
+            this.position.x = nextX;
+            this.position.z = nextZ;
+            this.position.y = THREE.MathUtils.lerp(this.position.y, railY, 0.15);
+            this.mesh.position.copy(this.position);
+            this.mesh.rotation.y = Math.atan2(dirX, dirZ);
         }
     }
 }

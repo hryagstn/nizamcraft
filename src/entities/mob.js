@@ -1,9 +1,16 @@
 import * as THREE from 'three';
 import { sounds } from '../utils/audio.js';
 import { PrimedTNT } from './tnt.js';
+import { HOSTILE_MOBS, isSolidBlock } from '../utils/gameData.js';
 
-// Helper to create pixel textures for Mob faces
+const mobFaceTextureCache = new Map();
+const SHARED_MOB_PARTICLE_GEO = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+
+// Helper to create pixel textures for Mob faces (cached per mob type)
 function createMobFaceTexture(type) {
+    if (mobFaceTextureCache.has(type)) {
+        return mobFaceTextureCache.get(type);
+    }
     const canvas = document.createElement('canvas');
     canvas.width = 8;
     canvas.height = 8;
@@ -104,6 +111,7 @@ function createMobFaceTexture(type) {
     const texture = new THREE.CanvasTexture(canvas);
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
+    mobFaceTextureCache.set(type, texture);
     return texture;
 }
 
@@ -147,33 +155,21 @@ export class Mob {
         // Implemented by subclasses
     }
 
-    checkCollisions(pos) {
-        const radius = this.width / 2;
-        const minX = Math.floor(pos.x - radius);
-        const maxX = Math.floor(pos.x + radius);
-        const minY = Math.floor(pos.y);
-        const maxY = Math.floor(pos.y + this.height);
-        const minZ = Math.floor(pos.z - radius);
-        const maxZ = Math.floor(pos.z + radius);
+    checkCollisions(pos, preferTop = true) {
+        return this.world.checkAABB(pos.x, pos.y, pos.z, this.width / 2, this.height, false, preferTop);
+    }
 
-        for (let y = minY; y <= maxY; y++) {
-            for (let x = minX; x <= maxX; x++) {
-                for (let z = minZ; z <= maxZ; z++) {
-                    const block = this.world.getBlockAt(x, y, z);
-                    // Collide only with solid blocks
-                    if (block && !block.startsWith('water') && !block.startsWith('lava')) {
-                        const overlapX = (pos.x + radius > x) && (pos.x - radius < x + 1);
-                        const overlapY = (pos.y + this.height > y) && (pos.y < y + 1);
-                        const overlapZ = (pos.z + radius > z) && (pos.z - radius < z + 1);
-                        
-                        if (overlapX && overlapY && overlapZ) {
-                            return true;
-                        }
-                    }
+    cleanupMesh() {
+        if (this.mesh) {
+            this.scene.remove(this.mesh);
+            this.mesh.traverse(child => {
+                if (child.isMesh && child.geometry) {
+                    child.geometry.dispose();
                 }
-            }
+            });
         }
-        return false;
+        this.materialsToDispose.forEach(mat => mat.dispose());
+        this.materialsToDispose = [];
     }
 
     takeDamage(amount) {
@@ -182,9 +178,11 @@ export class Mob {
         sounds.playHurtSound();
 
         // Face player on hit
-        const playerPos = this.game.player.position.clone();
-        const angle = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
-        this.mesh.rotation.y = angle;
+        if (this.game.player) {
+            const playerPos = this.game.player.position.clone();
+            const angle = Math.atan2(playerPos.x - this.position.x, playerPos.z - this.position.z);
+            this.mesh.rotation.y = angle;
+        }
 
         if (this.hp <= 0) {
             this.die();
@@ -194,11 +192,8 @@ export class Mob {
     die() {
         // Spawn death smoke particles
         this.spawnDeathParticles(this.position.x, this.position.y + 0.8, this.position.z);
-        this.scene.remove(this.mesh);
-        
-        // Dispose materials
-        this.materialsToDispose.forEach(mat => mat.dispose());
-        
+        this.cleanupMesh();
+
         // Remove from game mobs list
         if (this.game.mobs) {
             const idx = this.game.mobs.indexOf(this);
@@ -206,34 +201,38 @@ export class Mob {
                 this.game.mobs.splice(idx, 1);
             }
         }
-        
-        this.game.showNotification(`${this.type.toUpperCase()} dikalahkan!`);
+
+        if (typeof this.game.onMobDefeated === 'function') {
+            this.game.onMobDefeated(this.type);
+        } else {
+            this.game.showNotification(`${this.type.toUpperCase()} dikalahkan.`);
+        }
     }
 
     spawnDeathParticles(x, y, z) {
         const count = 12;
-        const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
         const particlesList = [];
-        
+
         for (let i = 0; i < count; i++) {
             const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-            const mesh = new THREE.Mesh(geo, mat);
+            const mesh = new THREE.Mesh(SHARED_MOB_PARTICLE_GEO, mat);
             mesh.position.set(x, y, z);
-            
+
             const speed = 1.0 + Math.random() * 2.0;
             const velocity = new THREE.Vector3(
                 (Math.random() - 0.5),
                 (Math.random() - 0.5),
                 (Math.random() - 0.5)
             ).normalize().multiplyScalar(speed);
-            
+
             this.scene.add(mesh);
             particlesList.push({
                 mesh: mesh,
                 velocity: velocity,
                 life: 0.4 + Math.random() * 0.3,
                 elapsed: 0,
-                material: mat
+                material: mat,
+                sharedGeo: true
             });
         }
         if (!this.game.particles) this.game.particles = [];
@@ -292,10 +291,13 @@ export class Mob {
 
         this.isGrounded = false;
         nextPos.y += this.velocity.y * dt;
-        if (this.checkCollisions(nextPos)) {
+        const hitY = this.checkCollisions(nextPos, this.velocity.y <= 0);
+        if (hitY) {
             if (this.velocity.y < 0) {
-                nextPos.y = Math.ceil(nextPos.y);
+                nextPos.y = hitY.y + 0.5;
                 this.isGrounded = true;
+            } else if (this.velocity.y > 0) {
+                nextPos.y = hitY.y - 0.5 - this.height;
             }
             this.velocity.y = 0;
         }
@@ -486,7 +488,7 @@ export class Zombie extends Mob {
 
             if (dist < 1.35 && this.attackCooldown <= 0) {
                 // Attack!
-                this.game.player.takeDamage(12); // deals 12 damage
+                this.game.player.takeDamage(12, 'mob', this); // deals 12 damage
                 this.attackCooldown = 1.2; // 1.2s cooldown
                 
                 // Push player back
@@ -595,19 +597,17 @@ export class Creeper extends Mob {
     }
 
     explode() {
-        // Destroy mob
-        this.scene.remove(this.mesh);
-        
+        // Destroy mob and free GPU resources
+        this.cleanupMesh();
+
         // Spawn actual explosion at Creeper center
         const tnt = new PrimedTNT(this.position.x, this.position.y + 0.5, this.position.z, this.scene, this.world, this.game);
         tnt.fuse = 0.01; // explode instantly
         tnt.velocity.set(0, 0, 0); // static
-        
-        // Add to game TNT list to trigger immediate explosion
+
         if (!this.game.tnts) this.game.tnts = [];
         this.game.tnts.push(tnt);
 
-        // Remove from list
         if (this.game.mobs) {
             const idx = this.game.mobs.indexOf(this);
             if (idx > -1) this.game.mobs.splice(idx, 1);
@@ -719,33 +719,34 @@ export class Skeleton extends Mob {
 
 // Arrow Projectile spawned by Skeletons or Player
 export class Arrow {
-    constructor(startPos, targetPos, scene, world, game, firedBy = 'mob') {
+    constructor(startPos, targetPos, scene, world, game, firedBy = 'mob', options = {}) {
         this.scene = scene;
         this.world = world;
         this.game = game;
         this.firedBy = firedBy;
+        this.damage = options.damage || (firedBy === 'player' ? 25 : 15);
+        this.knockback = options.knockback || 6.0;
+        this.lifeSteal = options.lifeSteal || 0;
+        this.isFire = !!options.isFire;
 
         this.position = startPos.clone();
-        
-        // Compute direction
-        const dir = targetPos.clone().sub(startPos).normalize();
-        this.velocity = dir.multiplyScalar(firedBy === 'player' ? 22.0 : 15.0); // Travel speed
 
-        this.life = 4.0; // disappear after 4 seconds
+        const dir = targetPos.clone().sub(startPos).normalize();
+        const speed = options.speed || (firedBy === 'player' ? 22.0 : 15.0);
+        this.velocity = dir.multiplyScalar(speed);
+
+        this.life = 4.0;
         this.isStuck = false;
 
-        // Thin arrow mesh (blocky stick)
         const geo = new THREE.BoxGeometry(0.08, 0.08, 0.35);
-        const mat = new THREE.MeshBasicMaterial({ color: 0xeeeeee });
+        const mat = new THREE.MeshBasicMaterial({ color: this.isFire ? 0xf97316 : 0xeeeeee });
         this.mesh = new THREE.Mesh(geo, mat);
         this.mesh.position.copy(this.position);
-        
-        // Look in motion direction
+
         this.mesh.lookAt(targetPos);
         this.scene.add(this.mesh);
 
-        // Play shoot audio
-        sounds.playClickSound(); // standard snap
+        sounds.playClickSound();
     }
 
     update(dt) {
@@ -756,21 +757,18 @@ export class Arrow {
         }
 
         if (this.isStuck) {
-            return true; // Still stuck, just waiting for timer
+            return true;
         }
 
-        // Apply a tiny bit of gravity drop
         this.velocity.y -= 2.0 * dt;
-
         const nextPos = this.position.clone().addScaledVector(this.velocity, dt);
 
-        // Check block collision
         const gridX = Math.round(nextPos.x);
         const gridY = Math.round(nextPos.y);
         const gridZ = Math.round(nextPos.z);
         const block = this.world.getBlockAt(gridX, gridY, gridZ);
-        
-        if (block && !block.startsWith('water') && !block.startsWith('lava')) {
+
+        if (isSolidBlock(block)) {
             this.isStuck = true;
             this.position.copy(nextPos);
             this.mesh.position.copy(this.position);
@@ -778,7 +776,6 @@ export class Arrow {
         }
 
         if (this.firedBy === 'mob') {
-            // Check player collision
             const playerPos = this.game.player.position.clone();
             const pRadius = this.game.player.width / 2;
             const hitX = nextPos.x >= playerPos.x - pRadius && nextPos.x <= playerPos.x + pRadius;
@@ -786,37 +783,34 @@ export class Arrow {
             const hitY = nextPos.y >= playerPos.y && nextPos.y <= playerPos.y + this.game.player.height;
 
             if (hitX && hitY && hitZ) {
-                // Hit player!
-                this.game.player.takeDamage(15); // deal 15 damage
-                
-                // Push player back
+                this.game.player.takeDamage(this.damage);
                 const pushVec = this.velocity.clone().setY(2.0).normalize();
                 this.game.player.velocity.addScaledVector(pushVec, 4.0);
-
                 this.destroy();
                 return false;
             }
         } else if (this.firedBy === 'player') {
-            // Check mob collision
             if (this.game.mobs) {
                 for (let i = this.game.mobs.length - 1; i >= 0; i--) {
                     const mob = this.game.mobs[i];
-                    const mobPos = mob.position.clone();
-                    const mobWidth = 0.8;
-                    const mobHeight = 1.8;
-                    const mRadius = mobWidth / 2;
+                    if (!mob || mob.type === 'minecart') continue;
+                    const mobPos = mob.position;
+                    const mRadius = Math.max(0.4, (mob.width || 0.8) / 2);
+                    const mHeight = mob.height || 1.8;
                     const hitX = nextPos.x >= mobPos.x - mRadius && nextPos.x <= mobPos.x + mRadius;
                     const hitZ = nextPos.z >= mobPos.z - mRadius && nextPos.z <= mobPos.z + mRadius;
-                    const hitY = nextPos.y >= mobPos.y && nextPos.y <= mobPos.y + mobHeight;
+                    const hitY = nextPos.y >= mobPos.y && nextPos.y <= mobPos.y + mHeight;
 
                     if (hitX && hitY && hitZ) {
-                        // Hit mob!
-                        mob.takeDamage(25); // deal 25 damage
-                        
-                        // Push mob back
+                        mob.takeDamage(this.damage);
+                        if (this.lifeSteal > 0 && this.game.player) {
+                            this.game.player.heal(this.lifeSteal);
+                        }
+                        if (this.isFire && this.world) {
+                            this.world.spawnBlockBreakParticles(mobPos.x, mobPos.y + 0.8, mobPos.z, 'lava', 0xf97316);
+                        }
                         const pushVec = this.velocity.clone().setY(2.0).normalize();
-                        mob.velocity.addScaledVector(pushVec, 6.0);
-
+                        mob.velocity.addScaledVector(pushVec, this.knockback);
                         this.destroy();
                         return false;
                     }
@@ -824,11 +818,9 @@ export class Arrow {
             }
         }
 
-        // Apply position
         this.position.copy(nextPos);
         this.mesh.position.copy(this.position);
-        
-        // Re-align mesh rotation towards flight velocity
+
         const targetDir = this.position.clone().add(this.velocity);
         this.mesh.lookAt(targetDir);
 
@@ -960,7 +952,7 @@ export class IronGolem extends Mob {
         if (this.game.mobs) {
             for (let i = 0; i < this.game.mobs.length; i++) {
                 const mob = this.game.mobs[i];
-                if (mob !== this && (mob.type === 'zombie' || mob.type === 'skeleton' || mob.type === 'creeper')) {
+                if (mob !== this && HOSTILE_MOBS.has(mob.type)) {
                     const dist = this.position.distanceTo(mob.position);
                     if (dist < minDist) {
                         minDist = dist;
@@ -1088,7 +1080,7 @@ export class SnowGolem extends Mob {
         if (this.game.mobs) {
             for (let i = 0; i < this.game.mobs.length; i++) {
                 const mob = this.game.mobs[i];
-                if (mob !== this && (mob.type === 'zombie' || mob.type === 'skeleton' || mob.type === 'creeper')) {
+                if (mob !== this && HOSTILE_MOBS.has(mob.type)) {
                     const dist = this.position.distanceTo(mob.position);
                     if (dist < minDist) {
                         minDist = dist;
@@ -1199,23 +1191,22 @@ export class Snowball {
         const gridZ = Math.round(nextPos.z);
         const block = this.world.getBlockAt(gridX, gridY, gridZ);
         
-        if (block && !block.startsWith('water') && !block.startsWith('lava')) {
+        if (isSolidBlock(block)) {
             this.destroy();
-            return false; // disappears on block hit!
+            return false;
         }
 
         // Check hostile mob collision
         if (this.game.mobs) {
             for (let i = this.game.mobs.length - 1; i >= 0; i--) {
                 const mob = this.game.mobs[i];
-                if (mob.type === 'zombie' || mob.type === 'skeleton' || mob.type === 'creeper') {
-                    const mobPos = mob.position.clone();
-                    const mobWidth = 0.8;
-                    const mobHeight = 1.8;
-                    const mRadius = mobWidth / 2;
+                if (HOSTILE_MOBS.has(mob.type)) {
+                    const mobPos = mob.position;
+                    const mRadius = Math.max(0.4, (mob.width || 0.8) / 2);
+                    const mHeight = mob.height || 1.8;
                     const hitX = nextPos.x >= mobPos.x - mRadius && nextPos.x <= mobPos.x + mRadius;
                     const hitZ = nextPos.z >= mobPos.z - mRadius && nextPos.z <= mobPos.z + mRadius;
-                    const hitY = nextPos.y >= mobPos.y && nextPos.y <= mobPos.y + mobHeight;
+                    const hitY = nextPos.y >= mobPos.y && nextPos.y <= mobPos.y + mHeight;
 
                     if (hitX && hitY && hitZ) {
                         mob.takeDamage(15); // snowballs deal 15 damage!
@@ -1271,13 +1262,16 @@ export class Animal extends Mob {
     }
 
     die() {
-        // Heal player when killed!
         if (this.game.player) {
             this.game.player.heal(this.healAmount);
-            this.game.showNotification(`${this.type.toUpperCase()} dikalahkan! Memulihkan HP +${this.healAmount} ❤️`);
         }
-        
-        super.die(); // triggers particles, clean remove, and sound
+        this.spawnDeathParticles(this.position.x, this.position.y + 0.5, this.position.z);
+        this.cleanupMesh();
+        if (this.game.mobs) {
+            const idx = this.game.mobs.indexOf(this);
+            if (idx > -1) this.game.mobs.splice(idx, 1);
+        }
+        this.game.showNotification(`${this.type.toUpperCase()} dikalahkan (+${this.healAmount} HP).`);
     }
 }
 
@@ -1597,7 +1591,7 @@ export class BloodGolem extends Mob {
                 this.attackAnimTimer = 0.5;
                 
                 if (target.type === 'player') {
-                    this.game.player.takeDamage(30);
+                    this.game.player.takeDamage(30, 'mob', this);
                 } else {
                     target.mob.takeDamage(50);
                     target.mob.velocity.y = 8.0;
@@ -1791,6 +1785,7 @@ export class WitherSkeleton extends Mob {
         this.height = 2.4;
         this.speed = 1.8;
         this.attackCooldown = 0;
+        this.swingAnimTimer = 0;
     }
 
     initMesh() {
@@ -1869,6 +1864,15 @@ export class WitherSkeleton extends Mob {
 
     updateAI(dt, isLiquid) {
         if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        if (this.swingAnimTimer > 0 && this.arms) {
+            this.swingAnimTimer -= dt;
+            if (this.swingAnimTimer <= 0) {
+                this.arms.rotation.x = 0;
+            } else {
+                const progress = 1.0 - (this.swingAnimTimer / 0.3);
+                this.arms.rotation.x = -Math.sin(progress * Math.PI) * 0.8;
+            }
+        }
 
         const playerPos = this.game.player.position.clone();
         const dist = this.position.distanceTo(playerPos);
@@ -1900,23 +1904,11 @@ export class WitherSkeleton extends Mob {
 
             if (dist < 1.8 && this.attackCooldown <= 0) {
                 this.attackCooldown = 1.2;
-                
-                // Swing sword animation
-                const origY = this.arms.position.y;
-                let t = 0;
-                const swingInt = setInterval(() => {
-                    t += 0.05;
-                    if (t >= 0.3) {
-                        this.arms.rotation.x = 0;
-                        clearInterval(swingInt);
-                    } else {
-                        this.arms.rotation.x = -Math.sin((t / 0.3) * Math.PI) * 0.8;
-                    }
-                }, 30);
+                this.swingAnimTimer = 0.3;
 
-                this.game.player.takeDamage(20);
-                this.game.player.witherTimer = 5.0; // Wither Decay
-                this.game.showNotification("Terkena efek Wither Decay! 🖤☠️");
+                this.game.player.takeDamage(20, 'mob', this);
+                this.game.player.witherTimer = 5.0;
+                this.game.showNotification('Terkena efek Wither Decay selama 5 detik.');
             }
         }
 
@@ -1990,13 +1982,13 @@ export class Minecart extends Mob {
         if (block === 'rail') {
             this.velocity.set(0, 0, 0);
         } else {
-            // Apply normal gravity physics
             this.velocity.y += this.gravity * dt;
             const nextPos = this.position.clone();
             nextPos.y += this.velocity.y * dt;
-            if (this.checkCollisions(nextPos)) {
+            const hitY = this.checkCollisions(nextPos, this.velocity.y <= 0);
+            if (hitY) {
                 if (this.velocity.y < 0) {
-                    nextPos.y = Math.ceil(nextPos.y);
+                    nextPos.y = hitY.y + 0.5;
                     this.isGrounded = true;
                 }
                 this.velocity.y = 0;
@@ -2060,7 +2052,7 @@ export class Minecart extends Mob {
         if (foundRail) {
             this.position.x = nextX;
             this.position.z = nextZ;
-            this.position.y = THREE.MathUtils.lerp(this.position.y, railY, 0.15);
+            this.position.y = THREE.MathUtils.lerp(this.position.y, railY - 0.44, 0.15);
             this.mesh.position.copy(this.position);
             this.mesh.rotation.y = Math.atan2(dirX, dirZ);
         }

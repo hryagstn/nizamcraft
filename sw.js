@@ -1,7 +1,9 @@
-const CACHE_NAME = 'nizamcraft-cache-v3';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'nizamcraft-cache-v9';
+
+const LOCAL_ASSETS = [
     '/',
     '/index.html',
+    '/manifest.json',
     '/src/index.css',
     '/src/main.js',
     '/src/world/world.js',
@@ -12,10 +14,12 @@ const ASSETS_TO_CACHE = [
     '/src/utils/audio.js',
     '/src/utils/noise.js',
     '/src/utils/textures.js',
-    '/src/assets/icon.svg',
-    '/manifest.json',
-    // External CDNs
-    'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap',
+    '/src/utils/gameData.js',
+    '/src/utils/icons.js',
+    '/src/assets/icon.svg'
+];
+
+const EXTERNAL_ASSETS = [
     'https://unpkg.com/three@0.152.0/build/three.module.js',
     'https://unpkg.com/three@0.152.0/examples/jsm/controls/PointerLockControls.js',
     'https://unpkg.com/simplex-noise@4.0.3/dist/esm/simplex-noise.js'
@@ -23,8 +27,9 @@ const ASSETS_TO_CACHE = [
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(ASSETS_TO_CACHE);
+        caches.open(CACHE_NAME).then(async (cache) => {
+            await cache.addAll(LOCAL_ASSETS);
+            await Promise.allSettled(EXTERNAL_ASSETS.map(url => cache.add(url)));
         })
     );
     self.skipWaiting();
@@ -32,43 +37,48 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
     event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((cache) => {
-                    if (cache !== CACHE_NAME) {
-                        return caches.delete(cache);
-                    }
-                })
-            );
-        })
+        caches.keys().then((cacheNames) =>
+            Promise.all(
+                cacheNames.map((name) => (name !== CACHE_NAME ? caches.delete(name) : undefined))
+            )
+        )
     );
     self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-    // Only cache GET requests
     if (event.request.method !== 'GET') return;
-
-    // Skip chrome-extension scheme or other non-http schemes
     if (!event.request.url.startsWith('http')) return;
 
+    const url = new URL(event.request.url);
+    const isSameOrigin = url.origin === self.location.origin;
+
+    if (isSameOrigin) {
+        // Network-first for app files so code updates apply immediately while offline still falls back to cache
+        event.respondWith(
+            fetch(event.request)
+                .then((response) => {
+                    if (response && response.status === 200) {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => caches.match(event.request, { ignoreSearch: true }))
+        );
+        return;
+    }
+
+    // Cache-first for version-pinned external CDN modules
     event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
-            if (cachedResponse) {
-                return cachedResponse;
-            }
+            if (cachedResponse) return cachedResponse;
             return fetch(event.request).then((response) => {
-                // Check if we received a valid response
-                if (!response || response.status !== 200 || response.type === 'error') {
-                    return response;
+                if (response && response.status === 200 && response.type !== 'error') {
+                    const copy = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
                 }
-                const responseToCache = response.clone();
-                caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(event.request, responseToCache);
-                });
                 return response;
-            }).catch(() => {
-                // Offline fallback if not in cache
             });
         })
     );

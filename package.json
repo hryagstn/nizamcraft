@@ -1,17 +1,17 @@
 {
   "name": "nizamcraft",
-  "version": "3.0.0",
-  "description": "Game Voxel 3D interaktif berbasis WebGL/Three.js",
+  "version": "3.2.0",
+  "type": "module",
+  "description": "Game Voxel 3D interaktif berbasis WebGL/Three.js dengan Crafting dan Enchantment",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test tests/*.test.mjs",
+    "deploy": "npx wrangler deploy"
   },
   "dependencies": {
-    "simplex-noise": "^4.0.3",
-    "three": "^0.184.0"
-  },
-  "devDependencies": {
-    "http-server": "^14.1.1"
+    "simplex-noise": "4.0.3",
+    "three": "0.152.0"
   }
 }

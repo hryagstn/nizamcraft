@@ -2,42 +2,74 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { sounds } from '../utils/audio.js';
+import {
+    normalizeBlockType,
+    isSolidBlock,
+    computeArmorReduction,
+    computeThornsDamage
+} from '../utils/gameData.js';
+
+const MODAL_IDS = [
+    'play-overlay',
+    'inventory-modal',
+    'crafting-modal',
+    'enchant-modal',
+    'block-picker-modal'
+];
+
+export function isAnyOverlayOpen() {
+    for (const id of MODAL_IDS) {
+        const el = document.getElementById(id);
+        if (el && el.style.display !== 'none' && getComputedStyle(el).display !== 'none') {
+            return true;
+        }
+    }
+    return false;
+}
+
+export function flashScreen(background, holdMs = 90, fadeMs = 200) {
+    const flash = document.createElement('div');
+    flash.className = 'screen-flash-overlay';
+    flash.style.background = background;
+    flash.style.transition = `opacity ${fadeMs}ms ease-out`;
+    document.body.appendChild(flash);
+
+    setTimeout(() => {
+        flash.style.opacity = '0';
+        setTimeout(() => {
+            if (flash.parentNode) flash.parentNode.removeChild(flash);
+        }, fadeMs);
+    }, holdMs);
+}
 
 export class Player {
     constructor(camera, domElement, world) {
         this.camera = camera;
         this.world = world;
-        
-        // Initialize Pointer Lock Controls
+
         this.controls = new PointerLockControls(this.camera, domElement);
-        
-        // Player Dimensions for collision detection
+
         this.width = 0.6;
         this.height = 1.8;
         this.eyeHeight = 1.6;
 
-        // Player Position & Physics State
         this.position = new THREE.Vector3(0, 10, 0);
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.isGrounded = false;
-        
-        // Health and damage state
+
         this.health = 100;
         this.maxHealth = 100;
+        this.xp = 0;
+        this.xpLevel = 5;
+        this.enchantSeed = Math.floor(Math.random() * 100000) + 1;
         this.lavaDamageTimer = 0;
         this.magmaDamageTimer = 0;
         this.witherTimer = 0;
+        this.witherDamageAccumulator = 0;
 
         // Tas (Inventory) - 24 slots
         this.inventory = Array(24).fill(null);
-        // Default starting items
-        this.inventory[0] = { type: 'golden_apple', count: 5 };
-        this.inventory[1] = { type: 'chest', count: 4 };
-        this.inventory[2] = { type: 'helmet_iron', count: 1 };
-        this.inventory[3] = { type: 'chestplate_iron', count: 1 };
-        this.inventory[4] = { type: 'coal', count: 8 };
-        this.inventory[5] = { type: 'diamond', count: 2 };
-        this.inventory[6] = { type: 'boots_iron', count: 1 };
+        this.resetDefaultInventory();
 
         // Armor slots
         this.armor = {
@@ -46,13 +78,11 @@ export class Player {
             leggings: null,
             boots: null
         };
-        
-        // Settings
+
         this.walkSpeed = 4.5;
-        this.jumpStrength = 6.0;
+        this.jumpStrength = 6.2;
         this.gravity = -18.0;
 
-        // Movement input state
         this.keys = {
             forward: false,
             backward: false,
@@ -61,52 +91,75 @@ export class Player {
             jump: false
         };
 
-        // Respawn height check
         this.minHeightLimit = -10;
 
-        // First-person hand visual state
         this.handContainer = null;
         this.heldItem = null;
         this.isSwinging = false;
         this.swingTimer = 0;
-        this.swingDuration = 0.2; // 200ms swing duration
+        this.swingDuration = 0.2;
+        this.toastTimer = null;
 
         this.setupInput();
-        
-        // Touch Input detection for Mobile
+
         this.isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         if (this.isTouch) {
-            this.setupTouchInput(domElement);
+            this.setupTouchInput();
         }
 
         this.respawn();
     }
 
+    resetDefaultInventory() {
+        this.xp = 0;
+        this.xpLevel = 5;
+        this.enchantSeed = Math.floor(Math.random() * 100000) + 1;
+        this.inventory = Array(24).fill(null);
+        this.inventory[0] = { type: 'sword_iron', count: 1 };
+        this.inventory[1] = { type: 'pickaxe_iron', count: 1 };
+        this.inventory[2] = { type: 'bow', count: 1 };
+        this.inventory[3] = {
+            type: 'enchanted_book',
+            count: 1,
+            enchants: { sharpness: 1 },
+            enchant: { id: 'sharpness', level: 1 }
+        };
+        this.inventory[4] = { type: 'wood', count: 16 };
+        this.inventory[5] = { type: 'iron_ingot', count: 6 };
+        this.inventory[6] = { type: 'lapis', count: 12 };
+        this.inventory[7] = { type: 'diamond', count: 4 };
+        this.inventory[8] = { type: 'book', count: 4 };
+        this.inventory[9] = { type: 'bookshelf', count: 6 };
+        this.inventory[10] = { type: 'crafting', count: 1 };
+        this.inventory[11] = { type: 'enchanting_table', count: 1 };
+        this.inventory[12] = { type: 'golden_apple', count: 3 };
+        this.inventory[13] = { type: 'coal', count: 8 };
+    }
+
     respawn() {
-        // Find center of the world and set player on top of the terrain (searching down from sky)
         const startX = 0;
         const startZ = 0;
         let topY = 6;
         for (let y = this.world.height - 1; y >= 0; y--) {
             const b = this.world.getBlockAt(startX, y, startZ);
-            if (b && !b.startsWith('water') && !b.startsWith('lava')) {
-                topY = y + 1;
+            if (isSolidBlock(b)) {
+                topY = y + 0.5;
                 break;
             }
         }
-        
-        this.position.set(startX, topY + 2, startZ);
+
+        this.position.set(startX, topY + 1.5, startZ);
         this.velocity.set(0, 0, 0);
         this.isGrounded = false;
         this.health = 100;
+        this.witherTimer = 0;
         this.camera.position.set(this.position.x, this.position.y + this.eyeHeight, this.position.z);
     }
 
     setupInput() {
-        // Key down
         const onKeyDown = (event) => {
-            if (!this.controls.isLocked) return;
-            
+            if (!this.controls.isLocked || isAnyOverlayOpen()) return;
+
             switch (event.code) {
                 case 'KeyW':
                 case 'ArrowUp':
@@ -127,11 +180,9 @@ export class Player {
                 case 'Space':
                     this.keys.jump = true;
                     break;
-
             }
         };
 
-        // Key up
         const onKeyUp = (event) => {
             switch (event.code) {
                 case 'KeyW':
@@ -160,80 +211,47 @@ export class Player {
         window.addEventListener('keyup', onKeyUp);
     }
 
-    // Check if player bounding box collides with any solid block in the world
-    checkCollisions(pos) {
-        const radius = this.width / 2;
-        
-        // Get bounding box range in grid coordinates
-        const minX = Math.floor(pos.x - radius);
-        const maxX = Math.floor(pos.x + radius);
-        const minY = Math.floor(pos.y);
-        const maxY = Math.floor(pos.y + this.height);
-        const minZ = Math.floor(pos.z - radius);
-        const maxZ = Math.floor(pos.z + radius);
-
-        for (let y = minY; y <= maxY; y++) {
-            for (let x = minX; x <= maxX; x++) {
-                for (let z = minZ; z <= maxZ; z++) {
-                    const blockType = this.world.getBlockAt(x, y, z);
-                    // Collide only with solid blocks (ignore air, water, and lava)
-                    if (blockType && !blockType.startsWith('water') && !blockType.startsWith('lava')) {
-                        // Check exact overlap
-                        const overlapX = (pos.x + radius > x) && (pos.x - radius < x + 1);
-                        const overlapY = (pos.y + this.height > y) && (pos.y < y + 1);
-                        const overlapZ = (pos.z + radius > z) && (pos.z - radius < z + 1);
-                        
-                        if (overlapX && overlapY && overlapZ) {
-                            return true; // Collision detected
-                        }
-                    }
-                }
-            }
-        }
-        return false;
+    checkCollisions(pos, preferTop = true) {
+        return this.world.checkAABB(pos.x, pos.y, pos.z, this.width / 2, this.height, false, preferTop);
     }
 
     update(dt) {
-        // Stop movement if overlay is visible
-        const overlay = document.getElementById('play-overlay');
-        if (overlay && overlay.style.display !== 'none') return;
-
-        // Stop movement if inventory is open
-        const invModal = document.getElementById('inventory-modal');
-        if (invModal && invModal.style.display !== 'none') return;
-
-        if (this.ridingMinecart) {
-            // Check if player wants to exit minecart (e.g. jumps)
-            if (this.keys.jump) {
-                this.ridingMinecart.rider = null;
-                this.ridingMinecart = null;
-                this.position.y += 1.0; // pop up slightly
-                if (sounds && typeof sounds.playClickSound === 'function') {
-                    sounds.playClickSound();
-                }
-                return;
-            }
-
-            // Update minecart movement from keys
-            this.ridingMinecart.updateFromRider(dt, this.keys);
-            
-            // Align player position to the minecart
-            this.position.copy(this.ridingMinecart.position);
-            this.position.y += 0.5; // sit slightly on top
-            this.velocity.set(0, 0, 0);
-            this.isGrounded = true;
+        if (isAnyOverlayOpen()) {
+            this.keys.forward = false;
+            this.keys.backward = false;
+            this.keys.left = false;
+            this.keys.right = false;
+            this.keys.jump = false;
             return;
         }
 
-        // Allow movement either if pointer is locked OR if we are on a mobile device where pointer lock is skipped
+        if (this.ridingMinecart) {
+            if (this.keys.jump) {
+                this.ridingMinecart.rider = null;
+                this.ridingMinecart = null;
+                this.position.y += 1.0;
+                this.camera.position.set(this.position.x, this.position.y + this.eyeHeight, this.position.z);
+                sounds.playClickSound();
+                return;
+            }
+
+            this.ridingMinecart.updateFromRider(dt, this.keys);
+            this.position.copy(this.ridingMinecart.position);
+            this.position.y += 0.35;
+            this.velocity.set(0, 0, 0);
+            this.isGrounded = true;
+            this.camera.position.set(this.position.x, this.position.y + this.eyeHeight, this.position.z);
+            return;
+        }
+
         if (!this.controls.isLocked && !this.isTouch) return;
 
         // 1. Detect if player is in water or lava
         let inWater = false;
         let inLava = false;
         const gridX = Math.round(this.position.x);
-        const feetY = Math.floor(this.position.y);
-        const headY = Math.floor(this.position.y + this.eyeHeight);
+        const feetY = Math.round(this.position.y);
+        const headY = Math.round(this.position.y + this.eyeHeight);
         const gridZ = Math.round(this.position.z);
 
         for (let y = feetY; y <= headY; y++) {
@@ -244,28 +262,33 @@ export class Player {
             }
         }
 
-        // Apply lava damage over time
         if (inLava) {
             this.lavaDamageTimer += dt;
-            if (this.lavaDamageTimer >= 0.5) { // every 500ms
-                this.takeDamage(15);
+            if (this.lavaDamageTimer >= 0.5) {
+                this.takeDamage(15, 'fire');
                 this.lavaDamageTimer = 0;
             }
         } else {
             this.lavaDamageTimer = 0;
         }
 
-        // Apply magma damage over time if standing on a magma block
         if (this.isGrounded) {
-            const blockUnder = this.world.getBlockAt(Math.round(this.position.x), Math.round(this.position.y - 0.5), Math.round(this.position.z));
+            const blockUnder = this.world.getBlockAt(
+                Math.round(this.position.x),
+                Math.round(this.position.y - 0.55),
+                Math.round(this.position.z)
+            );
             if (blockUnder === 'magma') {
                 this.magmaDamageTimer += dt;
-                if (this.magmaDamageTimer >= 0.5) { // every 500ms
-                    this.takeDamage(6); // Magma block deals 6 damage
+                if (this.magmaDamageTimer >= 0.5) {
+                    this.takeDamage(6, 'fire');
                     this.magmaDamageTimer = 0;
-                    if (this.world && typeof this.world.spawnBlockBreakParticles === 'function') {
-                        this.world.spawnBlockBreakParticles(Math.round(this.position.x), Math.round(this.position.y), Math.round(this.position.z), 'magma');
-                    }
+                    this.world.spawnBlockBreakParticles(
+                        Math.round(this.position.x),
+                        Math.round(this.position.y),
+                        Math.round(this.position.z),
+                        'magma'
+                    );
                 }
             } else {
                 this.magmaDamageTimer = 0;
@@ -274,62 +297,36 @@ export class Player {
             this.magmaDamageTimer = 0;
         }
 
-        // Apply Wither Decay damage over time
         if (this.witherTimer > 0) {
             this.witherTimer -= dt;
-            if (!this.witherDamageAccumulator) this.witherDamageAccumulator = 0;
             this.witherDamageAccumulator += dt;
-            if (this.witherDamageAccumulator >= 0.75) { // every 750ms deal 4 damage
+            if (this.witherDamageAccumulator >= 0.75) {
                 this.takeDamage(4);
                 this.witherDamageAccumulator = 0;
-                
-                // Dark wither screen flash
-                const flash = document.createElement('div');
-                flash.style.position = 'fixed';
-                flash.style.top = '0';
-                flash.style.left = '0';
-                flash.style.width = '100vw';
-                flash.style.height = '100vh';
-                flash.style.background = 'rgba(10, 10, 10, 0.45)';
-                flash.style.zIndex = '9999';
-                flash.style.pointerEvents = 'none';
-                flash.style.transition = 'opacity 0.2s ease-out';
-                document.body.appendChild(flash);
-                setTimeout(() => {
-                    flash.style.opacity = '0';
-                    setTimeout(() => {
-                        if (flash.parentNode) flash.parentNode.removeChild(flash);
-                    }, 200);
-                }, 80);
+                flashScreen('rgba(10, 10, 10, 0.45)', 80, 200);
             }
         } else {
             this.witherTimer = 0;
             this.witherDamageAccumulator = 0;
         }
 
-        // 2. Adjust speeds and gravity based on environment
         let currentSpeed = this.walkSpeed;
         let currentGravity = this.gravity;
-        
+
         if (inWater) {
-            currentSpeed = 2.0; // Swimming speed
-            currentGravity = -3.0; // Floaty water gravity
+            currentSpeed = 2.2;
+            currentGravity = -3.0;
         } else if (inLava) {
-            currentSpeed = 1.2; // Thick lava speed
-            currentGravity = -1.8; // Thick lava gravity
+            currentSpeed = 1.3;
+            currentGravity = -1.8;
         }
 
-        // 3. Calculate horizontal movement directions
         const moveDirection = new THREE.Vector3();
-        
-        // Forward / backward direction relative to camera
         const camDirection = new THREE.Vector3();
         this.camera.getWorldDirection(camDirection);
-        // Project onto XZ plane for horizontal movement
         camDirection.y = 0;
         camDirection.normalize();
 
-        // Left / right direction (cross product of camera look direction and UP vector)
         const camRight = new THREE.Vector3();
         camRight.crossVectors(camDirection, new THREE.Vector3(0, 1, 0)).normalize();
 
@@ -337,64 +334,56 @@ export class Player {
         if (this.keys.backward) moveDirection.sub(camDirection);
         if (this.keys.right) moveDirection.add(camRight);
         if (this.keys.left) moveDirection.sub(camRight);
-        
-        moveDirection.normalize();
-        
-        // 4. Set horizontal velocity
+
+        if (moveDirection.lengthSq() > 0) moveDirection.normalize();
+
         this.velocity.x = moveDirection.x * currentSpeed;
         this.velocity.z = moveDirection.z * currentSpeed;
-
-        // 5. Apply gravity to vertical velocity
         this.velocity.y += currentGravity * dt;
 
-        // Jump / Swim up logic
         if (this.keys.jump) {
             if (inWater) {
-                this.velocity.y = 2.2; // Swim up water
+                this.velocity.y = 2.4;
             } else if (inLava) {
-                this.velocity.y = 0.9; // Swim up lava slowly
+                this.velocity.y = 1.0;
             } else if (this.isGrounded) {
-                this.velocity.y = this.jumpStrength; // Normal jump
+                this.velocity.y = this.jumpStrength;
                 this.isGrounded = false;
             }
         }
 
-        // 6. Resolve Collisions (Axis-by-Axis)
         const nextPos = this.position.clone();
 
-        // A. X-Axis Movement and Collision Resolution
         nextPos.x += this.velocity.x * dt;
         if (this.checkCollisions(nextPos)) {
             nextPos.x = this.position.x;
             this.velocity.x = 0;
         }
 
-        // B. Z-Axis Movement and Collision Resolution
         nextPos.z += this.velocity.z * dt;
         if (this.checkCollisions(nextPos)) {
             nextPos.z = this.position.z;
             this.velocity.z = 0;
         }
 
-        // C. Y-Axis (Vertical) Movement and Collision Resolution
         this.isGrounded = false;
         nextPos.y += this.velocity.y * dt;
-        
-        if (this.checkCollisions(nextPos)) {
+
+        const verticalHit = this.checkCollisions(nextPos, this.velocity.y <= 0);
+        if (verticalHit) {
             if (this.velocity.y < 0) {
-                nextPos.y = Math.ceil(nextPos.y);
+                nextPos.y = verticalHit.y + 0.5;
                 this.isGrounded = true;
             } else if (this.velocity.y > 0) {
-                nextPos.y = Math.floor(nextPos.y);
+                nextPos.y = verticalHit.y - 0.5 - this.height;
             }
             this.velocity.y = 0;
         }
 
-        // 7. Apply world boundary checks (Invisible Walls)
         const halfWidth = this.world.width / 2;
         const halfDepth = this.world.depth / 2;
-        const boundaryBuffer = 0.3;
-        
+        const boundaryBuffer = 0.35;
+
         if (nextPos.x < -halfWidth + boundaryBuffer) {
             nextPos.x = -halfWidth + boundaryBuffer;
             this.velocity.x = 0;
@@ -402,7 +391,7 @@ export class Player {
             nextPos.x = halfWidth - boundaryBuffer;
             this.velocity.x = 0;
         }
-        
+
         if (nextPos.z < -halfDepth + boundaryBuffer) {
             nextPos.z = -halfDepth + boundaryBuffer;
             this.velocity.z = 0;
@@ -411,23 +400,19 @@ export class Player {
             this.velocity.z = 0;
         }
 
-        // Apply resolved coordinates to player position
         this.position.copy(nextPos);
 
-        // 8. Respawn player if they fall below the world void
         if (this.position.y < this.minHeightLimit) {
             this.respawn();
-            this.showNotification('Kamu terjatuh ke Void!');
+            this.showNotification('Kamu terjatuh ke Void dan kembali ke titik awal.');
         }
 
-        // 9. Update camera position to player eye height
         this.camera.position.set(
-            this.position.x, 
-            this.position.y + this.eyeHeight, 
+            this.position.x,
+            this.position.y + this.eyeHeight,
             this.position.z
         );
 
-        // 10. Update first-person hand swing animation
         if (this.isSwinging && this.handContainer) {
             this.swingTimer += dt;
             if (this.swingTimer >= this.swingDuration) {
@@ -438,8 +423,8 @@ export class Player {
                 const progress = this.swingTimer / this.swingDuration;
                 const angle = Math.sin(progress * Math.PI) * 0.5;
                 this.handContainer.position.set(
-                    0.25 - angle * 0.08, 
-                    -0.2 - angle * 0.06, 
+                    0.25 - angle * 0.08,
+                    -0.2 - angle * 0.06,
                     -0.45 + angle * 0.05
                 );
                 this.handContainer.rotation.set(angle * 1.0, -angle * 0.4, -angle * 0.3);
@@ -447,63 +432,26 @@ export class Player {
         }
     }
 
-    getArmorReduction() {
-        let reduction = 0;
-        if (this.armor) {
-            for (const slot in this.armor) {
-                const item = this.armor[slot];
-                if (item) {
-                    if (item.type.includes('diamond')) {
-                        if (slot === 'helmet') reduction += 0.15;
-                        else if (slot === 'chestplate') reduction += 0.25;
-                        else if (slot === 'leggings') reduction += 0.20;
-                        else if (slot === 'boots') reduction += 0.10;
-                    } else if (item.type.includes('iron')) {
-                        if (slot === 'helmet') reduction += 0.10;
-                        else if (slot === 'chestplate') reduction += 0.15;
-                        else if (slot === 'leggings') reduction += 0.10;
-                        else if (slot === 'boots') reduction += 0.05;
-                    } else if (item.type.includes('gold')) {
-                        if (slot === 'helmet') reduction += 0.07;
-                        else if (slot === 'chestplate') reduction += 0.12;
-                        else if (slot === 'leggings') reduction += 0.07;
-                        else if (slot === 'boots') reduction += 0.04;
-                    }
-                }
-            }
-        }
-        return reduction;
+    getArmorReduction(damageSource = 'normal') {
+        return computeArmorReduction(this.armor, damageSource);
     }
 
-    takeDamage(amount) {
+    takeDamage(amount, damageSource = 'normal', attackerMob = null) {
         if (this.health <= 0) return;
-        
-        const reduction = this.getArmorReduction();
+
+        const reduction = this.getArmorReduction(damageSource);
         const finalDamage = amount * (1 - reduction);
-        this.health -= finalDamage;
-        if (this.health < 0) this.health = 0;
-        
+        this.health = Math.max(0, this.health - finalDamage);
+
+        if (attackerMob && typeof attackerMob.takeDamage === 'function' && attackerMob.hp > 0) {
+            const thornsDamage = computeThornsDamage(this.armor);
+            if (thornsDamage > 0) {
+                attackerMob.takeDamage(thornsDamage);
+            }
+        }
+
         sounds.playHurtSound();
-
-        // Screen Flash red overlay
-        const flash = document.createElement('div');
-        flash.style.position = 'fixed';
-        flash.style.top = '0';
-        flash.style.left = '0';
-        flash.style.width = '100vw';
-        flash.style.height = '100vh';
-        flash.style.background = 'rgba(255, 0, 0, 0.28)';
-        flash.style.zIndex = '9999';
-        flash.style.pointerEvents = 'none';
-        flash.style.transition = 'opacity 0.2s ease-out';
-        document.body.appendChild(flash);
-
-        setTimeout(() => {
-            flash.style.opacity = '0';
-            setTimeout(() => {
-                if (flash.parentNode) flash.parentNode.removeChild(flash);
-            }, 200);
-        }, 80);
+        flashScreen('rgba(255, 0, 0, 0.28)', 80, 200);
 
         if (this.health <= 0) {
             this.die();
@@ -513,31 +461,12 @@ export class Player {
     heal(amount) {
         if (this.health <= 0) return;
         this.health = Math.min(this.maxHealth, this.health + amount);
-        
-        // Green healing screen flash for premium aesthetics!
-        const flash = document.createElement('div');
-        flash.style.position = 'fixed';
-        flash.style.top = '0';
-        flash.style.left = '0';
-        flash.style.width = '100vw';
-        flash.style.height = '100vh';
-        flash.style.background = 'rgba(0, 255, 128, 0.15)';
-        flash.style.zIndex = '9999';
-        flash.style.pointerEvents = 'none';
-        flash.style.transition = 'opacity 0.2s ease-out';
-        document.body.appendChild(flash);
-
-        setTimeout(() => {
-            flash.style.opacity = '0';
-            setTimeout(() => {
-                if (flash.parentNode) flash.parentNode.removeChild(flash);
-            }, 200);
-        }, 100);
+        flashScreen('rgba(0, 255, 128, 0.16)', 100, 200);
     }
 
     die() {
         sounds.playExplosionSound();
-        this.showNotification('Kamu gugur! Kembali ke spawn.');
+        this.showNotification('Kamu gugur dan kembali ke titik spawn.');
         this.respawn();
     }
 
@@ -546,16 +475,16 @@ export class Player {
         if (toast) {
             toast.textContent = message;
             toast.classList.add('show');
-            setTimeout(() => {
+            if (this.toastTimer) clearTimeout(this.toastTimer);
+            this.toastTimer = setTimeout(() => {
                 toast.classList.remove('show');
-            }, 3000);
+            }, 2800);
         }
     }
 
-    setupTouchInput(domElement) {
+    setupTouchInput() {
         document.body.classList.add('is-mobile');
 
-        // Joystick DOM nodes
         const joystickBase = document.getElementById('mobile-joystick-base');
         const joystickHandle = document.getElementById('mobile-joystick-handle');
         const jumpBtn = document.getElementById('mobile-btn-jump');
@@ -565,13 +494,12 @@ export class Player {
         let joystickTouchId = null;
         let joystickStartX = 0;
         let joystickStartY = 0;
-        const maxJoystickDistance = 45; // Max radius in px
+        const maxJoystickDistance = 42;
 
         let lookTouchId = null;
         let lastLookX = 0;
         let lastLookY = 0;
 
-        // Jump button listeners
         jumpBtn.addEventListener('touchstart', (e) => {
             e.preventDefault();
             jumpBtn.classList.add('active');
@@ -588,17 +516,13 @@ export class Player {
             this.keys.jump = false;
         });
 
-        // Window level touch handlers to handle dragging outside element boundaries
         window.addEventListener('touchstart', (e) => {
-            // Check if overlay is active. If so, don't capture touch controls yet.
-            const overlay = document.getElementById('play-overlay');
-            if (overlay && overlay.style.display !== 'none') return;
+            if (isAnyOverlayOpen()) return;
 
-            // Prevent default zoom/scrolling gestures on canvas touches, but allow buttons/hotbars
-            const isInteractive = e.target.closest('button') || 
-                                  e.target.closest('.hotbar-slot') || 
-                                  e.target.closest('#hotbar-container') ||
-                                  e.target.closest('.action-btn');
+            const isInteractive = e.target.closest('button') ||
+                                  e.target.closest('.hotbar-slot') ||
+                                  e.target.closest('#hotbar-wrapper') ||
+                                  e.target.closest('#actions-panel');
             if (!isInteractive) {
                 e.preventDefault();
             }
@@ -608,36 +532,26 @@ export class Player {
                 const clientX = touch.clientX;
                 const clientY = touch.clientY;
 
-                // Joystick detection: left half of the screen
-                if (clientX < window.innerWidth / 2) {
+                if (isInteractive) continue;
+
+                if (clientX < window.innerWidth * 0.42) {
                     if (joystickTouchId === null) {
                         joystickTouchId = touch.identifier;
-                        // Center of the joystick base
                         const rect = joystickBase.getBoundingClientRect();
                         joystickStartX = rect.left + rect.width / 2;
                         joystickStartY = rect.top + rect.height / 2;
                     }
-                } 
-                // Look drag detection: right half of the screen
-                else {
-                    if (lookTouchId === null) {
-                        // Check if tapping on action buttons (don't rotate camera if touching them)
-                        const isActionButton = e.target.closest('.mobile-action-btn') || e.target.closest('#actions-panel');
-                        if (!isActionButton) {
-                            lookTouchId = touch.identifier;
-                            lastLookX = clientX;
-                            lastLookY = clientY;
-                        }
-                    }
+                } else if (lookTouchId === null) {
+                    lookTouchId = touch.identifier;
+                    lastLookX = clientX;
+                    lastLookY = clientY;
                 }
             }
         }, { passive: false });
 
         window.addEventListener('touchmove', (e) => {
-            const overlay = document.getElementById('play-overlay');
-            if (overlay && overlay.style.display !== 'none') return;
+            if (isAnyOverlayOpen()) return;
 
-            // Unconditionally block scrolling/zooming gestures while playing, EXCEPT on the scrollable hotbar
             const isHotbar = e.target.closest('#hotbar-container');
             if (!isHotbar) {
                 e.preventDefault();
@@ -646,33 +560,28 @@ export class Player {
             for (let i = 0; i < e.touches.length; i++) {
                 const touch = e.touches[i];
 
-                // Update Joystick position & inputs
                 if (touch.identifier === joystickTouchId) {
                     let dx = touch.clientX - joystickStartX;
                     let dy = touch.clientY - joystickStartY;
-                    
+
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist > maxJoystickDistance) {
                         dx = (dx / dist) * maxJoystickDistance;
                         dy = (dy / dist) * maxJoystickDistance;
                     }
 
-                    // Move visual handle
                     joystickHandle.style.transform = `translate(${dx}px, ${dy}px)`;
                     joystickHandle.style.transition = 'none';
 
-                    // Convert to values between -1 and 1
                     const normalizedX = dx / maxJoystickDistance;
                     const normalizedY = dy / maxJoystickDistance;
 
-                    // Map to keys for player update method
                     this.keys.left = normalizedX < -0.25;
                     this.keys.right = normalizedX > 0.25;
                     this.keys.forward = normalizedY < -0.25;
                     this.keys.backward = normalizedY > 0.25;
                 }
 
-                // Update Camera Rotation (Look)
                 if (touch.identifier === lookTouchId) {
                     const dx = touch.clientX - lastLookX;
                     const dy = touch.clientY - lastLookY;
@@ -683,8 +592,6 @@ export class Player {
 
                     euler.y -= dx * sensitivity;
                     euler.x -= dy * sensitivity;
-
-                    // Clamp pitch (look up/down) to avoid flipping
                     euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
                     this.camera.quaternion.setFromEuler(euler);
 
@@ -696,16 +603,12 @@ export class Player {
 
         const endTouch = (touch) => {
             if (touch.identifier === joystickTouchId) {
-                // Reset joystick UI
                 joystickHandle.style.transform = 'translate(0px, 0px)';
                 joystickHandle.style.transition = 'transform 0.15s ease';
-                
-                // Clear joystick state
                 this.keys.left = false;
                 this.keys.right = false;
                 this.keys.forward = false;
                 this.keys.backward = false;
-                
                 joystickTouchId = null;
             }
             if (touch.identifier === lookTouchId) {
@@ -729,85 +632,198 @@ export class Player {
     initHand(scene) {
         this.handContainer = new THREE.Group();
         this.handContainer.position.set(0.25, -0.2, -0.45);
-        
+
         const handGeo = new THREE.BoxGeometry(0.08, 0.08, 0.25);
         const handMat = new THREE.MeshLambertMaterial({ color: 0xe0a96d });
         const handMesh = new THREE.Mesh(handGeo, handMat);
         handMesh.position.set(0, 0, 0.05);
         this.handContainer.add(handMesh);
-        
+
         this.camera.add(this.handContainer);
         scene.add(this.camera);
-        
-        this.updateHeldItem('grass');
+
+        this.updateHeldItem('grass', false);
     }
 
-    updateHeldItem(type) {
+    disposeHeldObject(obj) {
+        if (!obj) return;
+        obj.traverse(child => {
+            if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (!child.userData.sharedMaterial && child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(m => m.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            }
+        });
+    }
+
+    updateHeldItem(type, isEnchanted = false) {
         if (!this.handContainer) return;
-        
+
         if (this.heldItem) {
             this.handContainer.remove(this.heldItem);
-            if (this.heldItem.geometry) this.heldItem.geometry.dispose();
-            // Don't dispose shared material from world instMesh!
+            this.disposeHeldObject(this.heldItem);
             this.heldItem = null;
         }
-        
+
         if (!type) return;
-        
+
+        const glintEmissive = isEnchanted ? new THREE.Color(0x9d4edd) : new THREE.Color(0x000000);
+        const glintIntensity = isEnchanted ? 0.55 : 0;
+
         if (type === 'bow') {
             const group = new THREE.Group();
-            const woodMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+            const woodMat = new THREE.MeshLambertMaterial({
+                color: 0x8b5a2b,
+                emissive: glintEmissive,
+                emissiveIntensity: glintIntensity
+            });
             const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.02), woodMat);
             group.add(p1);
-            
-            const stringMat = new THREE.MeshBasicMaterial({ color: 0xcccccc });
+
+            const stringMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
             const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.16, 0.005), stringMat);
             s1.position.set(-0.02, 0, -0.01);
             group.add(s1);
-            
+
             this.heldItem = group;
             this.heldItem.position.set(-0.04, 0.05, -0.05);
             this.heldItem.rotation.set(0, Math.PI / 4, 0);
             this.handContainer.add(this.heldItem);
+        } else if (type.startsWith('sword_')) {
+            const group = new THREE.Group();
+            const matColor = type.includes('diamond')
+                ? 0x38bdf8
+                : type.includes('iron')
+                    ? 0xd4d4d8
+                    : type.includes('stone')
+                        ? 0x94a3b8
+                        : 0xb07d56;
+            const bladeMat = new THREE.MeshLambertMaterial({
+                color: matColor,
+                emissive: glintEmissive,
+                emissiveIntensity: glintIntensity
+            });
+            const hiltMat = new THREE.MeshLambertMaterial({ color: 0x6d4c33 });
+
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.19, 0.032), bladeMat);
+            blade.position.set(0, 0.08, 0);
+            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.018, 0.08), hiltMat);
+            guard.position.set(0, -0.015, 0);
+            const grip = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.06, 0.018), hiltMat);
+            grip.position.set(0, -0.05, 0);
+
+            group.add(blade, guard, grip);
+            this.heldItem = group;
+            this.heldItem.position.set(-0.03, 0.04, -0.07);
+            this.heldItem.rotation.set(-0.35, 0.3, 0);
+            this.handContainer.add(this.heldItem);
+        } else if (type.startsWith('pickaxe_')) {
+            const group = new THREE.Group();
+            const matColor = type.includes('diamond')
+                ? 0x38bdf8
+                : type.includes('iron')
+                    ? 0xd4d4d8
+                    : type.includes('stone')
+                        ? 0x94a3b8
+                        : 0xb07d56;
+            const headMat = new THREE.MeshLambertMaterial({
+                color: matColor,
+                emissive: glintEmissive,
+                emissiveIntensity: glintIntensity
+            });
+            const stickMat = new THREE.MeshLambertMaterial({ color: 0x784f30 });
+
+            const stick = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.18, 0.016), stickMat);
+            stick.position.set(0, 0.04, 0);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.03, 0.13), headMat);
+            head.position.set(0, 0.12, 0);
+
+            group.add(stick, head);
+            this.heldItem = group;
+            this.heldItem.position.set(-0.03, 0.02, -0.07);
+            this.heldItem.rotation.set(-0.3, 0.35, 0);
+            this.handContainer.add(this.heldItem);
+        } else if (type === 'stick') {
+            const stickMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+            const stick = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.17, 0.016), stickMat);
+            this.heldItem = stick;
+            this.heldItem.position.set(-0.02, 0.05, -0.06);
+            this.heldItem.rotation.set(-0.35, 0.25, 0.2);
+            this.handContainer.add(this.heldItem);
+        } else if (type === 'lapis') {
+            const lapisMat = new THREE.MeshLambertMaterial({ color: 0x2563eb });
+            const gem = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.07, 0.025), lapisMat);
+            this.heldItem = gem;
+            this.heldItem.position.set(-0.02, 0.04, -0.06);
+            this.heldItem.rotation.set(0.2, 0.4, 0.15);
+            this.handContainer.add(this.heldItem);
+        } else if (type === 'book' || type === 'enchanted_book') {
+            const group = new THREE.Group();
+            const coverMat = new THREE.MeshLambertMaterial({
+                color: type === 'enchanted_book' ? 0x6d28d9 : 0x92400e,
+                emissive: type === 'enchanted_book' ? new THREE.Color(0x9d4edd) : new THREE.Color(0x000000),
+                emissiveIntensity: type === 'enchanted_book' ? 0.6 : 0
+            });
+            const pageMat = new THREE.MeshLambertMaterial({ color: 0xfef3c7 });
+            const cover = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.024), coverMat);
+            const pages = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.082, 0.018), pageMat);
+            pages.position.set(0.004, 0, 0);
+            group.add(cover, pages);
+
+            this.heldItem = group;
+            this.heldItem.position.set(-0.02, 0.04, -0.06);
+            this.heldItem.rotation.set(0.25, 0.45, 0.1);
+            this.handContainer.add(this.heldItem);
+        } else if (type === 'minecart') {
+            const mat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.09), mat);
+            this.heldItem = mesh;
+            this.heldItem.position.set(-0.02, 0.04, -0.06);
+            this.heldItem.rotation.set(0.2, 0.4, 0.1);
+            this.handContainer.add(this.heldItem);
         } else if (type === 'spawn_irongolem' || type === 'spawn_snowgolem') {
             const eggGroup = new THREE.Group();
-            
-            // Create a small blocky egg (overlapping layers)
             const eggGeo = new THREE.BoxGeometry(0.05, 0.07, 0.05);
-            const eggMat = new THREE.MeshLambertMaterial({ 
-                color: type === 'spawn_irongolem' ? 0xdcdcdc : 0xe0e2db 
+            const eggMat = new THREE.MeshLambertMaterial({
+                color: type === 'spawn_irongolem' ? 0xdcdcdc : 0xe0e2db
             });
             const eggMesh = new THREE.Mesh(eggGeo, eggMat);
             eggGroup.add(eggMesh);
-            
-            // Add some spots to the spawn egg
+
             const spotGeo = new THREE.BoxGeometry(0.015, 0.015, 0.015);
-            const spotMat = new THREE.MeshBasicMaterial({ 
-                color: type === 'spawn_irongolem' ? 0x990000 : 0xff7a00 
+            const spotMat = new THREE.MeshBasicMaterial({
+                color: type === 'spawn_irongolem' ? 0x990000 : 0xff7a00
             });
-            
-            const spot1 = new THREE.Mesh(spotGeo, spotMat);
+
+            const spot1 = new THREE.Mesh(spotGeo, spotMat.clone());
             spot1.position.set(0.015, 0.02, 0.015);
-            eggGroup.add(spot1);
-            
-            const spot2 = new THREE.Mesh(spotGeo, spotMat);
+            const spot2 = new THREE.Mesh(spotGeo.clone(), spotMat.clone());
             spot2.position.set(-0.015, -0.01, -0.015);
-            eggGroup.add(spot2);
-            
-            const spot3 = new THREE.Mesh(spotGeo, spotMat);
-            spot3.position.set(0.015, -0.02, -0.01);
-            eggGroup.add(spot3);
-            
+            eggGroup.add(spot1, spot2);
+            spotMat.dispose();
+
             this.heldItem = eggGroup;
             this.heldItem.position.set(-0.02, 0.04, -0.06);
             this.heldItem.rotation.set(0.2, 0.4, 0.1);
             this.handContainer.add(this.heldItem);
         } else {
-            const baseType = type.split('_')[0];
+            const baseType = normalizeBlockType(type);
             const instMesh = this.world.instancedMeshMap.get(baseType);
             if (instMesh) {
-                const geo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+                const heldDims = {
+                    rail: [0.09, 0.014, 0.09],
+                    pressure_plate: [0.08, 0.018, 0.08],
+                    button: [0.05, 0.026, 0.04],
+                    lever: [0.06, 0.036, 0.06]
+                }[baseType] || [0.08, 0.08, 0.08];
+                const geo = new THREE.BoxGeometry(heldDims[0], heldDims[1], heldDims[2]);
                 this.heldItem = new THREE.Mesh(geo, instMesh.material);
+                this.heldItem.userData.sharedMaterial = true;
                 this.heldItem.position.set(-0.02, 0.04, -0.06);
                 this.heldItem.rotation.set(0.2, 0.4, 0.1);
                 this.handContainer.add(this.heldItem);

@@ -925,3 +925,206 @@ textures.dispenserFront = createPixelTexture((ctx) => {
     ctx.fillRect(11, 11, 2, 2);
 });
 
+// 40. Enchanting Table Top (Crimson velvet cloth, diamond corners, open spellbook)
+textures.enchantingTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#1b0b2e'; // Deep obsidian base
+    ctx.fillRect(0, 0, 16, 16);
+
+    // Crimson cloth diamond carpet
+    ctx.fillStyle = '#9d0208';
+    ctx.fillRect(2, 2, 12, 12);
+    ctx.fillStyle = '#d00000';
+    ctx.fillRect(3, 3, 10, 10);
+
+    // Cyan diamond corner inlays
+    ctx.fillStyle = '#48cae4';
+    ctx.fillRect(1, 1, 2, 2);
+    ctx.fillRect(13, 1, 2, 2);
+    ctx.fillRect(1, 13, 2, 2);
+    ctx.fillRect(13, 13, 2, 2);
+
+    // Open golden-bound spellbook in center
+    ctx.fillStyle = '#ffb703';
+    ctx.fillRect(4, 5, 8, 6);
+    ctx.fillStyle = '#fefae0';
+    ctx.fillRect(5, 6, 3, 4);
+    ctx.fillRect(8, 6, 3, 4);
+    ctx.fillStyle = '#9d4edd';
+    ctx.fillRect(6, 7, 1, 2);
+    ctx.fillRect(9, 7, 1, 2);
+});
+
+// 41. Enchanting Table Side (Obsidian pedestal, crimson cloth drape, glowing runes)
+textures.enchantingSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#150626';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 4; y < 16; y++) {
+            if ((x + y) % 5 === 0) {
+                ctx.fillStyle = '#3c096c';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+
+    // Top crimson cloth band + gold trim
+    ctx.fillStyle = '#b5171e';
+    ctx.fillRect(0, 0, 16, 4);
+    ctx.fillStyle = '#ffb703';
+    ctx.fillRect(0, 4, 16, 1);
+    ctx.fillRect(6, 4, 4, 3);
+
+    // Cyan diamond side gems
+    ctx.fillStyle = '#48cae4';
+    ctx.fillRect(2, 8, 2, 3);
+    ctx.fillRect(12, 8, 2, 3);
+});
+
+// 42. Oak Wood Planks
+textures.planks = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#b88b58';
+    ctx.fillRect(0, 0, 16, 16);
+
+    ctx.fillStyle = '#7f5539';
+    ctx.fillRect(0, 3, 16, 1);
+    ctx.fillRect(0, 7, 16, 1);
+    ctx.fillRect(0, 11, 16, 1);
+    ctx.fillRect(0, 15, 16, 1);
+
+    ctx.fillRect(7, 0, 1, 3);
+    ctx.fillRect(13, 4, 1, 3);
+    ctx.fillRect(4, 8, 1, 3);
+    ctx.fillRect(10, 12, 1, 3);
+
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            if (y % 4 === 3) continue;
+            const r = Math.random();
+            if (r < 0.14) {
+                ctx.fillStyle = '#cfa372';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.24) {
+                ctx.fillStyle = '#9c6b3e';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+});
+
+// 43. Bookshelf Side (Oak frame + two rows of colorful spellbooks)
+textures.bookshelfSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#b88b58';
+    ctx.fillRect(0, 0, 16, 16);
+
+    ctx.fillStyle = '#7f5539';
+    ctx.fillRect(0, 2, 16, 1);
+    ctx.fillRect(0, 7, 16, 2);
+    ctx.fillRect(0, 14, 16, 1);
+
+    ctx.fillStyle = '#24160e';
+    ctx.fillRect(1, 3, 14, 4);
+    ctx.fillRect(1, 9, 14, 5);
+
+    const spinesTop = ['#b91c1c', '#1d4ed8', '#047857', '#d97706', '#7e22ce', '#be123c'];
+    let sx = 1;
+    spinesTop.forEach((col, i) => {
+        const w = i % 2 === 0 ? 2 : 2;
+        if (sx + w <= 15) {
+            ctx.fillStyle = col;
+            ctx.fillRect(sx, 3, w, 4);
+            ctx.fillStyle = '#fde68a';
+            ctx.fillRect(sx, 4, w, 1);
+            sx += w + (i === 2 ? 1 : 0);
+        }
+    });
+
+    const spinesBot = ['#0f766e', '#a16207', '#4338ca', '#9f1239', '#15803d', '#6d28d9'];
+    sx = 1;
+    spinesBot.forEach((col, i) => {
+        const w = 2;
+        if (sx + w <= 15) {
+            ctx.fillStyle = col;
+            ctx.fillRect(sx, 9 + (i % 2), w, 5 - (i % 2));
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(sx, 11, w, 1);
+            sx += w + (i === 1 || i === 4 ? 1 : 0);
+        }
+    });
+});
+
+// 44. Lapis Lazuli Ore
+textures.lapisOre = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const rand = Math.random();
+            if (rand < 0.15) {
+                ctx.fillStyle = '#6e6e6e';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (rand < 0.25) {
+                ctx.fillStyle = '#a6a6a6';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    const spots = [[2, 3], [5, 2], [9, 4], [12, 3], [3, 8], [7, 7], [11, 9], [4, 12], [9, 12], [13, 12]];
+    spots.forEach(([lx, ly], idx) => {
+        ctx.fillStyle = idx % 2 === 0 ? '#1d4ed8' : '#2563eb';
+        ctx.fillRect(lx, ly, 2, 2);
+        ctx.fillStyle = '#60a5fa';
+        ctx.fillRect(lx, ly, 1, 1);
+    });
+});
+
+const BLOCK_TEXTURE_KEY = {
+    grass: 'grassSide',
+    dirt: 'dirt',
+    stone: 'stone',
+    obsidian: 'obsidian',
+    wood: 'woodSide',
+    planks: 'planks',
+    bookshelf: 'bookshelfSide',
+    leaf: 'leaf',
+    brick: 'brick',
+    emerald: 'emerald',
+    diamond: 'diamond',
+    ender: 'ender',
+    tnt: 'tntSide',
+    water: 'water',
+    lava: 'lava',
+    quartz: 'quartz',
+    sand: 'sand',
+    farmland: 'farmlandTop',
+    lucky: 'lucky',
+    magma: 'magma',
+    crop: 'crop',
+    coal_ore: 'coalOre',
+    iron_ore: 'ironOre',
+    gold_ore: 'goldOre',
+    lapis_ore: 'lapisOre',
+    chest: 'chestFront',
+    crafting: 'craftingTop',
+    enchanting_table: 'enchantingTop',
+    piston: 'pistonSide',
+    rail: 'railTop',
+    pressure_plate: 'pressurePlateTop',
+    button: 'buttonTop',
+    lever: 'leverTop',
+    dispenser: 'dispenserFront'
+};
+
+const previewUrlCache = new Map();
+
+export function getBlockPreviewDataURL(type) {
+    if (!type) return null;
+    if (previewUrlCache.has(type)) return previewUrlCache.get(type);
+    const texKey = BLOCK_TEXTURE_KEY[type];
+    const tex = texKey ? textures[texKey] : null;
+    if (!tex || !tex.image || typeof tex.image.toDataURL !== 'function') return null;
+    const url = tex.image.toDataURL();
+    previewUrlCache.set(type, url);
+    return url;
+}
+
+

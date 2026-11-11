@@ -2,7 +2,7 @@
 
 NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Game ini dikembangkan menggunakan Three.js dan berjalan langsung di web browser Anda tanpa memerlukan instalasi aplikasi tambahan. Gali, bangun, dan ciptakan dunia impian Anda!
 
-**Demo Live:** [https://nizamcraft.wanohdigital.biz.id](https://nizamcraft.wanohdigital.biz.id)
+**Demo Live:** [https://nizamcraft.my.id](https://nizamcraft.my.id)
 
 ## Fitur Utama
 
@@ -32,31 +32,39 @@ NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Gam
 - **Optimalisasi iOS Safari**: Layout game didesain menggunakan CSS Dynamic Viewport Height (`100dvh`) agar pas di layar tanpa terpotong bar navigasi Safari. Dilengkapi pula dengan deteksi otomatis dan petunjuk toast layar penuh jika Fullscreen API dibatasi oleh sistem iOS.
 - **Kompatibilitas MacBook Trackpad**: Mendukung klik kiri (ketuk satu jari) dan klik kanan (ketuk dua jari) trackpad MacBook secara lancar tanpa terganggu menu konteks browser.
 - **Penyimpanan Dunia Otomatis**: Simpan dan muat progres dunia Anda (termasuk posisi, HP, isi tas/inventaris pemain, armor terpasang, serta seluruh inventaris peti) menggunakan LocalStorage di browser. Dunia Anda otomatis tersimpan saat Anda menutup halaman game atau menekan tombol simpan.
-- **Efek Suara Sintetis (Web Audio API)**: Sound effect bawaan (suara gali, suara pasang, suara tembakan busur panah, suara terkena serangan, hingga ledakan) yang dihasilkan secara real-time tanpa file audio eksternal.
+- **Meja Enchant & Buku Enchant**: Tulis 5 jenis mantra (**Ketajaman**, **Efisiensi**, **Perlindungan**, **Kekuatan**, dan **Aspek Api**) ke dalam **Buku Kosong** menggunakan kristal Zamrud atau Berlian, lalu tempa **Buku Enchant** ke Pedang, Beliung, Busur, atau Zirah.
+- **Meja Crafting Terkategori**: Rakit Pedang Besi/Berlian, Beliung Besi/Berlian, Busur, Zirah Besi/Emas/Berlian, Buku, Meja Enchant, Apel Emas, serta blok mekanis dengan filter kategori dan ringkasan stok bahan langsung.
+- **Katalog Blok Ramah Layar Sentuh**: Tombol **Blok** di ujung hotbar (atau `Tab` di desktop) membuka panel grid blok terfilter (**Alam**, **Tambang & Mulia**, **Mekanis & Meja**, **Golem**) lengkap dengan pratinjau tekstur piksel asli.
+- **Efek Suara Sintetis (Web Audio API)**: Sound effect bawaan (suara gali, suara pasang, busur panah, denting sihir enchant, terkena serangan, hingga ledakan) yang dihasilkan secara real-time tanpa file audio eksternal.
 
 ## Kontrol Permainan
 
 ### Desktop (Keyboard & Mouse)
 - **Berjalan / Bergerak**: Tombol `W` `A` `S` `D` atau `Tombol Arah`
-- **Melihat Sekeliling**: Gerakkan Mouse (klik layar untuk mengaktifkan Pointer Lock)
+- **Melihat Sekeliling**: Gerakkan Mouse / Trackpad (klik layar untuk mengaktifkan Pointer Lock)
 - **Melompat**: Tombol `Spasi`
-- **Gali Block / Serang**: Klik Kiri Mouse
-- **Pasang Block / Buka Peti**: Klik Kanan Mouse
-- **Buka/Tutup Tas (Inventaris)**: Tombol `E` (Tombol `I` dibebaskan untuk pintasan Lucky Block)
-- **Pilih Jenis Block/Item**: Tombol `1` - `9`, `0`, `-`, `=`, `L` (Lava), `Q` (Quartz), `Y` (Pasir), `U` (Ladang), `I` (Lucky Block), `O` (Magma), `P` (Crop/Tanam), `G` (Spawn Iron Golem), `H` (Spawn Snow Golem), `K` (Coal Ore), `J` (Iron Ore), `N` (Gold Ore), `C` (Chest), `V` (Crafting Table), `X` (Piston), `Z` (Rail), `M` (Pressure Plate), `B` (Button), `T` (Lever), `R` (Dispenser)
+- **Gali Block / Serang**: Klik Kiri Mouse, atau tombol keyboard `,` (Koma) maupun `[`
+- **Pasang Block / Interaksi (Peti, Crafting, Enchant, Minecart, Saklar)**: Klik Kanan Mouse (`Ctrl+Klik`), atau tombol keyboard `.` (Titik) maupun `]`
+- **Buka/Tutup Tas & Perlengkapan**: Tombol `E`
+- **Buka/Tutup Meja Kerja (Crafting & Enchant)**: Tombol `/`
+- **Buka/Tutup Katalog Semua Blok**: Tombol `Tab`
+- **Tampilkan/Sembunyikan Bantuan Kontrol**: Tombol `H`
+- **Jeda & Pengaturan Dunia**: Tombol `Esc`
+- **Menembak Busur Panah**: Tombol `F`
+- **Slot Hotbar Cepat**: Tombol `1` - `9` atau Scroll Mouse (pintasan langsung blok lain seperti `0`, `-`, `=`, `L`, `Q`, `Y`, `U`, `I`, `O`, `P`, `G`, `'`, `K`, `J`, `N`, `C`, `V`, `;`, `X`, `Z`, `M`, `B`, `T`, `R` otomatis memuat blok tersebut ke slot aktif)
 - **Shortcut Kontekstual Tanam**: Tombol `P` saat membidik block Ladang (Farmland) yang kosong di atasnya
 - **Regenerasi Dunia**: Tombol `Backspace` (mengatur ulang seluruh peta)
 
 ### Mobile (Layar Sentuh)
 - **Berjalan / Bergerak**: Tarik Joystick di kiri bawah layar
 - **Melihat Sekeliling**: Seret/geser layar di area sebelah kanan
-- **Melompat / Berenang**: Ketuk tombol ▲
-- **Menyerang Monster**: Ketuk tombol ⚔️
-- **Menggali / Memicu TNT**: Ketuk tombol ⛏️
-- **Memasang / Buka Peti / Memicu TNT**: Ketuk tombol 🧱
-- **Buka/Tutup Tas**: Ketuk tombol melayang 🎒 (Tas) di tengah layar
-- **Menembak Busur Panah**: Ketuk tombol 🏹 (diposisikan rapi di samping kiri tombol menyerang)
-- **Memilih Block**: Geser dan ketuk hotbar di bawah layar
+- **Busur Jempol Kanan Kontekstual (4 Tombol)**:
+  - **Tombol Utama Besar**: Gali blok atau Serang monster (ikon otomatis berubah saat membidik monster)
+  - **Pasang / Interaksi**: Pasang blok atau buka Peti / Meja Crafting / Meja Enchant / naiki Minecart
+  - **Lompat / Berenang**: Tombol kanan luar
+  - **Panah / Tanam**: Tembak panah, atau berubah menjadi Tanam Benih saat membidik ladang kosong
+- **Menu Kanan Atas Aman (3 Tombol)**: **Tas**, **Meja** (tab gabungan Crafting & Enchant), dan **Jeda** (menu Simpan, Muat, Respawn, Layar Penuh, dan Reset Dunia)
+- **Hotbar 5 Slot Cepat + Katalog `[Blok]`**: Memilih blok dari Katalog langsung menempatkannya ke slot aktif tanpa perlu menggeser 33 kotak kecil
 
 ## Instalasi & Menjalankan Game Lokal
 
@@ -70,24 +78,27 @@ NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Gam
    ```bash
    npm start
    ```
-   atau
+   atau jalankan pengujian otomatis:
    ```bash
-   npm run dev
+   npm test
    ```
 5. Buka web browser Anda dan akses `http://localhost:3000`
 
 ## Struktur File Project
 
-- `index.html` - Halaman utama game, UI HUD, dan panel mobile
-- `server.js` - Server statis Node.js sederhana
-- `src/main.js` - Logika utama, event listener, dan inisialisasi Three.js
-- `src/index.css` - Desain UI, responsive media queries, dan tema visual
-- `src/world/world.js` - Logika grid dunia, fisika block, partikel hancur, dan simulasi air/lava
-- `src/player/player.js` - Kontrol pergerakan player, deteksi tabrakan (collision), visual tangan 3D, dan kesehatan
-- `src/entities/mob.js` - Logika monster (Zombie, Skeleton, Creeper) dan proyektil anak panah
-- `src/entities/tnt.js` - Implementasi TNT (`PrimedTNT`) beserta simulasi fisika dan reaksi berantai ledakan
+- `index.html` - Halaman utama game, UI HUD, Katalog Blok, Meja Crafting, dan Meja Enchant
+- `server.js` - Server statis Node.js dengan proteksi path traversal
+- `src/main.js` - Koordinasi permainan, input mouse/keyboard/sentuh, inventaris, crafting, dan enchanting
+- `src/index.css` - Desain antarmuka HUD, workbench, dan tata letak responsif mobile landscape
+- `src/world/world.js` - Grid dunia voxel, raycast blok 3D DDA, partikel, dan simulasi air/lava
+- `src/player/player.js` - Pergerakan pemain, deteksi kolisi AABB terpusat, dan model tangan/senjata 3D
+- `src/entities/mob.js` - AI monster, pelindung Golem, hewan pasif, anak panah, dan Minecart
+- `src/entities/tnt.js` - Simulasi fisika TNT (`PrimedTNT`) dan reaksi berantai ledakan
+- `src/utils/gameData.js` - Aturan kolisi murni, resep crafting, sistem enchantment, dan manajemen slot
+- `src/utils/icons.js` - Ikonografi SVG Lucide dan generator pratinjau item
 - `src/utils/audio.js` - Generator efek suara sintetis (Web Audio API)
-- `src/utils/textures.js` - Generator tekstur block prosedural piksel retro
+- `src/utils/textures.js` - Generator tekstur block prosedural piksel 16x16
+- `tests/game-logic.test.mjs` - Pengujian unit otomatis logika inti dan keamanan server
 
 ## Teknologi yang Digunakan
 
@@ -99,6 +110,22 @@ NizamCraft adalah game voxel 3D interaktif yang terinspirasi dari Minecraft. Gam
 ## Riwayat Perubahan (Changelog)
 
 Seluruh riwayat rilis dan catatan pembaruan proyek dikonsolidasikan di bawah ini:
+
+### [3.2.0] - 2026-11-10
+#### Added
+- **Sistem Enchantment & Buku Enchant**: Menambahkan blok `Meja Enchant` (`enchanting_table`), item `Buku Kosong` (`book`), dan `Buku Enchant` (`enchanted_book`) dengan 5 mantra aktif (`Ketajaman`, `Efisiensi`, `Perlindungan`, `Kekuatan`, `Aspek Api`) beserta efek visual kilau ungu di UI maupun tangan 3D.
+- **Senjata & Alat Baru**: Menambahkan `Pedang Besi`, `Pedang Berlian`, `Beliung Besi`, `Beliung Berlian`, dan resep `Busur Panah` serta kemampuan memegang item langsung dari Tas.
+- **Kontrol Gali & Pasang via Keyboard Desktop**: Mendukung tombol `,` / `[` untuk menggali/menyerang dan `.` / `]` untuk memasang/berinteraksi tanpa perlu klik mouse atau touchpad.
+- **Katalog Blok Mobile Terkategori**: Menambahkan tombol **Blok** (`Tab` di desktop) dengan filter kategori dan pratinjau tekstur piksel asli agar pemilihan 33 blok di layar HP jauh lebih cepat.
+- **Pengujian Otomatis**: Menambahkan suite `node --test` (`tests/game-logic.test.mjs`).
+
+#### Fixed
+- Memperbaiki render blok `coal_ore`, `iron_ore`, `gold_ore`, dan `pressure_plate` yang sebelumnya tidak terlihat akibat pemotongan nama tipe `split('_')`.
+- Memperbaiki penyimpanan otomatis `beforeunload` dan pemuatan awal agar isi Tas, Zirah, Enchantment, dan Peti tidak pernah hilang saat halaman ditutup atau di-refresh.
+- Menyelaraskan kotak kolisi AABB pada pusat voxel `[-0.5, +0.5]` untuk Pemain, Mob, dan TNT.
+- Memperbaiki generasi alami `iron_ore` dan `gold_ore`, penguncian kursor pada modal Crafting/Tas, pembaruan kamera saat menaiki `Minecart`, raycast blok menggunakan algoritma 3D DDA, pembersihan memori WebGL, serta proteksi path traversal pada `server.js`.
+
+---
 
 ### [3.1.0] - 2026-07-03
 #### Added

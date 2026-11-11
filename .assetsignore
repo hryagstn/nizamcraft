@@ -1,0 +1,16 @@
+node_modules
+**/node_modules/**
+.git
+.wrangler
+.htaccess
+.assetsignore
+.gitignore
+tests
+**/tests/**
+server.js
+package.json
+package-lock.json
+wrangler.jsonc
+wrangler.toml
+*.md
+LICENSE

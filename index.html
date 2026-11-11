@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>NizamCraft - Game Voxel 3D Sederhana</title>
-    <meta name="description" content="NizamCraft adalah game voxel 3D interaktif mirip Minecraft yang berjalan langsung di browser. Gali dan bangun block sesukamu!">
-    <link rel="stylesheet" href="src/index.css?v=3">
-    
+    <title>NizamCraft - Dunia Voxel 3D</title>
+    <meta name="description" content="Jelajahi, tambang bijih, rakit perlengkapan, dan tempa Buku Enchant di dunia voxel 3D langsung dari browser.">
+    <link rel="stylesheet" href="src/index.css">
+
     <!-- PWA & Offline Support -->
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="src/assets/icon.svg">
@@ -17,13 +18,12 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('Service Worker registered successfully:', reg.scope))
-                    .catch(err => console.log('Service Worker registration failed:', err));
+                    .catch(err => console.warn('Service Worker registration failed:', err));
             });
         }
     </script>
-    
-    <!-- Import Map for Three.js and modules -->
+
+    <!-- Import Map for Three.js and Simplex Noise -->
     <script type="importmap">
       {
         "imports": {
@@ -35,475 +35,460 @@
     </script>
 </head>
 <body>
-    <!-- Landscape Orientation Warning Overlay -->
-    <div id="orientation-warning">
+    <!-- Landscape Orientation Prompt for Portrait Phones -->
+    <div id="orientation-warning" role="alert">
         <div class="warning-content">
-            <div class="rotate-device-icon">
-                <svg viewBox="0 0 24 24" width="80" height="80" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="5" y="2" width="14" height="20" rx="2" class="phone-icon" />
+            <div class="rotate-device-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2" />
                     <path d="M12 18h.01" />
-                    <path d="M17 4h.01M7 4h.01" />
                 </svg>
             </div>
-            <h2>Mode Landscape Diperlukan</h2>
-            <p>NizamCraft memerlukan layar horizontal. Silakan putar HP Anda untuk bermain!</p>
+            <h2>Putar Perangkat ke Landscape</h2>
+            <p>NizamCraft dirancang untuk layar mendatar agar kontrol jalan, bidikan, dan pemilih blok nyaman dijangkau.</p>
         </div>
     </div>
 
-    <!-- Center Screen Crosshair -->
-    <div id="crosshair"></div>
+    <!-- Center Screen Crosshair & Contextual Prompt -->
+    <div id="crosshair" aria-hidden="true"></div>
+    <div id="context-prompt" aria-live="polite"></div>
 
-    <!-- Toast Notification Message -->
-    <div id="toast-msg">Notifikasi</div>
+    <!-- Toast Notification -->
+    <div id="toast-msg" role="status" aria-live="polite">Siap bermain</div>
 
-    <!-- Play/Start screen Overlay -->
+    <!-- Start & Pause Screen Overlay -->
     <div id="play-overlay">
         <div id="overlay-container">
             <div class="overlay-left">
                 <h1>NIZAMCRAFT</h1>
-                <p>Game Voxel 3D - Bangun & Gali Dunia Impianmu</p>
-                <button id="play-button" aria-label="Mulai Game">MULAI PETUALANGAN</button>
+                <p id="overlay-subtitle" class="overlay-subtitle">Tambang bijih, rakit persenjataan, dan tempa Buku Enchant di dunia voxel 3D.</p>
+                <button id="play-button" type="button">Mulai Permainan</button>
             </div>
-            
+
             <div class="overlay-right">
-                <!-- World Management Actions -->
                 <div class="overlay-actions">
-                    <div class="instructions-title">Penyimpanan Dunia</div>
+                    <h2 class="section-heading">Data &amp; Pengaturan Dunia</h2>
                     <div class="overlay-actions-row">
-                        <button id="overlay-save-btn" class="overlay-btn" aria-label="Simpan Dunia">
-                            <span>Simpan 💾</span>
+                        <button id="overlay-save-btn" type="button" class="overlay-btn">
+                            <span data-icon="save"></span>
+                            <span>Simpan</span>
                         </button>
-                        <button id="overlay-load-btn" class="overlay-btn" aria-label="Muat Dunia">
-                            <span>Muat 📂</span>
+                        <button id="overlay-load-btn" type="button" class="overlay-btn">
+                            <span data-icon="folder"></span>
+                            <span>Muat</span>
                         </button>
-                        <button id="overlay-fullscreen-btn" class="overlay-btn" aria-label="Layar Penuh">
-                            <span>Layar 📺</span>
+                        <button id="overlay-respawn-btn" type="button" class="overlay-btn">
+                            <span data-icon="locate"></span>
+                            <span>Respawn</span>
                         </button>
-                        <button id="overlay-reset-btn" class="overlay-btn danger" aria-label="Reset Dunia">
-                            <span>Reset 🔄</span>
+                        <button id="overlay-fullscreen-btn" type="button" class="overlay-btn">
+                            <span data-icon="maximize"></span>
+                            <span>Layar Penuh</span>
+                        </button>
+                        <button id="overlay-reset-btn" type="button" class="overlay-btn danger">
+                            <span data-icon="reset"></span>
+                            <span>Reset Dunia</span>
                         </button>
                     </div>
                 </div>
 
                 <div class="instructions">
-                    <div class="instructions-title">Kontrol Permainan</div>
+                    <h2 class="section-heading">Kontrol Komputer</h2>
                     <div class="instruction-row">
-                        <span>Berjalan / Bergerak</span>
-                        <span class="key-tag">W</span> <span class="key-tag">A</span> <span class="key-tag">S</span> <span class="key-tag">D</span>
+                        <span>Bergerak &amp; Lompat</span>
+                        <span><kbd class="key-tag">WASD</kbd> <kbd class="key-tag">Spasi</kbd></span>
                     </div>
                     <div class="instruction-row">
-                        <span>Melihat Sekeliling</span>
-                        <span class="key-tag">Gerakan Mouse</span>
+                        <span>Hapus Blok / Serang</span>
+                        <span><kbd class="key-tag">Klik Kiri</kbd> · <kbd class="key-tag">,</kbd> <kbd class="key-tag">[</kbd></span>
                     </div>
                     <div class="instruction-row">
-                        <span>Melompat (Jump)</span>
-                        <span class="key-tag">Spasi</span>
+                        <span>Pasang Blok / Buka Meja</span>
+                        <span><kbd class="key-tag">Klik Kanan</kbd> · <kbd class="key-tag">.</kbd> <kbd class="key-tag">]</kbd></span>
                     </div>
                     <div class="instruction-row">
-                        <span>Gali Block / Serang</span>
-                        <span class="key-tag">Klik Kiri</span>
-                    </div>
-                    <div class="instruction-row">
-                        <span>Pasang Block</span>
-                        <span class="key-tag">Klik Kanan</span> / <span class="key-tag">Ctrl+Klik</span>
-                    </div>
-                    <div class="instruction-row">
-                        <span>Menembak Panah 🏹</span>
-                        <span class="key-tag">F</span>
-                    </div>
-                    <div class="instruction-row">
-                        <span>Pilih Jenis Block</span>
-                        <span class="key-tag">1 - 9, 0, -, =</span>
-                    </div>
-                    <div class="instruction-row">
-                        <span>Reset Posisi / Respawn</span>
-                        <span class="key-tag">R</span>
+                        <span>Tas, Meja, Blok &amp; Bantuan</span>
+                        <span><kbd class="key-tag">E</kbd> <kbd class="key-tag">/</kbd> <kbd class="key-tag">Tab</kbd> <kbd class="key-tag">H</kbd></span>
                     </div>
                 </div>
-                
-                <!-- Mobile Touch Controls instructions -->
+
                 <div class="mobile-instructions">
-                    <div class="instructions-title">Kontrol Layar Sentuh</div>
+                    <h2 class="section-heading">Kontrol Layar Sentuh</h2>
                     <div class="instruction-row-mobile">
-                        <span>Berjalan</span>
-                        <span class="key-tag-mobile">Joystick Kiri</span>
+                        <span>Jalan &amp; Kamera</span>
+                        <span class="key-tag-mobile">Joystick Kiri &amp; Geser Kanan</span>
                     </div>
                     <div class="instruction-row-mobile">
-                        <span>Melihat</span>
-                        <span class="key-tag-mobile">Seret Layar Kanan</span>
+                        <span>Aksi Kontekstual</span>
+                        <span class="key-tag-mobile">Busur Jempol Kanan Bawah</span>
                     </div>
                     <div class="instruction-row-mobile">
-                        <span>Melompat / Berenang</span>
-                        <span class="key-tag-mobile">Tombol ▲</span>
-                    </div>
-                    <div class="instruction-row-mobile">
-                        <span>Gali / Pasang / Serang</span>
-                        <span class="key-tag-mobile">Tombol ⛏️ / 🧱</span>
-                    </div>
-                    <div class="instruction-row-mobile">
-                        <span>Pilih Block</span>
-                        <span class="key-tag-mobile">Geser & Ketuk Hotbar</span>
+                        <span>Tas, Meja &amp; Jeda</span>
+                        <span class="key-tag-mobile">3 Tombol Kanan Atas</span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Left HUD: Guide & Stats -->
-    <div id="guide-panel" class="hud-panel">
-        <h3>NizamCraft v3.0.0</h3>
-        <div class="instruction-row" style="margin-bottom: 4px;">
-            <span>Gali / Serang:</span>
-            <span>Klik Kiri</span>
-        </div>
-        <div class="instruction-row" style="margin-bottom: 4px;">
-            <span>Pasang / Peti:</span>
-            <span>Klik Kanan</span>
-        </div>
-        <div class="instruction-row" style="margin-bottom: 4px;">
-            <span>Buka Tas:</span>
-            <span>Tombol [E] / [I]</span>
-        </div>
-        <div class="instruction-row" style="margin-bottom: 4px;">
-            <span>Pilih Block:</span>
-            <span>Angka / Hotbar</span>
-        </div>
-        <div class="instruction-row" style="margin-bottom: 4px;">
-            <span>Respawn:</span>
-            <span>Tombol [R]</span>
-        </div>
-        <div class="instruction-row" style="margin-bottom: 4px;">
-            <span>Reset Dunia:</span>
-            <span>[Backspace]</span>
-        </div>
+    <!-- Desktop Top-Left Minimal Shortcut Strip + Toggleable Help Panel [H] -->
+    <div id="desktop-hint-bar" aria-hidden="true">
+        <span><kbd class="key-mini">Esc</kbd> Jeda</span>
+        <span class="hint-dot">·</span>
+        <span><kbd class="key-mini">E</kbd> Tas</span>
+        <span class="hint-dot">·</span>
+        <span><kbd class="key-mini">/</kbd> Meja</span>
+        <span class="hint-dot">·</span>
+        <span><kbd class="key-mini">Tab</kbd> Blok</span>
+        <span class="hint-dot">·</span>
+        <span><kbd class="key-mini">H</kbd> Bantuan</span>
     </div>
 
-    <!-- Right HUD: Actions -->
-    <div id="actions-panel" class="hud-panel">
-        <button id="save-btn" class="action-btn" aria-label="Simpan Dunia">
-            <span>Simpan Dunia</span>
-            <span>💾</span>
-        </button>
-        <button id="load-btn" class="action-btn" aria-label="Muat Dunia">
-            <span>Muat Dunia</span>
-            <span>📂</span>
-        </button>
-        <button id="fullscreen-btn" class="action-btn" aria-label="Layar Penuh">
-            <span>Layar Penuh</span>
-            <span>📺</span>
-        </button>
-        <button id="respawn-btn" class="action-btn" aria-label="Kembali ke Spawn">
-            <span>Respawn Player</span>
-            <span>📍</span>
-        </button>
-        <button id="reset-btn" class="action-btn danger" aria-label="Reset Dunia">
-            <span>Regenerasi Dunia</span>
-            <span>🔄</span>
-        </button>
-        <button id="exit-btn" class="action-btn danger" aria-label="Keluar Game">
-            <span>Keluar Game</span>
-            <span>🚪</span>
-        </button>
-    </div>
+    <aside id="guide-panel" class="hud-panel" style="display: none;" aria-label="Panduan Kontrol">
+        <h3>Pintasan Lengkap</h3>
+        <div class="instruction-row">
+            <span>Gali / Serang</span>
+            <span>Klik Kiri · <kbd class="key-mini">,</kbd> <kbd class="key-mini">[</kbd></span>
+        </div>
+        <div class="instruction-row">
+            <span>Pasang / Interaksi</span>
+            <span>Klik Kanan · <kbd class="key-mini">.</kbd> <kbd class="key-mini">]</kbd></span>
+        </div>
+        <div class="instruction-row">
+            <span>Slot Hotbar Cepat</span>
+            <span><kbd class="key-mini">1</kbd> – <kbd class="key-mini">9</kbd> / Scroll</span>
+        </div>
+        <div class="instruction-row">
+            <span>Meja Crafting &amp; Enchant</span>
+            <span><kbd class="key-mini">/</kbd></span>
+        </div>
+        <div class="instruction-row">
+            <span>Panah / Tanam Ladang</span>
+            <span><kbd class="key-mini">F</kbd> · <kbd class="key-mini">P</kbd></span>
+        </div>
+        <div class="instruction-row">
+            <span>Tutup Bantuan</span>
+            <span><kbd class="key-mini">H</kbd></span>
+        </div>
+    </aside>
 
-    <!-- HUD Health Bar -->
-    <div id="health-bar-container">
-        <span class="heart-icon">❤️</span>
-        <div id="health-bar">
-            <div id="health-fill"></div>
-        </div>
-        <span id="health-text">100 HP</span>
-    </div>
-
-    <!-- HUD Armor Bar -->
-    <div id="armor-bar-container" style="display: none;">
-        <span class="shield-icon">🛡️</span>
-        <div id="armor-bar">
-            <div id="armor-fill"></div>
-        </div>
-        <span id="armor-text">0% DEF</span>
-    </div>
-
-    <!-- Bottom HUD: Hotbar Voxel Selection -->
-    <div id="hotbar-container">
-        <div class="hotbar-slot active" data-index="0" title="Grass Block">
-            <span class="slot-num">1</span>
-            <div class="block-preview preview-grass">🌱</div>
-            <span class="block-name">Grass</span>
-        </div>
-        <div class="hotbar-slot" data-index="1" title="Dirt Block">
-            <span class="slot-num">2</span>
-            <div class="block-preview preview-dirt">🟫</div>
-            <span class="block-name">Dirt</span>
-        </div>
-        <div class="hotbar-slot" data-index="2" title="Stone Block">
-            <span class="slot-num">3</span>
-            <div class="block-preview preview-stone">🪨</div>
-            <span class="block-name">Stone</span>
-        </div>
-        <div class="hotbar-slot" data-index="3" title="Obsidian Block">
-            <span class="slot-num">4</span>
-            <div class="block-preview preview-obsidian">🔮</div>
-            <span class="block-name">Obsidian</span>
-        </div>
-        <div class="hotbar-slot" data-index="4" title="Wood Block">
-            <span class="slot-num">5</span>
-            <div class="block-preview preview-wood">🪵</div>
-            <span class="block-name">Wood</span>
-        </div>
-        <div class="hotbar-slot" data-index="5" title="Leaf Block">
-            <span class="slot-num">6</span>
-            <div class="block-preview preview-leaf">🍃</div>
-            <span class="block-name">Leaf</span>
-        </div>
-        <div class="hotbar-slot" data-index="6" title="Brick Block">
-            <span class="slot-num">7</span>
-            <div class="block-preview preview-brick">🧱</div>
-            <span class="block-name">Brick</span>
-        </div>
-        <div class="hotbar-slot" data-index="7" title="Emerald Block">
-            <span class="slot-num">8</span>
-            <div class="block-preview preview-emerald">💚</div>
-            <span class="block-name">Emerald</span>
-        </div>
-        <div class="hotbar-slot" data-index="8" title="Diamond Block">
-            <span class="slot-num">9</span>
-            <div class="block-preview preview-diamond">💎</div>
-            <span class="block-name">Diamond</span>
-        </div>
-        <div class="hotbar-slot" data-index="9" title="Ender Block">
-            <span class="slot-num">0</span>
-            <div class="block-preview preview-ender">👁️</div>
-            <span class="block-name">Ender</span>
-        </div>
-        <div class="hotbar-slot" data-index="10" title="TNT Block">
-            <span class="slot-num">-</span>
-            <div class="block-preview preview-tnt">🧨</div>
-            <span class="block-name">TNT</span>
-        </div>
-        <div class="hotbar-slot" data-index="11" title="Water Block">
-            <span class="slot-num">=</span>
-            <div class="block-preview preview-water">💧</div>
-            <span class="block-name">Water</span>
-        </div>
-        <div class="hotbar-slot" data-index="12" title="Lava Block">
-            <span class="slot-num">L</span>
-            <div class="block-preview preview-lava">🔥</div>
-            <span class="block-name">Lava</span>
-        </div>
-        <div class="hotbar-slot" data-index="13" title="Quartz Block">
-            <span class="slot-num">Q</span>
-            <div class="block-preview preview-quartz">🤍</div>
-            <span class="block-name">Quartz</span>
-        </div>
-        <div class="hotbar-slot" data-index="14" title="Sand Block">
-            <span class="slot-num">Y</span>
-            <div class="block-preview preview-sand">⏳</div>
-            <span class="block-name">Sand</span>
-        </div>
-        <div class="hotbar-slot" data-index="15" title="Farmland Block">
-            <span class="slot-num">U</span>
-            <div class="block-preview preview-farmland">🚜</div>
-            <span class="block-name">Farmland</span>
-        </div>
-        <div class="hotbar-slot" data-index="16" title="Lucky Block">
-            <span class="slot-num">I</span>
-            <div class="block-preview preview-lucky">❓</div>
-            <span class="block-name">Lucky</span>
-        </div>
-        <div class="hotbar-slot" data-index="17" title="Magma Block">
-            <span class="slot-num">O</span>
-            <div class="block-preview preview-magma">🌋</div>
-            <span class="block-name">Magma</span>
-        </div>
-        <div class="hotbar-slot" data-index="18" title="Crop Block">
-            <span class="slot-num">P</span>
-            <div class="block-preview preview-crop">🌾</div>
-            <span class="block-name">Crop</span>
-        </div>
-        <div class="hotbar-slot" data-index="19" title="Spawn Iron Golem">
-            <span class="slot-num">G</span>
-            <div class="block-preview preview-spawn_irongolem">🤖</div>
-            <span class="block-name">G. Iron</span>
-        </div>
-        <div class="hotbar-slot" data-index="20" title="Spawn Snow Golem">
-            <span class="slot-num">H</span>
-            <div class="block-preview preview-spawn_snowgolem">⛄</div>
-            <span class="block-name">G. Snow</span>
-        </div>
-        <div class="hotbar-slot" data-index="21" title="Coal Ore">
-            <span class="slot-num">K</span>
-            <div class="block-preview preview-coal_ore">🪨⚫</div>
-            <span class="block-name">Coal Ore</span>
-        </div>
-        <div class="hotbar-slot" data-index="22" title="Iron Ore">
-            <span class="slot-num">J</span>
-            <div class="block-preview preview-iron_ore">🪨🟫</div>
-            <span class="block-name">Iron Ore</span>
-        </div>
-        <div class="hotbar-slot" data-index="23" title="Gold Ore">
-            <span class="slot-num">N</span>
-            <div class="block-preview preview-gold_ore">🪨🪙</div>
-            <span class="block-name">Gold Ore</span>
-        </div>
-        <div class="hotbar-slot" data-index="24" title="Peti Penyimpanan">
-            <span class="slot-num">C</span>
-            <div class="block-preview preview-chest">📦</div>
-            <span class="block-name">Chest</span>
-        </div>
-        <div class="hotbar-slot" data-index="25" title="Meja Crafting">
-            <span class="slot-num">V</span>
-            <div class="block-preview preview-crafting">🛠️</div>
-            <span class="block-name">Crafting</span>
-        </div>
-        <div class="hotbar-slot" data-index="26" title="Block Piston">
-            <span class="slot-num">X</span>
-            <div class="block-preview preview-piston">⚙️</div>
-            <span class="block-name">Piston</span>
-        </div>
-        <div class="hotbar-slot" data-index="27" title="Rel Kereta">
-            <span class="slot-num">Z</span>
-            <div class="block-preview preview-rail">🛤️</div>
-            <span class="block-name">Rail</span>
-        </div>
-        <div class="hotbar-slot" data-index="28" title="Pelat Tekanan">
-            <span class="slot-num">M</span>
-            <div class="block-preview preview-pressure_plate">🟫</div>
-            <span class="block-name">Plate</span>
-        </div>
-        <div class="hotbar-slot" data-index="29" title="Tombol Tekan">
-            <span class="slot-num">B</span>
-            <div class="block-preview preview-button">🟤</div>
-            <span class="block-name">Button</span>
-        </div>
-        <div class="hotbar-slot" data-index="30" title="Tuas Saklar">
-            <span class="slot-num">T</span>
-            <div class="block-preview preview-lever">🕹️</div>
-            <span class="block-name">Lever</span>
-        </div>
-        <div class="hotbar-slot" data-index="31" title="Dispenser">
-            <span class="slot-num">R</span>
-            <div class="block-preview preview-dispenser">🧱</div>
-            <span class="block-name">Dispenser</span>
-        </div>
-    </div>
-
-    <!-- Floating Plant Button above Health Bar -->
-    <div id="plant-button-container">
-        <button id="plant-btn" class="glass-btn">
-            <span class="plant-icon">🌱</span>
-            <span class="plant-text">Tanam Benih (P)</span>
+    <!-- Mobile Top-Right Safe 3-Button Bar -->
+    <div id="mobile-top-bar" role="toolbar" aria-label="Menu Cepat Mobile">
+        <button id="mobile-bag-btn" type="button" class="mobile-top-btn" aria-label="Buka Tas dan Zirah">
+            <span data-icon="backpack"></span>
+            <span>Tas</span>
+        </button>
+        <button id="mobile-workbench-btn" type="button" class="mobile-top-btn" aria-label="Buka Meja Crafting dan Enchant">
+            <span data-icon="hammer"></span>
+            <span>Meja</span>
+        </button>
+        <button id="mobile-pause-btn" type="button" class="mobile-top-btn pause-btn" aria-label="Jeda dan Pengaturan Dunia">
+            <span data-icon="pause"></span>
+            <span>Jeda</span>
         </button>
     </div>
 
-    <!-- Floating Inventory/Bag Button -->
-    <div id="inventory-button-container">
-        <button id="inventory-btn" class="glass-btn">
-            <span class="bag-icon">🎒</span>
-            <span class="bag-text">Tas (E)</span>
-        </button>
-    </div>
-
-    <!-- Inventory & Storage UI Modal -->
-    <div id="inventory-modal" class="modal-overlay" style="display: none;">
-        <div class="inventory-container glass-panel">
-            <div class="inventory-header">
-                <h2 id="inventory-title">🎒 Tas & Perlengkapan</h2>
-                <button id="close-inventory-btn" class="close-btn">&times;</button>
+    <!-- Status Bars Row (Bottom-Center on Desktop, Top-Left on Mobile) -->
+    <div id="status-bars-row">
+        <div id="health-bar-container">
+            <span class="stat-icon hp-icon" data-icon="heart"></span>
+            <div id="health-bar">
+                <div id="health-fill"></div>
             </div>
-            
+            <span id="health-text">100 HP</span>
+        </div>
+
+        <div id="armor-bar-container" style="display: none;">
+            <span class="stat-icon def-icon" data-icon="shield"></span>
+            <div id="armor-bar">
+                <div id="armor-fill"></div>
+            </div>
+            <span id="armor-text">0% DEF</span>
+        </div>
+
+        <div id="xp-bar-container" title="Level dan XP Enchanting">
+            <span class="stat-icon xp-icon" data-icon="zap"></span>
+            <div id="xp-bar">
+                <div id="xp-fill"></div>
+            </div>
+            <span id="xp-text">Lv. 5</span>
+        </div>
+
+        <div id="held-item-badge" style="display: none;">
+            <span id="held-item-badge-icon"></span>
+            <span id="held-item-badge-name"></span>
+        </div>
+    </div>
+
+    <!-- Bottom Loadout Hotbar (9 Slots Desktop / 5 Slots Mobile) + Pinned Catalog Trigger -->
+    <div id="hotbar-wrapper">
+        <div id="hotbar-container" role="listbox" aria-label="Hotbar Blok Aktif">
+            <!-- Populated dynamically: 9 slots on Desktop, 5 slots on Mobile -->
+        </div>
+        <button id="open-block-picker-btn" type="button" aria-label="Buka Katalog Semua Blok" title="Semua Blok (Tab)">
+            <span data-icon="grid"></span>
+            <span class="picker-btn-label">Blok</span>
+        </button>
+    </div>
+
+    <!-- Categorized Block Picker Modal -->
+    <div id="block-picker-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+        <div class="modal-card picker-card">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="header-icon" data-icon="grid"></span>
+                    <h2 id="picker-title">Katalog Blok &amp; Objek</h2>
+                </div>
+                <button id="close-picker-btn" type="button" class="close-btn" aria-label="Tutup Katalog">
+                    <span data-icon="x"></span>
+                </button>
+            </div>
+            <div id="picker-category-tabs" class="filter-tabs" role="tablist">
+                <button type="button" class="filter-tab active" data-cat="all">Semua</button>
+                <button type="button" class="filter-tab" data-cat="nature">Alam</button>
+                <button type="button" class="filter-tab" data-cat="mineral">Tambang &amp; Mulia</button>
+                <button type="button" class="filter-tab" data-cat="redstone">Mekanis &amp; Meja</button>
+                <button type="button" class="filter-tab" data-cat="special">Golem</button>
+            </div>
+            <div id="block-picker-grid" class="picker-grid"></div>
+        </div>
+    </div>
+
+    <!-- Inventory & Chest Storage Modal -->
+    <div id="inventory-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="inventory-title">
+        <div class="modal-card inventory-card">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="header-icon" data-icon="backpack"></span>
+                    <h2 id="inventory-title">Tas &amp; Perlengkapan</h2>
+                </div>
+                <button id="close-inventory-btn" type="button" class="close-btn" aria-label="Tutup Tas">
+                    <span data-icon="x"></span>
+                </button>
+            </div>
+
             <div class="inventory-content">
-                <!-- Chest Storage Area (Only visible when interacting with a chest) -->
                 <div id="chest-storage-section" class="storage-section" style="display: none;">
-                    <h3>📦 Peti Penyimpanan</h3>
+                    <h3 class="panel-subtitle">Peti Penyimpanan (18 Slot)</h3>
                     <div id="chest-grid" class="inventory-grid"></div>
                 </div>
 
                 <div class="player-and-bag-section">
-                    <!-- Left: Player Equipment (Armor) -->
                     <div class="equipment-section">
-                        <h3>🛡️ Status & Armor</h3>
+                        <h3 class="panel-subtitle">Status &amp; Zirah</h3>
                         <div class="player-preview-box">
-                            <div class="player-silhouette">👤</div>
+                            <div class="player-silhouette" data-icon="user"></div>
                             <div class="armor-stats">
-                                <div id="stats-hp">❤️ HP: 100/100</div>
-                                <div id="stats-def">🛡️ DEF: 0%</div>
+                                <div id="stats-hp">HP: 100 / 100</div>
+                                <div id="stats-def">DEF: 0%</div>
+                                <div id="stats-xp">Level XP: 5</div>
                             </div>
                         </div>
                         <div class="armor-slots-container">
-                            <div class="armor-slot" data-slot="helmet" title="Helmet">
-                                <span class="slot-placeholder">🪖</span>
+                            <button type="button" class="armor-slot" data-slot="helmet" title="Slot Helm">
+                                <span class="slot-placeholder" data-icon="helmet"></span>
                                 <div class="slot-item"></div>
-                            </div>
-                            <div class="armor-slot" data-slot="chestplate" title="Chestplate">
-                                <span class="slot-placeholder">👕</span>
+                            </button>
+                            <button type="button" class="armor-slot" data-slot="chestplate" title="Slot Zirah Dada">
+                                <span class="slot-placeholder" data-icon="shirt"></span>
                                 <div class="slot-item"></div>
-                            </div>
-                            <div class="armor-slot" data-slot="leggings" title="Leggings">
-                                <span class="slot-placeholder">👖</span>
+                            </button>
+                            <button type="button" class="armor-slot" data-slot="leggings" title="Slot Pelindung Kaki">
+                                <span class="slot-placeholder" data-icon="shieldHalf"></span>
                                 <div class="slot-item"></div>
-                            </div>
-                            <div class="armor-slot" data-slot="boots" title="Boots">
-                                <span class="slot-placeholder">🥾</span>
+                            </button>
+                            <button type="button" class="armor-slot" data-slot="boots" title="Slot Sepatu">
+                                <span class="slot-placeholder" data-icon="footprints"></span>
                                 <div class="slot-item"></div>
-                            </div>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Right: Player Bag Inventory -->
                     <div class="bag-section">
-                        <h3>🎒 Tas Pemain</h3>
+                        <h3 class="panel-subtitle">Isi Tas Pemain (24 Slot)</h3>
                         <div id="bag-grid" class="inventory-grid"></div>
                     </div>
                 </div>
             </div>
-            
-            <div class="inventory-footer">
-                <span class="info-tip">Tip: Klik barang untuk memindahkan/menggunakan! Klik 'Makan' untuk Apel Emas.</span>
+
+            <div class="modal-footer">
+                <div id="selected-item-detail" class="info-tip">Pilih item di Tas untuk memegang, memakai zirah, atau menggunakan buku enchant.</div>
                 <div class="footer-actions">
-                    <button id="eat-apple-btn" class="action-btn heal-btn" style="display: none;">🍎 Makan Apel Emas</button>
+                    <button id="equip-hand-btn" type="button" class="primary-btn" style="display: none;">
+                        <span data-icon="hand"></span>
+                        <span>Pegang di Tangan</span>
+                    </button>
+                    <button id="use-enchant-book-btn" type="button" class="enchant-btn" style="display: none;">
+                        <span data-icon="sparkles"></span>
+                        <span>Tempa Buku Enchant</span>
+                    </button>
+                    <button id="eat-apple-btn" type="button" class="heal-btn" style="display: none;">
+                        <span data-icon="apple"></span>
+                        <span>Makan (+50 HP)</span>
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Crafting Table UI Modal -->
-    <div id="crafting-modal" class="modal-overlay" style="display: none;">
-        <div class="inventory-container glass-panel">
-            <div class="inventory-header">
-                <h2>🛠️ Meja Crafting</h2>
-                <button id="close-crafting-btn" class="close-btn">&times;</button>
-            </div>
-            <div class="inventory-content" style="flex-direction: column; overflow-y: auto; max-height: 60vh;">
-                <p style="margin: 0 0 12px 0; color: #ddd; font-size: 14px; text-align: center;">Buat barang-barang canggih dengan bahan yang Anda miliki!</p>
-                <div id="recipes-list" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; width: 100%; padding: 4px;">
-                    <!-- Dynamic Recipes will be loaded here -->
+    <!-- Crafting Workbench Modal (with 1-Tap Switcher to Enchant) -->
+    <div id="crafting-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="crafting-title">
+        <div class="modal-card crafting-card">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="header-icon" data-icon="hammer"></span>
+                    <h2 id="crafting-title">Meja Kerja</h2>
+                    <div class="workbench-mode-switch" role="tablist">
+                        <button type="button" class="mode-switch-btn active" aria-selected="true">Crafting</button>
+                        <button type="button" id="switch-to-enchant-btn" class="mode-switch-btn" aria-selected="false">Enchant</button>
+                    </div>
+                    <span id="craft-mode-badge" class="station-badge">2x2 Rakit Tangan</span>
                 </div>
+                <button id="close-crafting-btn" type="button" class="close-btn" aria-label="Tutup Meja Crafting">
+                    <span data-icon="x"></span>
+                </button>
             </div>
-            <div class="inventory-footer">
-                <span class="info-tip">Tip: Klik tombol "CRAFT" jika bahan dalam Tas sudah mencukupi!</span>
+
+            <div class="crafting-columns">
+                <section class="craft-grid-panel">
+                    <div class="craft-panel-head">
+                        <h3 class="panel-subtitle">Pola Grid Crafting</h3>
+                        <button id="clear-craft-grid-btn" type="button" class="ghost-mini-btn">Kembalikan Isi</button>
+                    </div>
+
+                    <div class="craft-workbench-stage">
+                        <div id="crafting-grid-board" class="craft-matrix grid-2x2" role="grid" aria-label="Grid Pola Crafting"></div>
+                        <div class="craft-arrow-box" data-icon="arrowRight" aria-hidden="true"></div>
+                        <button id="craft-output-slot" type="button" class="craft-output-slot" disabled title="Hasil Rakit"></button>
+                    </div>
+
+                    <div class="craft-action-row">
+                        <button id="craft-once-btn" type="button" class="primary-btn" disabled>
+                            <span data-icon="hammer"></span>
+                            <span id="craft-once-label">Susun Pola</span>
+                        </button>
+                        <button id="craft-max-btn" type="button" class="heal-btn" disabled>
+                            <span>Rakit Maks</span>
+                        </button>
+                    </div>
+
+                    <div class="infuse-step">
+                        <div class="step-label">Bahan di Tas (Pilih bahan lalu klik kotak Grid; klik kotak terisi untuk melepas)</div>
+                        <div id="crafting-bag-palette" class="bag-palette-list" aria-label="Bahan di Tas"></div>
+                    </div>
+                </section>
+
+                <section class="craft-book-panel">
+                    <div class="crafting-toolbar">
+                        <div id="crafting-category-tabs" class="filter-tabs" role="tablist">
+                            <button type="button" class="filter-tab active" data-craft-cat="all">Semua</button>
+                            <button type="button" class="filter-tab" data-craft-cat="basic">Dasar (2x2)</button>
+                            <button type="button" class="filter-tab" data-craft-cat="weapon">Senjata &amp; Alat</button>
+                            <button type="button" class="filter-tab" data-craft-cat="armor">Zirah</button>
+                            <button type="button" class="filter-tab" data-craft-cat="magic">Sihir &amp; Pangan</button>
+                            <button type="button" class="filter-tab" data-craft-cat="block">Mekanis &amp; Blok</button>
+                        </div>
+                        <label class="ready-toggle">
+                            <input type="checkbox" id="craft-ready-only">
+                            <span>Siap dirakit</span>
+                        </label>
+                    </div>
+
+                    <div id="recipes-list" class="recipes-grid"></div>
+                </section>
+            </div>
+
+            <div class="modal-footer">
+                <span id="crafting-footer-tip" class="info-tip">Rakit Papan Kayu dan Meja Crafting di Grid 2x2, lalu pasang Meja Crafting di dunia untuk membuka Grid 3x3.</span>
             </div>
         </div>
     </div>
 
-    <!-- Mobile HUD Controls (Only active on Mobile/Touch) -->
+    <!-- Enchanting Table & Anvil Modal (with 1-Tap Switcher to Crafting) -->
+    <div id="enchant-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="enchant-title">
+        <div class="modal-card enchant-card">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="header-icon enchant-accent" data-icon="wand"></span>
+                    <h2 id="enchant-title">Meja Kerja</h2>
+                    <div class="workbench-mode-switch" role="tablist">
+                        <button type="button" id="switch-to-craft-btn" class="mode-switch-btn" aria-selected="false">Crafting</button>
+                        <button type="button" class="mode-switch-btn enchant-active" aria-selected="true">Enchant</button>
+                    </div>
+                    <span id="enchant-shelf-badge" class="station-badge violet">0 / 15 Rak Buku</span>
+                </div>
+                <button id="close-enchant-btn" type="button" class="close-btn" aria-label="Tutup Meja Enchant">
+                    <span data-icon="x"></span>
+                </button>
+            </div>
+
+            <div id="enchant-resources-bar" class="materials-summary-bar"></div>
+
+            <div class="enchant-columns">
+                <section class="enchant-panel">
+                    <h3 class="panel-subtitle">1. Meja Enchant (3 Slot Mantra)</h3>
+                    <p class="panel-desc">Pasang hingga 15 Rak Buku berjarak 1 blok udara di sekitar Meja Enchant untuk membuka mantra Level 30 dengan Lapis Lazuli dan Level XP.</p>
+
+                    <div class="infuse-step">
+                        <div class="step-label">Pilih Perlengkapan Polos atau Buku Kosong</div>
+                        <div id="enchant-table-candidates" class="selectable-chip-list"></div>
+                    </div>
+
+                    <div class="infuse-step">
+                        <div class="step-label">Tawaran Mantra (Tier I / II / III)</div>
+                        <div id="enchant-table-offers" class="enchant-offers-list"></div>
+                    </div>
+                </section>
+
+                <section class="enchant-panel">
+                    <h3 class="panel-subtitle">2. Paron Tempa (Gabung Mantra)</h3>
+                    <p class="panel-desc">Gabungkan Perlengkapan dengan Buku Enchant, dua Buku Enchant, atau dua Perlengkapan sejenis. Mantra selevel naik +1 level.</p>
+
+                    <div class="infuse-step">
+                        <div class="step-label">Item Utama (Perlengkapan atau Buku Enchant)</div>
+                        <div id="anvil-target-list" class="selectable-chip-list"></div>
+                    </div>
+
+                    <div class="infuse-step">
+                        <div class="step-label">Item Penggabung (Buku Enchant atau Sejenis)</div>
+                        <div id="anvil-sacrifice-list" class="selectable-chip-list"></div>
+                    </div>
+
+                    <div id="anvil-preview-box" class="anvil-preview-box">Pilih item utama dan item penggabung untuk melihat hasil tempaan serta biaya Level XP.</div>
+
+                    <button id="apply-anvil-btn" type="button" class="enchant-btn full-width-btn" disabled>
+                        <span data-icon="anvil"></span>
+                        <span id="apply-anvil-btn-text">Pilih Dua Item di Paron</span>
+                    </button>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Left Thumb Joystick -->
     <div id="mobile-joystick-container">
         <div id="mobile-joystick-base">
             <div id="mobile-joystick-handle"></div>
         </div>
     </div>
-    
+
+    <!-- Mobile Right Thumb Contextual 4-Button Arc -->
     <div id="mobile-actions-container">
-        <div class="mobile-btn-group-right">
-            <button id="mobile-btn-shoot" class="mobile-action-btn" aria-label="Tembak Panah">🏹</button>
-            <button id="mobile-btn-attack" class="mobile-action-btn" aria-label="Serang Monster">⚔️</button>
-            <button id="mobile-btn-dig" class="mobile-action-btn" aria-label="Gali Block">⛏️</button>
-            <button id="mobile-btn-build" class="mobile-action-btn" aria-label="Pasang Block">🧱</button>
-            <button id="mobile-btn-jump" class="mobile-action-btn" aria-label="Melompat">▲</button>
-        </div>
+        <button id="mobile-btn-aux" type="button" class="mobile-arc-btn" aria-label="Tembak Panah atau Tanam">
+            <span id="mobile-icon-aux" data-icon="crosshair"></span>
+        </button>
+        <button id="mobile-btn-secondary" type="button" class="mobile-arc-btn" aria-label="Pasang Blok atau Interaksi">
+            <span id="mobile-icon-secondary" data-icon="box"></span>
+        </button>
+        <button id="mobile-btn-primary" type="button" class="mobile-arc-btn primary-arc-btn" aria-label="Gali Blok atau Serang">
+            <span id="mobile-icon-primary" data-icon="pickaxe"></span>
+        </button>
+        <button id="mobile-btn-jump" type="button" class="mobile-arc-btn jump-arc-btn" aria-label="Lompat">
+            <span data-icon="chevronUp"></span>
+        </button>
     </div>
 
     <!-- Main Game Script Entry -->
-    <script type="module" src="src/main.js?v=3"></script>
+    <script type="module" src="src/main.js"></script>
 </body>
 </html>

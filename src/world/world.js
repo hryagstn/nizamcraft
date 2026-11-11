@@ -1,7 +1,13 @@
 import * as THREE from 'three';
-import { getTerrainHeight } from '../utils/noise.js';
 import { sounds } from '../utils/audio.js';
 import { textures } from '../utils/textures.js';
+import {
+    normalizeBlockType,
+    checkGridAABB,
+    rollUndergroundBlock
+} from '../utils/gameData.js';
+
+export const WORLD_SAVE_VERSION = 2;
 
 // Block Types Configuration
 export const BLOCK_TYPES = {
@@ -30,32 +36,60 @@ export const BLOCK_TYPES = {
     pressure_plate: { id: 23, name: 'Pressure Plate', color: 0x8c5b36 },
     button: { id: 24, name: 'Button', color: 0x7c7c7c },
     lever: { id: 25, name: 'Lever', color: 0x5c3d24 },
-    dispenser: { id: 26, name: 'Dispenser', color: 0x7c7c7c }
+    dispenser: { id: 26, name: 'Dispenser', color: 0x7c7c7c },
+    coal_ore: { id: 27, name: 'Coal Ore', color: 0x3a3a3a },
+    iron_ore: { id: 28, name: 'Iron Ore', color: 0xd4a373 },
+    gold_ore: { id: 29, name: 'Gold Ore', color: 0xffb703 },
+    chest: { id: 30, name: 'Chest', color: 0xa06a42 },
+    enchanting_table: { id: 31, name: 'Enchanting Table', color: 0x7b2cbf },
+    planks: { id: 32, name: 'Planks', color: 0xc29563 },
+    bookshelf: { id: 33, name: 'Bookshelf', color: 0x9c6b3b },
+    lapis_ore: { id: 34, name: 'Lapis Ore', color: 0x2563eb }
 };
+
+const TRANSPARENT_BASE_TYPES = new Set([
+    'water',
+    'leaf',
+    'rail',
+    'pressure_plate',
+    'button',
+    'lever',
+    'crop'
+]);
 
 export class World {
     constructor(scene) {
         this.scene = scene;
-        
-        // Expanded World Dimensions (64x24x64)
+
+        // World Dimensions (64x24x64)
         this.width = 64;
         this.height = 24;
         this.depth = 64;
-        
+
         // Offset to center the world at (0, 0)
         this.xOffset = -this.width / 2;
         this.zOffset = -this.depth / 2;
 
         this.grid = new Array(this.width * this.height * this.depth);
         this.instancedMeshMap = new Map();
-        this.blockTypesList = ['grass', 'dirt', 'stone', 'obsidian', 'wood', 'leaf', 'brick', 'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz', 'sand', 'farmland', 'lucky', 'magma', 'crop', 'coal_ore', 'iron_ore', 'gold_ore', 'chest', 'crafting', 'piston', 'rail', 'pressure_plate', 'button', 'lever', 'dispenser'];
+        this.loadedFromSave = false;
+        this.blockTypesList = [
+            'grass', 'dirt', 'stone', 'obsidian', 'wood', 'planks', 'leaf', 'brick',
+            'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz',
+            'sand', 'farmland', 'lucky', 'magma', 'crop', 'coal_ore',
+            'iron_ore', 'gold_ore', 'lapis_ore', 'bookshelf', 'chest', 'crafting',
+            'enchanting_table', 'piston', 'rail', 'pressure_plate', 'button',
+            'lever', 'dispenser'
+        ];
 
-        // Highlight box helper for targeting
         this.highlightBox = null;
-
-        // Active liquid ticking state
         this.liquidTimer = 0;
 
+        // Shared particle geometries to prevent GPU geometry leaks
+        this.particleGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+        this.cropParticleGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+
+        this.boundGetBlockAt = this.getBlockAt.bind(this);
         this.init();
     }
 
@@ -69,8 +103,11 @@ export class World {
         return lx * (this.height * this.depth) + ly * this.depth + lz;
     }
 
+    checkAABB(x, y, z, radius, height, yFromCenter = false, preferTop = true) {
+        return checkGridAABB(this.boundGetBlockAt, x, y, z, radius, height, yFromCenter, preferTop);
+    }
+
     init() {
-        // Setup materials for each block type using procedural canvas textures
         const grassSideMat = new THREE.MeshLambertMaterial({ map: textures.grassSide });
         const grassTopMat = new THREE.MeshLambertMaterial({ map: textures.grassTop });
         const dirtMat = new THREE.MeshLambertMaterial({ map: textures.dirt });
@@ -78,34 +115,36 @@ export class World {
         const obsidianMat = new THREE.MeshLambertMaterial({ map: textures.obsidian });
         const woodSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide });
         const woodTopMat = new THREE.MeshLambertMaterial({ map: textures.woodTop });
-        
-        const leafMat = new THREE.MeshLambertMaterial({ 
-            map: textures.leaf, 
-            transparent: true, 
-            alphaTest: 0.15 
+        const planksMat = new THREE.MeshLambertMaterial({ map: textures.planks });
+        const bookshelfSideMat = new THREE.MeshLambertMaterial({ map: textures.bookshelfSide });
+
+        const leafMat = new THREE.MeshLambertMaterial({
+            map: textures.leaf,
+            transparent: true,
+            alphaTest: 0.15
         });
-        
+
         const brickMat = new THREE.MeshLambertMaterial({ map: textures.brick });
         const emeraldMat = new THREE.MeshLambertMaterial({ map: textures.emerald });
         const diamondMat = new THREE.MeshLambertMaterial({ map: textures.diamond });
         const enderMat = new THREE.MeshLambertMaterial({ map: textures.ender });
-        
+
         const tntSideMat = new THREE.MeshLambertMaterial({ map: textures.tntSide, color: 0xd90429 });
         const tntTopMat = new THREE.MeshLambertMaterial({ map: textures.tntTop, color: 0xd90429 });
-        
-        const waterMat = new THREE.MeshLambertMaterial({ 
-            map: textures.water, 
+
+        const waterMat = new THREE.MeshLambertMaterial({
+            map: textures.water,
             color: 0x3a86ff,
-            transparent: true, 
-            opacity: 0.65, 
-            depthWrite: false, 
-            side: THREE.DoubleSide 
+            transparent: true,
+            opacity: 0.65,
+            depthWrite: false,
+            side: THREE.DoubleSide
         });
-        
-        const lavaMat = new THREE.MeshLambertMaterial({ 
-            map: textures.lava, 
+
+        const lavaMat = new THREE.MeshLambertMaterial({
+            map: textures.lava,
             color: 0xff5500,
-            emissive: new THREE.Color(0xff3300), 
+            emissive: new THREE.Color(0xff3300),
             emissiveIntensity: 0.8
         });
 
@@ -115,62 +154,86 @@ export class World {
         const farmlandSideMat = new THREE.MeshLambertMaterial({ map: textures.farmlandSide });
         const luckyMat = new THREE.MeshLambertMaterial({ map: textures.lucky });
 
-        const magmaMat = new THREE.MeshLambertMaterial({ 
+        const magmaMat = new THREE.MeshLambertMaterial({
             map: textures.magma,
             emissive: new THREE.Color(0xff2200),
             emissiveIntensity: 0.6
         });
-        const cropMat = new THREE.MeshLambertMaterial({ 
+        const cropMat = new THREE.MeshLambertMaterial({
             map: textures.crop,
             transparent: true,
             alphaTest: 0.15,
             side: THREE.DoubleSide
         });
 
-        // New blocks materials
         const coalOreMat = new THREE.MeshLambertMaterial({ map: textures.coalOre });
         const ironOreMat = new THREE.MeshLambertMaterial({ map: textures.ironOre });
         const goldOreMat = new THREE.MeshLambertMaterial({ map: textures.goldOre });
+        const lapisOreMat = new THREE.MeshLambertMaterial({ map: textures.lapisOre });
         const chestSideMat = new THREE.MeshLambertMaterial({ map: textures.chestSide });
         const chestTopMat = new THREE.MeshLambertMaterial({ map: textures.chestTop });
         const chestFrontMat = new THREE.MeshLambertMaterial({ map: textures.chestFront });
 
-        // Crafting, Piston, Rail, Plate, Button, Lever, Dispenser materials
         const craftingSideMat = new THREE.MeshLambertMaterial({ map: textures.craftingSide });
         const craftingTopMat = new THREE.MeshLambertMaterial({ map: textures.craftingTop });
-        
+
+        const enchantingSideMat = new THREE.MeshLambertMaterial({
+            map: textures.enchantingSide,
+            emissive: new THREE.Color(0x3c096c),
+            emissiveIntensity: 0.35
+        });
+        const enchantingTopMat = new THREE.MeshLambertMaterial({
+            map: textures.enchantingTop,
+            emissive: new THREE.Color(0x5a189a),
+            emissiveIntensity: 0.35
+        });
+
         const pistonSideMat = new THREE.MeshLambertMaterial({ map: textures.pistonSide });
         const pistonTopMat = new THREE.MeshLambertMaterial({ map: textures.pistonTop });
-        
-        const railTopMat = new THREE.MeshLambertMaterial({ 
-            map: textures.railTop, 
-            transparent: true, 
-            alphaTest: 0.15 
+
+        const railTopMat = new THREE.MeshLambertMaterial({
+            map: textures.railTop,
+            transparent: true,
+            alphaTest: 0.15,
+            side: THREE.DoubleSide
         });
-        const railSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide, transparent: true, opacity: 0 });
-        
+        const hiddenSideMat = new THREE.MeshLambertMaterial({
+            map: textures.woodSide,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false
+        });
+
         const pressurePlateTopMat = new THREE.MeshLambertMaterial({ map: textures.pressurePlateTop });
-        const pressurePlateSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide, transparent: true, opacity: 0 });
-        
         const buttonTopMat = new THREE.MeshLambertMaterial({ map: textures.buttonTop });
-        const buttonSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide, transparent: true, opacity: 0 });
-        
         const leverTopMat = new THREE.MeshLambertMaterial({ map: textures.leverTop });
-        const leverSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide, transparent: true, opacity: 0 });
-        
+
         const dispenserFrontMat = new THREE.MeshLambertMaterial({ map: textures.dispenserFront });
-        const dispenserSideMat = new THREE.MeshLambertMaterial({ map: textures.stone });
 
-        // Box Geometry for cubes
         const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const railGeo = new THREE.BoxGeometry(1, 0.06, 1);
+        railGeo.translate(0, -0.47, 0);
+        const plateGeo = new THREE.BoxGeometry(0.88, 0.08, 0.88);
+        plateGeo.translate(0, -0.46, 0);
+        const buttonGeo = new THREE.BoxGeometry(0.36, 0.14, 0.26);
+        buttonGeo.translate(0, -0.43, 0);
+        const leverGeo = new THREE.BoxGeometry(0.46, 0.22, 0.46);
+        leverGeo.translate(0, -0.39, 0);
 
-        // Max instances mapping
+        const geometryConfigs = {
+            rail: railGeo,
+            pressure_plate: plateGeo,
+            button: buttonGeo,
+            lever: leverGeo
+        };
+
         const maxCounts = {
             stone: 45000,
             dirt: 25000,
             grass: 10000,
             obsidian: 5000,
             wood: 5000,
+            planks: 10000,
             leaf: 10000,
             brick: 5000,
             emerald: 2000,
@@ -188,8 +251,11 @@ export class World {
             coal_ore: 5000,
             iron_ore: 5000,
             gold_ore: 5000,
+            lapis_ore: 5000,
+            bookshelf: 3000,
             chest: 2000,
             crafting: 2000,
+            enchanting_table: 1000,
             piston: 2000,
             rail: 5000,
             pressure_plate: 2000,
@@ -198,19 +264,19 @@ export class World {
             dispenser: 2000
         };
 
-        // Material arrays mapping (right, left, top, bottom, front, back)
         const materialConfigs = {
             grass: [grassSideMat, grassSideMat, grassTopMat, dirtMat, grassSideMat, grassSideMat],
             dirt: dirtMat,
             stone: stoneMat,
             obsidian: obsidianMat,
             wood: [woodSideMat, woodSideMat, woodTopMat, woodTopMat, woodSideMat, woodSideMat],
+            planks: planksMat,
             leaf: leafMat,
             brick: brickMat,
             emerald: emeraldMat,
             diamond: diamondMat,
             ender: enderMat,
-            tnt: tntSideMat,
+            tnt: [tntSideMat, tntSideMat, tntTopMat, tntTopMat, tntSideMat, tntSideMat],
             water: waterMat,
             lava: lavaMat,
             quartz: quartzMat,
@@ -218,28 +284,33 @@ export class World {
             farmland: [farmlandSideMat, farmlandSideMat, farmlandTopMat, dirtMat, farmlandSideMat, farmlandSideMat],
             lucky: luckyMat,
             magma: magmaMat,
-            crop: cropMat,
+            crop: [cropMat, cropMat, hiddenSideMat, hiddenSideMat, cropMat, cropMat],
             coal_ore: coalOreMat,
             iron_ore: ironOreMat,
             gold_ore: goldOreMat,
+            lapis_ore: lapisOreMat,
+            bookshelf: [bookshelfSideMat, bookshelfSideMat, planksMat, planksMat, bookshelfSideMat, bookshelfSideMat],
             chest: [chestSideMat, chestSideMat, chestTopMat, chestTopMat, chestFrontMat, chestSideMat],
             crafting: [craftingSideMat, craftingSideMat, craftingTopMat, woodTopMat, craftingSideMat, craftingSideMat],
+            enchanting_table: [enchantingSideMat, enchantingSideMat, enchantingTopMat, obsidianMat, enchantingSideMat, enchantingSideMat],
             piston: [pistonSideMat, pistonSideMat, pistonTopMat, stoneMat, pistonSideMat, pistonSideMat],
-            rail: [railSideMat, railSideMat, railTopMat, railSideMat, railSideMat, railSideMat],
-            pressure_plate: [pressurePlateSideMat, pressurePlateSideMat, pressurePlateTopMat, pressurePlateSideMat, pressurePlateSideMat, pressurePlateSideMat],
-            button: [buttonSideMat, buttonSideMat, buttonTopMat, buttonSideMat, buttonSideMat, buttonSideMat],
-            lever: [leverSideMat, leverSideMat, leverTopMat, leverSideMat, leverSideMat, leverSideMat],
-            dispenser: [dispenserSideMat, dispenserSideMat, dispenserSideMat, dispenserSideMat, dispenserFrontMat, dispenserSideMat]
+            rail: [woodSideMat, woodSideMat, railTopMat, railTopMat, woodSideMat, woodSideMat],
+            pressure_plate: [woodSideMat, woodSideMat, pressurePlateTopMat, woodTopMat, woodSideMat, woodSideMat],
+            button: [stoneMat, stoneMat, buttonTopMat, stoneMat, stoneMat, stoneMat],
+            lever: [stoneMat, stoneMat, leverTopMat, stoneMat, stoneMat, stoneMat],
+            dispenser: [stoneMat, stoneMat, stoneMat, stoneMat, dispenserFrontMat, stoneMat]
         };
 
-        // Initialize InstancedMesh for each block type
         this.blockTypesList.forEach(type => {
             const mat = materialConfigs[type];
+            const blockGeo = geometryConfigs[type] || geometry;
             const maxInst = maxCounts[type] || 2000;
-            const instMesh = new THREE.InstancedMesh(geometry, mat, maxInst);
+            const instMesh = new THREE.InstancedMesh(blockGeo, mat, maxInst);
             instMesh.castShadow = (type !== 'water' && type !== 'lava');
             instMesh.receiveShadow = true;
-            instMesh.maxInstances = maxInst; // Custom tag
+            // Prevent Three.js from caching an empty boundingSphere (radius = -1) on meshes that start at count = 0
+            instMesh.frustumCulled = false;
+            instMesh.maxInstances = maxInst;
             this.scene.add(instMesh);
             this.instancedMeshMap.set(type, instMesh);
         });
@@ -252,145 +323,40 @@ export class World {
         this.highlightBox.visible = false;
         this.scene.add(this.highlightBox);
 
-        // Load existing world or generate new terrain
-        if (!this.load()) {
+        this.loadedFromSave = this.load();
+        if (!this.loadedFromSave) {
             this.generateTerrain();
         }
     }
 
     generateTerrain() {
+        this.loadedFromSave = false;
         this.grid = new Array(this.width * this.height * this.depth);
-        
-        const seaLevel = 4;
-        
-        // 1. Generate core terrain heights & blocks
+        const flatY = 6;
+
         for (let x = 0; x < this.width; x++) {
             for (let z = 0; z < this.depth; z++) {
-                const worldX = x + this.xOffset;
-                const worldZ = z + this.zOffset;
-                
-                // Get terrain height using Simplex Noise (ranging from 3 to 18)
-                const terrainH = getTerrainHeight(worldX, worldZ, this.height - 6);
-                
-                if (terrainH <= seaLevel) {
-                    // Generate pools under water level
-                    for (let y = 0; y < this.height; y++) {
-                        const idx = x * (this.height * this.depth) + y * this.depth + z;
-                        if (y <= terrainH - 3) {
-                            this.grid[idx] = 'stone';
-                        } else if (y < terrainH) {
-                            // Under-water floor is sandy or dirty
-                            this.grid[idx] = (Math.random() < 0.6) ? 'sand' : 'dirt';
-                        } else if (y <= seaLevel) {
-                            this.grid[idx] = 'water_source';
-                        }
-                    }
-                } else if (terrainH === seaLevel + 1) {
-                    // Sandy shoreline/beach!
-                    for (let y = 0; y < this.height; y++) {
-                        const idx = x * (this.height * this.depth) + y * this.depth + z;
-                        if (y === terrainH) {
-                            // Rare shoreline lucky block!
-                            this.grid[idx] = (Math.random() < 0.005) ? 'lucky' : 'sand';
-                        } else if (y < terrainH && y >= terrainH - 3) {
-                            this.grid[idx] = 'sand';
-                        } else if (y < terrainH - 3) {
-                            const r = Math.random();
-                            if (r < 0.05) {
-                                this.grid[idx] = 'coal_ore';
-                            } else if (r < 0.03) {
-                                this.grid[idx] = 'iron_ore';
-                            } else if (r < 0.015) {
-                                this.grid[idx] = 'gold_ore';
-                            } else {
-                                this.grid[idx] = 'stone';
-                            }
-                        }
-                    }
-                } else {
-                    for (let y = 0; y < this.height; y++) {
-                        const idx = x * (this.height * this.depth) + y * this.depth + z;
-                        if (y === terrainH) {
-                            // Rare surface lucky block!
-                            if (Math.random() < 0.005) {
-                                this.grid[idx] = 'lucky';
-                            } else {
-                                this.grid[idx] = 'grass';
-                            }
-                        } else if (y < terrainH && y >= terrainH - 3) {
-                            this.grid[idx] = 'dirt';
-                        } else if (y < terrainH - 3) {
-                            // Rare obsidian veins at bottom (y=0 or 1)
-                            if (y <= 1 && Math.random() < 0.15) {
-                                this.grid[idx] = 'obsidian';
-                            } else {
-                                const r = Math.random();
-                                if (r < 0.05) {
-                                    this.grid[idx] = 'coal_ore';
-                                } else if (r < 0.03) {
-                                    this.grid[idx] = 'iron_ore';
-                                } else if (r < 0.015) {
-                                    this.grid[idx] = 'gold_ore';
-                                } else {
-                                    this.grid[idx] = 'stone';
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // 2. Spawn trees on dry land (grass blocks)
-        const treeSpawns = [];
-        for (let x = 2; x < this.width - 2; x++) {
-            for (let z = 2; z < this.depth - 2; z++) {
-                const worldX = x + this.xOffset;
-                const worldZ = z + this.zOffset;
-                
-                // Find surface y
-                let surfaceY = -1;
-                for (let y = this.height - 1; y >= 0; y--) {
+                for (let y = 0; y <= flatY; y++) {
                     const idx = x * (this.height * this.depth) + y * this.depth + z;
-                    if (this.grid[idx] !== undefined) {
-                        surfaceY = y;
-                        break;
-                    }
-                }
-                
-                if (surfaceY > seaLevel) {
-                    const idx = x * (this.height * this.depth) + surfaceY * this.depth + z;
-                    const blockType = this.grid[idx];
-                    if (blockType === 'grass') {
-                        if (Math.random() < 0.015) { // 1.5% chance per column
-                            let tooClose = false;
-                            for (const spawn of treeSpawns) {
-                                const dist = Math.abs(spawn.x - worldX) + Math.abs(spawn.z - worldZ);
-                                if (dist < 4) {
-                                    tooClose = true;
-                                    break;
-                                }
-                            }
-                            if (!tooClose) {
-                                treeSpawns.push({ x: worldX, y: surfaceY, z: worldZ });
-                            }
-                        }
+                    if (y === 0) {
+                        this.grid[idx] = 'obsidian';
+                    } else if (y === flatY) {
+                        this.grid[idx] = 'grass';
+                    } else if (y >= flatY - 2) {
+                        this.grid[idx] = 'dirt';
+                    } else {
+                        this.grid[idx] = rollUndergroundBlock(Math.random(), y, Math.random());
                     }
                 }
             }
         }
-        
-        // Render tree trunks and leaf canopies
-        treeSpawns.forEach(spawn => {
-            this.spawnTree(spawn.x, spawn.y + 1, spawn.z);
-        });
 
-        // 3. Spawn underground lava pools
+        // Spawn underground lava pools strictly deep below the flat surface
         for (let i = 0; i < 4; i++) {
             const lx = Math.floor(Math.random() * (this.width - 6)) + 3;
             const lz = Math.floor(Math.random() * (this.depth - 6)) + 3;
-            const ly = 1 + Math.floor(Math.random() * 2);
-            
+            const ly = 1;
+
             for (let dx = -1; dx <= 1; dx++) {
                 for (let dz = -1; dz <= 1; dz++) {
                     const idx = (lx + dx) * (this.height * this.depth) + ly * this.depth + (lz + dz);
@@ -400,36 +366,24 @@ export class World {
                 }
             }
         }
-        
+
         this.updateMesh();
     }
 
     spawnTree(startX, startY, startZ) {
-        // Trunk of wood (4 to 5 blocks tall)
         const trunkH = 4 + Math.floor(Math.random() * 2);
         for (let dy = 0; dy < trunkH; dy++) {
             const idx = this.getGridIndex(startX, startY + dy, startZ);
-            if (idx !== -1) {
-                this.grid[idx] = 'wood';
-            }
+            if (idx !== -1) this.grid[idx] = 'wood';
         }
-        
-        // Leaf canopy around top of trunk
+
         const leafStart = startY + trunkH - 2;
         for (let lx = -2; lx <= 2; lx++) {
             for (let lz = -2; lz <= 2; lz++) {
                 for (let ly = 0; ly <= 2; ly++) {
-                    const tx = startX + lx;
-                    const ty = leafStart + ly;
-                    const tz = startZ + lz;
-                    const idx = this.getGridIndex(tx, ty, tz);
-                    if (idx === -1) continue;
-                    
-                    // Don't place leaves at corners of the 5x5 canopy at the top layer
                     if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly === 2) continue;
-                    
-                    // Don't overwrite trunk wood
-                    if (this.grid[idx] === undefined) {
+                    const idx = this.getGridIndex(startX + lx, leafStart + ly, startZ + lz);
+                    if (idx !== -1 && this.grid[idx] === undefined) {
                         this.grid[idx] = 'leaf';
                     }
                 }
@@ -439,75 +393,42 @@ export class World {
 
     isTransparent(type) {
         if (!type) return true;
-        const baseType = type.split('_')[0];
-        return baseType === 'water' || baseType === 'leaf' || baseType === 'rail' || baseType === 'pressure_plate' || baseType === 'button' || baseType === 'lever' || baseType === 'crop';
+        return TRANSPARENT_BASE_TYPES.has(normalizeBlockType(type));
     }
 
-    isBlockVisible(x, y, z) {
-        const lx = Math.round(x) - this.xOffset;
-        const ly = Math.round(y);
-        const lz = Math.round(z) - this.zOffset;
-        if (lx < 0 || lx >= this.width || ly < 0 || ly >= this.height || lz < 0 || lz >= this.depth) {
-            return true; // exposed if out of bounds
-        }
-        const idx = lx * (this.height * this.depth) + ly * this.depth + lz;
-        const currentType = this.grid[idx];
-        if (!currentType) return false;
-        return this.isBlockVisibleAtIndex(lx, ly, lz, currentType);
+    isNeighborTransparentTo(nIdx, currentBase) {
+        const neighborType = this.grid[nIdx];
+        if (neighborType === undefined) return true;
+        const neighborBase = normalizeBlockType(neighborType);
+        return TRANSPARENT_BASE_TYPES.has(neighborBase) && neighborBase !== currentBase;
     }
 
-    isBlockVisibleAtIndex(lx, ly, lz, currentType) {
-        const currentBase = currentType.split('_')[0];
-
-        // 6 directions
-        const neighbors = [
-            [lx + 1, ly, lz],
-            [lx - 1, ly, lz],
-            [lx, ly + 1, lz],
-            [lx, ly - 1, lz],
-            [lx, ly, lz + 1],
-            [lx, ly, lz - 1]
-        ];
-
-        for (const [nx, ny, nz] of neighbors) {
-            // Out of bounds vertically counts as air (exposed)
-            if (ny < 0 || ny >= this.height) return true;
-            
-            // Out of bounds horizontally (world boundaries) counts as air
-            if (nx < 0 || nx >= this.width || 
-                nz < 0 || nz >= this.depth) {
-                return true;
-            }
-
-            const nIdx = nx * (this.height * this.depth) + ny * this.depth + nz;
-            const neighborType = this.grid[nIdx];
-            if (!neighborType) return true; // Next to air
-
-            const neighborBase = neighborType.split('_')[0];
-
-            // If neighbor is transparent, and not the same transparent type, this face is visible
-            if (this.isTransparent(neighborType) && neighborBase !== currentBase) {
-                return true;
-            }
+    isBlockVisibleAtIndex(lx, ly, lz, currentBase) {
+        if (lx <= 0 || lx >= this.width - 1 || ly <= 0 || ly >= this.height - 1 || lz <= 0 || lz >= this.depth - 1) {
+            return true;
         }
+        const strideX = this.height * this.depth;
+        const strideY = this.depth;
+        const baseIdx = lx * strideX + ly * strideY + lz;
 
-        return false;
+        return (
+            this.isNeighborTransparentTo(baseIdx + strideX, currentBase) ||
+            this.isNeighborTransparentTo(baseIdx - strideX, currentBase) ||
+            this.isNeighborTransparentTo(baseIdx + strideY, currentBase) ||
+            this.isNeighborTransparentTo(baseIdx - strideY, currentBase) ||
+            this.isNeighborTransparentTo(baseIdx + 1, currentBase) ||
+            this.isNeighborTransparentTo(baseIdx - 1, currentBase)
+        );
     }
 
     updateMesh() {
-        // Reset counts
-        this.instancedMeshMap.forEach(mesh => {
-            mesh.count = 0;
-        });
-
         const counts = {};
-        this.blockTypesList.forEach(type => {
-            counts[type] = 0;
-        });
+        for (let i = 0; i < this.blockTypesList.length; i++) {
+            counts[this.blockTypesList[i]] = 0;
+        }
 
         const matrix = new THREE.Matrix4();
 
-        // Populate instanced meshes with only VISIBLE blocks
         let idx = 0;
         for (let x = 0; x < this.width; x++) {
             const worldX = x + this.xOffset;
@@ -515,15 +436,14 @@ export class World {
                 for (let z = 0; z < this.depth; z++) {
                     const type = this.grid[idx];
                     if (type !== undefined) {
-                        const baseType = type.split('_')[0];
+                        const baseType = normalizeBlockType(type);
                         const mesh = this.instancedMeshMap.get(baseType);
-                        if (mesh && this.isBlockVisibleAtIndex(x, y, z, type)) {
+                        if (mesh && this.isBlockVisibleAtIndex(x, y, z, baseType)) {
                             const instanceIdx = counts[baseType];
                             if (instanceIdx < mesh.maxInstances) {
-                                const worldZ = z + this.zOffset;
-                                matrix.makeTranslation(worldX, y, worldZ);
+                                matrix.makeTranslation(worldX, y, z + this.zOffset);
                                 mesh.setMatrixAt(instanceIdx, matrix);
-                                counts[baseType]++;
+                                counts[baseType] = instanceIdx + 1;
                             }
                         }
                     }
@@ -532,18 +452,98 @@ export class World {
             }
         }
 
-        // Set counts and trigger GPU buffers upload
         this.instancedMeshMap.forEach((mesh, type) => {
-            mesh.count = counts[type];
+            const nextCount = counts[type] || 0;
+            mesh.count = nextCount;
             mesh.instanceMatrix.needsUpdate = true;
-            // Recompute bounding volumes so raycasting works after instance changes
-            mesh.computeBoundingSphere();
-            mesh.computeBoundingBox();
+            if (nextCount > 0) {
+                mesh.computeBoundingSphere();
+            } else {
+                mesh.boundingSphere = null;
+            }
         });
     }
 
-    getInstancedMeshes() {
-        return Array.from(this.instancedMeshMap.values());
+    /**
+     * Fast 3D DDA voxel raycast over integer-centered blocks [bx - 0.5, bx + 0.5].
+     * Skips flowing/source water and lava so players can target solid blocks cleanly.
+     */
+    raycastBlock(origin, direction, maxDist = 6.0) {
+        const ox = origin.x + 0.5;
+        const oy = origin.y + 0.5;
+        const oz = origin.z + 0.5;
+
+        let cx = Math.floor(ox);
+        let cy = Math.floor(oy);
+        let cz = Math.floor(oz);
+
+        const stepX = direction.x > 0 ? 1 : (direction.x < 0 ? -1 : 0);
+        const stepY = direction.y > 0 ? 1 : (direction.y < 0 ? -1 : 0);
+        const stepZ = direction.z > 0 ? 1 : (direction.z < 0 ? -1 : 0);
+
+        const tDeltaX = stepX !== 0 ? Math.abs(1 / direction.x) : Infinity;
+        const tDeltaY = stepY !== 0 ? Math.abs(1 / direction.y) : Infinity;
+        const tDeltaZ = stepZ !== 0 ? Math.abs(1 / direction.z) : Infinity;
+
+        let tMaxX = stepX > 0 ? (cx + 1 - ox) * tDeltaX : (stepX < 0 ? (ox - cx) * tDeltaX : Infinity);
+        let tMaxY = stepY > 0 ? (cy + 1 - oy) * tDeltaY : (stepY < 0 ? (oy - cy) * tDeltaY : Infinity);
+        let tMaxZ = stepZ > 0 ? (cz + 1 - oz) * tDeltaZ : (stepZ < 0 ? (oz - cz) * tDeltaZ : Infinity);
+
+        let t = 0;
+        let nx = 0;
+        let ny = 0;
+        let nz = 0;
+
+        for (let step = 0; step < 32 && t <= maxDist; step++) {
+            if (t > 0) {
+                const blockType = this.getBlockAt(cx, cy, cz);
+                if (blockType && !blockType.startsWith('water') && !blockType.startsWith('lava')) {
+                    return {
+                        position: new THREE.Vector3(cx, cy, cz),
+                        normal: new THREE.Vector3(nx, ny, nz),
+                        distance: t,
+                        blockType
+                    };
+                }
+            }
+
+            if (tMaxX < tMaxY) {
+                if (tMaxX < tMaxZ) {
+                    cx += stepX;
+                    t = tMaxX;
+                    tMaxX += tDeltaX;
+                    nx = -stepX; ny = 0; nz = 0;
+                } else {
+                    cz += stepZ;
+                    t = tMaxZ;
+                    tMaxZ += tDeltaZ;
+                    nx = 0; ny = 0; nz = -stepZ;
+                }
+            } else {
+                if (tMaxY < tMaxZ) {
+                    cy += stepY;
+                    t = tMaxY;
+                    tMaxY += tDeltaY;
+                    nx = 0; ny = -stepY; nz = 0;
+                } else {
+                    cz += stepZ;
+                    t = tMaxZ;
+                    tMaxZ += tDeltaZ;
+                    nx = 0; ny = 0; nz = -stepZ;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    setHighlightPosition(pos) {
+        if (pos) {
+            this.highlightBox.position.copy(pos);
+            this.highlightBox.visible = true;
+        } else {
+            this.highlightBox.visible = false;
+        }
     }
 
     getBlockAt(x, y, z) {
@@ -558,7 +558,6 @@ export class World {
             this.removeBlock(x, y, z, true, true);
         }
 
-        // If placing liquid, place as source
         let finalType = type;
         if (type === 'water') finalType = 'water_source';
         if (type === 'lava') finalType = 'lava_source';
@@ -567,25 +566,20 @@ export class World {
         this.updateMesh();
         sounds.playPlaceSound();
 
-        // Crop Growth Hook
         if (finalType === 'crop') {
-            // Spark green planting particles immediately
             setTimeout(() => {
-                this.spawnCropParticles(x, y, z, 0x2d6a4f); // dark green
-            }, 50);
+                this.spawnCropParticles(x, y, z, 0x2d6a4f);
+            }, 50).unref?.();
 
-            // Timeout for growth (5 seconds)
             setTimeout(() => {
-                const currentBlock = this.getBlockAt(x, y, z);
-                if (currentBlock === 'crop') {
-                    // Spark light green growth particles
-                    this.spawnCropParticles(x, y, z, 0x55a630); // vibrant light green
+                if (this.getBlockAt(x, y, z) === 'crop') {
+                    this.spawnCropParticles(x, y, z, 0x55a630);
                     sounds.playPlaceSound();
                     if (this.game && typeof this.game.showNotification === 'function') {
-                        this.game.showNotification('Tanamanmu telah matang! 🌾');
+                        this.game.showNotification('Tanaman gandum siap dipanen.');
                     }
                 }
-            }, 5000);
+            }, 5000).unref?.();
         }
 
         return true;
@@ -609,39 +603,39 @@ export class World {
         return type;
     }
 
-    spawnBlockBreakParticles(x, y, z, type) {
-        if (!type) return;
-        const baseType = type.split('_')[0];
+    spawnBlockBreakParticles(x, y, z, type, overrideColor = null) {
+        if (!type && overrideColor === null) return;
+        const baseType = normalizeBlockType(type);
         const blockConfig = BLOCK_TYPES[baseType];
-        const color = blockConfig ? blockConfig.color : 0x888888;
-        
+        const color = overrideColor !== null ? overrideColor : (blockConfig ? blockConfig.color : 0x888888);
+
         const count = 12;
-        const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
         const particlesList = [];
-        
+
         for (let i = 0; i < count; i++) {
-            const mat = new THREE.MeshBasicMaterial({ color: color });
-            const mesh = new THREE.Mesh(geo, mat);
+            const mat = new THREE.MeshBasicMaterial({ color });
+            const mesh = new THREE.Mesh(this.particleGeo, mat);
             mesh.position.set(
                 x + (Math.random() - 0.5) * 0.6,
                 y + (Math.random() - 0.5) * 0.6,
                 z + (Math.random() - 0.5) * 0.6
             );
-            
+
             const speed = 1.5 + Math.random() * 2.0;
             const velocity = new THREE.Vector3(
                 (Math.random() - 0.5) * 1.5,
-                (Math.random() * 1.5 + 0.5),
+                Math.random() * 1.5 + 0.5,
                 (Math.random() - 0.5) * 1.5
             ).normalize().multiplyScalar(speed);
-            
+
             this.scene.add(mesh);
             particlesList.push({
-                mesh: mesh,
-                velocity: velocity,
+                mesh,
+                velocity,
                 life: 0.3 + Math.random() * 0.3,
                 elapsed: 0,
-                material: mat
+                material: mat,
+                sharedGeo: true
             });
         }
         this.game.particles.push(...particlesList);
@@ -650,11 +644,10 @@ export class World {
     spawnCropParticles(x, y, z, color) {
         if (!this.game || !this.game.particles) return;
         const count = 10;
-        const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
         const particlesList = [];
         for (let i = 0; i < count; i++) {
-            const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true });
-            const mesh = new THREE.Mesh(geo, mat);
+            const mat = new THREE.MeshBasicMaterial({ color, transparent: true });
+            const mesh = new THREE.Mesh(this.cropParticleGeo, mat);
             mesh.position.set(
                 x + (Math.random() - 0.5) * 0.5,
                 y + Math.random() * 0.5,
@@ -663,53 +656,33 @@ export class World {
             const speed = 1.0 + Math.random() * 1.5;
             const velocity = new THREE.Vector3(
                 (Math.random() - 0.5) * 0.8,
-                (Math.random() * 1.0 + 0.5),
+                Math.random() * 1.0 + 0.5,
                 (Math.random() - 0.5) * 0.8
             ).normalize().multiplyScalar(speed);
             this.scene.add(mesh);
             particlesList.push({
-                mesh: mesh,
-                velocity: velocity,
+                mesh,
+                velocity,
                 life: 0.3 + Math.random() * 0.3,
                 elapsed: 0,
-                material: mat
+                material: mat,
+                sharedGeo: true
             });
         }
         this.game.particles.push(...particlesList);
-    }
-
-    updateHighlight(intersect) {
-        if (intersect && this.getInstancedMeshes().includes(intersect.object)) {
-            const instanceId = intersect.instanceId;
-            const instMesh = intersect.object;
-            
-            const matrix = new THREE.Matrix4();
-            instMesh.getMatrixAt(instanceId, matrix);
-            
-            const position = new THREE.Vector3();
-            position.setFromMatrixPosition(matrix);
-            
-            this.highlightBox.position.copy(position);
-            this.highlightBox.visible = true;
-            return position;
-        } else {
-        this.highlightBox.visible = false;
-            return null;
-        }
     }
 
     tickLiquids() {
         let changed = false;
         const newAdditions = [];
         const toRemove = [];
-        
+
         let idx = 0;
         for (let x = 0; x < this.width; x++) {
             for (let y = 0; y < this.height; y++) {
                 for (let z = 0; z < this.depth; z++) {
                     const type = this.grid[idx];
                     if (type && type.startsWith('lava_')) {
-                        // Check if water is adjacent
                         let hasWaterNeighbor = false;
                         const adj = [];
                         if (x > 0) adj.push(idx - this.height * this.depth);
@@ -718,7 +691,7 @@ export class World {
                         if (z < this.depth - 1) adj.push(idx + 1);
                         if (y > 0) adj.push(idx - this.depth);
                         if (y < this.height - 1) adj.push(idx + this.depth);
-                        
+
                         for (const nIdx of adj) {
                             const nBlock = this.grid[nIdx];
                             if (nBlock && nBlock.startsWith('water_')) {
@@ -726,10 +699,10 @@ export class World {
                                 break;
                             }
                         }
-                        
+
                         if (hasWaterNeighbor) {
                             toRemove.push(idx);
-                            newAdditions.push({ idx: idx, type: 'obsidian' });
+                            newAdditions.push({ idx, type: 'obsidian' });
                             changed = true;
                             idx++;
                             continue;
@@ -737,16 +710,15 @@ export class World {
                     }
 
                     if (type && (type.startsWith('water_') || type.startsWith('lava_'))) {
-                        const parts = type.split('_');
-                        const baseType = parts[0];
-                        const isSource = parts[1] === 'source';
-                        const level = isSource ? 4 : parseInt(parts[1]);
-                        
-                        // Flow down check
+                        const isLava = type.startsWith('lava_');
+                        const baseType = isLava ? 'lava' : 'water';
+                        const suffix = type.slice(baseType.length + 1);
+                        const isSource = suffix === 'source';
+                        const level = isSource ? 4 : parseInt(suffix, 10);
+
                         if (y > 0) {
-                            const belowIdx = idx - this.depth; // ly - 1
+                            const belowIdx = idx - this.depth;
                             const belowBlock = this.grid[belowIdx];
-                            
                             if (!belowBlock) {
                                 newAdditions.push({ idx: belowIdx, type: `${baseType}_4` });
                                 changed = true;
@@ -754,51 +726,42 @@ export class World {
                                 continue;
                             }
                         }
-                        
-                        // Spread horizontally if level > 1
+
                         if (level > 1) {
                             const neighbors = [];
                             if (x > 0) neighbors.push(idx - this.height * this.depth);
                             if (x < this.width - 1) neighbors.push(idx + this.height * this.depth);
                             if (z > 0) neighbors.push(idx - 1);
                             if (z < this.depth - 1) neighbors.push(idx + 1);
-                            
-                            neighbors.forEach(nIdx => {
-                                const nBlock = this.grid[nIdx];
-                                if (!nBlock) {
+
+                            for (const nIdx of neighbors) {
+                                if (!this.grid[nIdx]) {
                                     newAdditions.push({ idx: nIdx, type: `${baseType}_${level - 1}` });
                                     changed = true;
                                 }
-                            });
+                            }
                         }
-                        
-                        // Dry up logic: If not source, make sure it has a source above or adjacent higher level
+
                         if (!isSource) {
                             let hasSource = false;
-                            
-                            // Above
                             if (y < this.height - 1) {
-                                const aboveIdx = idx + this.depth; // ly + 1
-                                const aboveBlock = this.grid[aboveIdx];
+                                const aboveBlock = this.grid[idx + this.depth];
                                 if (aboveBlock && aboveBlock.startsWith(baseType)) {
                                     hasSource = true;
                                 }
                             }
-                            
-                            // Adjacents
                             if (!hasSource) {
                                 const adjacents = [];
                                 if (x > 0) adjacents.push(idx - this.height * this.depth);
                                 if (x < this.width - 1) adjacents.push(idx + this.height * this.depth);
                                 if (z > 0) adjacents.push(idx - 1);
                                 if (z < this.depth - 1) adjacents.push(idx + 1);
-                                
+
                                 for (const adjIdx of adjacents) {
                                     const adjBlock = this.grid[adjIdx];
                                     if (adjBlock && adjBlock.startsWith(baseType)) {
-                                        const adjParts = adjBlock.split('_');
-                                        const adjIsSource = adjParts[1] === 'source';
-                                        const adjLevel = adjIsSource ? 4 : parseInt(adjParts[1]);
+                                        const adjSuffix = adjBlock.slice(baseType.length + 1);
+                                        const adjLevel = adjSuffix === 'source' ? 4 : parseInt(adjSuffix, 10);
                                         if (adjLevel > level) {
                                             hasSource = true;
                                             break;
@@ -806,7 +769,7 @@ export class World {
                                     }
                                 }
                             }
-                            
+
                             if (!hasSource) {
                                 toRemove.push(idx);
                                 changed = true;
@@ -817,23 +780,21 @@ export class World {
                 }
             }
         }
-        
-        // Apply updates
-        toRemove.forEach(rIdx => {
+
+        for (const rIdx of toRemove) {
             this.grid[rIdx] = undefined;
-        });
-        newAdditions.forEach(({ idx: aIdx, type }) => {
+        }
+        for (const { idx: aIdx, type } of newAdditions) {
             if (this.grid[aIdx] === undefined) {
                 this.grid[aIdx] = type;
             }
-        });
-        
+        }
+
         if (changed) {
             this.updateMesh();
         }
     }
 
-    // Save world state to localStorage
     save() {
         try {
             const entries = [];
@@ -844,6 +805,7 @@ export class World {
                 }
             }
             const data = {
+                version: WORLD_SAVE_VERSION,
                 grid: entries,
                 width: this.width,
                 height: this.height,
@@ -857,13 +819,23 @@ export class World {
         }
     }
 
-    // Load world state from localStorage
     load() {
         try {
             const saved = localStorage.getItem('nizamcraft-save');
-            if (!saved) return false;
+            if (!saved) {
+                this.loadedFromSave = false;
+                return false;
+            }
 
             const data = JSON.parse(saved);
+            if (!data || data.version !== WORLD_SAVE_VERSION) {
+                localStorage.removeItem?.('nizamcraft-save');
+                localStorage.removeItem?.('nizamcraft-player');
+                localStorage.removeItem?.('nizamcraft-chests');
+                this.loadedFromSave = false;
+                return false;
+            }
+
             this.width = data.width || 64;
             this.height = data.height || 24;
             this.depth = data.depth || 64;
@@ -874,27 +846,24 @@ export class World {
             if (Array.isArray(data.grid)) {
                 data.grid.forEach(([key, type]) => {
                     if (typeof key === 'string') {
-                        // Compatibility with old "x,y,z" format
                         const [x, y, z] = key.split(',').map(Number);
                         const idx = this.getGridIndex(x, y, z);
-                        if (idx !== -1) {
-                            this.grid[idx] = type;
-                        }
-                    } else {
-                        // New format using numeric indices
+                        if (idx !== -1) this.grid[idx] = type;
+                    } else if (key >= 0 && key < this.grid.length) {
                         this.grid[key] = type;
                     }
                 });
             }
             this.updateMesh();
+            this.loadedFromSave = true;
             return true;
         } catch (e) {
             console.error('Failed to load game:', e);
+            this.loadedFromSave = false;
             return false;
         }
     }
 
-    // Reset world (clear and regenerate)
     reset() {
         this.generateTerrain();
         this.save();

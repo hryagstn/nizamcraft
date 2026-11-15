@@ -349,11 +349,19 @@
                 </button>
             </div>
 
-            <div class="crafting-columns">
-                <section class="craft-grid-panel">
+            <div id="craft-mobile-tabs" class="mobile-workbench-tabs" role="tablist" aria-label="Panel Crafting">
+                <button type="button" class="mobile-wb-tab active" data-craft-pane="grid" aria-selected="true">Pola Grid</button>
+                <button type="button" class="mobile-wb-tab" data-craft-pane="book" aria-selected="false">Buku Resep</button>
+            </div>
+
+            <div class="crafting-columns" data-active-pane="grid">
+                <section class="craft-grid-panel" data-pane="grid">
                     <div class="craft-panel-head">
-                        <h3 class="panel-subtitle">Pola Grid Crafting</h3>
-                        <button id="clear-craft-grid-btn" type="button" class="ghost-mini-btn">Kembalikan Isi</button>
+                        <h3 class="panel-subtitle">Pola Grid</h3>
+                        <div class="craft-head-actions">
+                            <button id="craft-stack-mode-btn" type="button" class="ghost-mini-btn" aria-pressed="false">Mode: Lepas</button>
+                            <button id="clear-craft-grid-btn" type="button" class="ghost-mini-btn">Reset</button>
+                        </div>
                     </div>
 
                     <div class="craft-workbench-stage">
@@ -373,12 +381,12 @@
                     </div>
 
                     <div class="infuse-step">
-                        <div class="step-label">Bahan di Tas (Pilih bahan lalu klik kotak Grid; klik kotak terisi untuk melepas)</div>
+                        <div class="step-label">Bahan di Tas (Pilih bahan lalu ketuk kotak Grid)</div>
                         <div id="crafting-bag-palette" class="bag-palette-list" aria-label="Bahan di Tas"></div>
                     </div>
                 </section>
 
-                <section class="craft-book-panel">
+                <section class="craft-book-panel" data-pane="book">
                     <div class="crafting-toolbar">
                         <div id="crafting-category-tabs" class="filter-tabs" role="tablist">
                             <button type="button" class="filter-tab active" data-craft-cat="all">Semua</button>
@@ -424,8 +432,13 @@
 
             <div id="enchant-resources-bar" class="materials-summary-bar"></div>
 
-            <div class="enchant-columns">
-                <section class="enchant-panel">
+            <div id="enchant-mobile-tabs" class="mobile-workbench-tabs" role="tablist" aria-label="Panel Enchant">
+                <button type="button" class="mobile-wb-tab enchant-tab active" data-enchant-pane="table" aria-selected="true">1. Meja Enchant</button>
+                <button type="button" class="mobile-wb-tab enchant-tab" data-enchant-pane="anvil" aria-selected="false">2. Paron Tempa</button>
+            </div>
+
+            <div class="enchant-columns" data-active-pane="table">
+                <section class="enchant-panel" data-pane="table">
                     <h3 class="panel-subtitle">1. Meja Enchant (3 Slot Mantra)</h3>
                     <p class="panel-desc">Pasang hingga 15 Rak Buku berjarak 1 blok udara di sekitar Meja Enchant untuk membuka mantra Level 30 dengan Lapis Lazuli dan Level XP.</p>
 
@@ -440,7 +453,7 @@
                     </div>
                 </section>
 
-                <section class="enchant-panel">
+                <section class="enchant-panel" data-pane="anvil">
                     <h3 class="panel-subtitle">2. Paron Tempa (Gabung Mantra)</h3>
                     <p class="panel-desc">Gabungkan Perlengkapan dengan Buku Enchant, dua Buku Enchant, atau dua Perlengkapan sejenis. Mantra selevel naik +1 level.</p>
 

@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { sounds } from '../utils/audio.js';
 import { PrimedTNT } from './tnt.js';
-import { HOSTILE_MOBS, isSolidBlock } from '../utils/gameData.js';
+import {
+    HOSTILE_MOBS,
+    isSolidBlock,
+    findRailAtCartPos,
+    stepMinecartOnRail,
+    isPoweredRailActive
+} from '../utils/gameData.js';
 
 const mobFaceTextureCache = new Map();
 const SHARED_MOB_PARTICLE_GEO = new THREE.BoxGeometry(0.12, 0.12, 0.12);
@@ -1924,77 +1930,209 @@ export class Minecart extends Mob {
         this.width = 0.8;
         this.height = 0.5;
         this.rider = null;
+        this.riderInput = null;
+        this.cartYaw = 0;
+        this.cartPitch = 0;
     }
 
     initMesh() {
-        const ironMat = new THREE.MeshLambertMaterial({ color: 0x888888, roughness: 0.5 });
-        this.materialsToDispose.push(ironMat);
+        const bodyGroup = new THREE.Group();
+        this.bodyGroup = bodyGroup;
+        this.mesh.add(bodyGroup);
 
-        // 1. Base Plate of the cart
-        const baseGeo = new THREE.BoxGeometry(0.7, 0.05, 0.7);
-        const baseMesh = new THREE.Mesh(baseGeo, ironMat);
-        baseMesh.position.set(0, 0.025, 0);
+        const ironMat = new THREE.MeshLambertMaterial({ color: 0x8b95a5 });
+        const rimMat = new THREE.MeshLambertMaterial({ color: 0xb8c2d0 });
+        const floorMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+        this.materialsToDispose.push(ironMat, rimMat, floorMat, wheelMat);
+
+        // Floor & darkened inner bottom
+        const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.08, 0.9), floorMat);
+        baseMesh.position.set(0, 0.08, 0);
         baseMesh.castShadow = true;
         baseMesh.receiveShadow = true;
-        this.mesh.add(baseMesh);
+        bodyGroup.add(baseMesh);
 
-        // 2. Front & Back Walls
-        const wallGeoFB = new THREE.BoxGeometry(0.7, 0.3, 0.05);
-        const frontWall = new THREE.Mesh(wallGeoFB, ironMat);
-        frontWall.position.set(0, 0.15, 0.325);
-        frontWall.castShadow = true;
-        frontWall.receiveShadow = true;
-        this.mesh.add(frontWall);
+        // Front & back walls + top rims
+        const wallGeoFB = new THREE.BoxGeometry(0.76, 0.34, 0.07);
+        const rimGeoFB = new THREE.BoxGeometry(0.8, 0.05, 0.09);
+        for (const zSign of [1, -1]) {
+            const wall = new THREE.Mesh(wallGeoFB, ironMat);
+            wall.position.set(0, 0.25, zSign * 0.415);
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            bodyGroup.add(wall);
 
-        const backWall = new THREE.Mesh(wallGeoFB, ironMat);
-        backWall.position.set(0, 0.15, -0.325);
-        backWall.castShadow = true;
-        backWall.receiveShadow = true;
-        this.mesh.add(backWall);
+            const rim = new THREE.Mesh(rimGeoFB, rimMat);
+            rim.position.set(0, 0.44, zSign * 0.415);
+            bodyGroup.add(rim);
+        }
 
-        // 3. Left & Right Walls
-        const wallGeoLR = new THREE.BoxGeometry(0.05, 0.3, 0.6);
-        const leftWall = new THREE.Mesh(wallGeoLR, ironMat);
-        leftWall.position.set(0.325, 0.15, 0);
-        leftWall.castShadow = true;
-        leftWall.receiveShadow = true;
-        this.mesh.add(leftWall);
+        // Left & right walls + top rims
+        const wallGeoLR = new THREE.BoxGeometry(0.07, 0.34, 0.78);
+        const rimGeoLR = new THREE.BoxGeometry(0.09, 0.05, 0.78);
+        for (const xSign of [1, -1]) {
+            const wall = new THREE.Mesh(wallGeoLR, ironMat);
+            wall.position.set(xSign * 0.345, 0.25, 0);
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            bodyGroup.add(wall);
 
-        const rightWall = new THREE.Mesh(wallGeoLR, ironMat);
-        rightWall.position.set(-0.325, 0.15, 0);
-        rightWall.castShadow = true;
-        rightWall.receiveShadow = true;
-        this.mesh.add(rightWall);
+            const rim = new THREE.Mesh(rimGeoLR, rimMat);
+            rim.position.set(xSign * 0.345, 0.44, 0);
+            bodyGroup.add(rim);
+        }
+
+        // 4 iron wheels beneath the chassis
+        this.wheels = [];
+        const wheelGeo = new THREE.BoxGeometry(0.08, 0.14, 0.14);
+        for (const xPos of [-0.36, 0.36]) {
+            for (const zPos of [-0.26, 0.26]) {
+                const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                wheel.position.set(xPos, 0.07, zPos);
+                wheel.castShadow = true;
+                bodyGroup.add(wheel);
+                this.wheels.push(wheel);
+            }
+        }
+    }
+
+    pushImpulse(vx, vz) {
+        this.velocity.x += vx;
+        this.velocity.z += vz;
+        const horizSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+        if (horizSpeed > 12.0) {
+            const scale = 12.0 / horizSpeed;
+            this.velocity.x *= scale;
+            this.velocity.z *= scale;
+        }
+    }
+
+    syncRider() {
+        if (!this.rider) return;
+        this.rider.position.set(this.position.x, this.position.y + 0.35, this.position.z);
+        this.rider.velocity.set(0, 0, 0);
+        this.rider.isGrounded = true;
+        this.rider.camera.position.set(
+            this.position.x,
+            this.position.y + 0.35 + this.rider.eyeHeight,
+            this.position.z
+        );
+    }
+
+    dismountRider() {
+        if (!this.rider) return;
+        const rider = this.rider;
+        this.rider = null;
+        this.riderInput = null;
+        rider.ridingMinecart = null;
+        rider.position.set(this.position.x, this.position.y + 1.0, this.position.z);
+        rider.velocity.set(0, 0, 0);
+        rider.camera.position.set(rider.position.x, rider.position.y + rider.eyeHeight, rider.position.z);
+        sounds.playClickSound();
     }
 
     update(dt) {
-        if (this.rider) {
-            // Already updated directly by the rider (player)
-            return;
+        const clampedDt = Math.min(Math.max(dt || 0, 0), 0.05);
+
+        // Unmanned carts respond cleanly when bumped by the player
+        const player = this.game && this.game.player;
+        if (!this.rider && player && !player.ridingMinecart) {
+            const dx = this.position.x - player.position.x;
+            const dz = this.position.z - player.position.z;
+            const dy = Math.abs(this.position.y - player.position.y);
+            const distSq = dx * dx + dz * dz;
+            if (dy < 1.1 && distSq < 0.72 * 0.72 && distSq > 1e-4) {
+                const dist = Math.sqrt(distSq);
+                const pushSpeed = Math.max(4.5, Math.hypot(player.velocity.x, player.velocity.z) * 1.15);
+                this.velocity.x = (dx / dist) * pushSpeed;
+                this.velocity.z = (dz / dist) * pushSpeed;
+            }
         }
 
-        // Check if on rail block
-        const rx = Math.round(this.position.x);
-        const ry = Math.round(this.position.y);
-        const rz = Math.round(this.position.z);
-        const block = this.world.getBlockAt(rx, ry, rz);
+        const rail = findRailAtCartPos(this.world.boundGetBlockAt, this.position.x, this.position.y, this.position.z);
+        if (rail) {
+            const isPowered = rail.base === 'powered_rail'
+                ? isPoweredRailActive(this.world.boundGetBlockAt, rail.x, rail.y, rail.z)
+                : false;
 
-        if (block === 'rail') {
-            this.velocity.set(0, 0, 0);
+            const step = stepMinecartOnRail({
+                x: this.position.x,
+                y: this.position.y,
+                z: this.position.z,
+                vx: this.velocity.x,
+                vz: this.velocity.z,
+                yaw: this.cartYaw,
+                rail,
+                isPowered,
+                riderInput: this.rider ? this.riderInput : null,
+                getBlockAt: this.world.boundGetBlockAt,
+                dt: clampedDt
+            });
+
+            this.position.set(step.x, step.y, step.z);
+            this.velocity.set(step.vx, 0, step.vz);
+            this.cartYaw = step.yaw;
+            this.cartPitch = THREE.MathUtils.lerp(this.cartPitch, step.pitch || 0, 0.35);
+            this.isGrounded = true;
+            if (step.bounced) {
+                sounds.playClickSound();
+            }
         } else {
-            this.velocity.y += this.gravity * dt;
+            this.velocity.y += this.gravity * clampedDt;
+            const drag = this.isGrounded ? Math.exp(-5.0 * clampedDt) : Math.exp(-1.5 * clampedDt);
+            this.velocity.x *= drag;
+            this.velocity.z *= drag;
+            if (Math.abs(this.velocity.x) < 0.04) this.velocity.x = 0;
+            if (Math.abs(this.velocity.z) < 0.04) this.velocity.z = 0;
+
             const nextPos = this.position.clone();
-            nextPos.y += this.velocity.y * dt;
+            nextPos.x += this.velocity.x * clampedDt;
+            if (this.checkCollisions(nextPos, false)) {
+                nextPos.x = this.position.x;
+                this.velocity.x = 0;
+            }
+
+            nextPos.z += this.velocity.z * clampedDt;
+            if (this.checkCollisions(nextPos, false)) {
+                nextPos.z = this.position.z;
+                this.velocity.z = 0;
+            }
+
+            nextPos.y += this.velocity.y * clampedDt;
             const hitY = this.checkCollisions(nextPos, this.velocity.y <= 0);
             if (hitY) {
                 if (this.velocity.y < 0) {
                     nextPos.y = hitY.y + 0.5;
                     this.isGrounded = true;
+                } else {
+                    nextPos.y = this.position.y;
                 }
                 this.velocity.y = 0;
+            } else {
+                this.isGrounded = false;
             }
-            this.position.y = nextPos.y;
-            this.mesh.position.copy(this.position);
+
+            this.position.copy(nextPos);
+            this.cartPitch = THREE.MathUtils.lerp(this.cartPitch, 0, 0.25);
+        }
+
+        this.riderInput = null;
+        this.mesh.position.copy(this.position);
+        this.mesh.rotation.y = this.cartYaw;
+        if (this.bodyGroup) {
+            this.bodyGroup.rotation.x = this.cartPitch;
+        }
+        if (this.wheels && this.wheels.length > 0) {
+            const horizSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+            const wheelSpin = horizSpeed * clampedDt * 2.5;
+            for (const wheel of this.wheels) {
+                wheel.rotation.x += wheelSpin;
+            }
+        }
+
+        if (this.rider) {
+            this.syncRider();
         }
     }
 
@@ -2003,59 +2141,18 @@ export class Minecart extends Mob {
     }
 
     updateFromRider(dt, keys) {
+        // Backward compatibility wrapper for callers invoking updateFromRider directly
         const camDir = new THREE.Vector3();
-        this.game.player.camera.getWorldDirection(camDir);
-        camDir.y = 0;
-        camDir.normalize();
-
-        let dirX = 0;
-        let dirZ = 0;
-        if (Math.abs(camDir.x) > Math.abs(camDir.z)) {
-            dirX = Math.sign(camDir.x);
+        if (this.game?.player?.camera) {
+            this.game.player.camera.getWorldDirection(camDir);
+            camDir.y = 0;
+            if (camDir.lengthSq() > 1e-6) camDir.normalize();
         } else {
-            dirZ = Math.sign(camDir.z);
+            camDir.set(Math.sin(this.cartYaw), 0, Math.cos(this.cartYaw));
         }
-
-        if (keys.backward) {
-            dirX = -dirX;
-            dirZ = -dirZ;
-        }
-
-        if (!keys.forward && !keys.backward) {
-            return;
-        }
-
-        const speed = 6.0;
-        const stepX = dirX * speed * dt;
-        const stepZ = dirZ * speed * dt;
-
-        let nextX = this.position.x + stepX;
-        let nextZ = this.position.z + stepZ;
-
-        const rx = Math.round(nextX);
-        const rz = Math.round(nextZ);
-        const ry = Math.round(this.position.y);
-
-        let foundRail = false;
-        let railY = ry;
-
-        // Check current level, down 1 level, up 1 level
-        for (let dy of [0, -1, 1]) {
-            const block = this.world.getBlockAt(rx, ry + dy, rz);
-            if (block === 'rail') {
-                foundRail = true;
-                railY = ry + dy;
-                break;
-            }
-        }
-
-        if (foundRail) {
-            this.position.x = nextX;
-            this.position.z = nextZ;
-            this.position.y = THREE.MathUtils.lerp(this.position.y, railY - 0.44, 0.15);
-            this.mesh.position.copy(this.position);
-            this.mesh.rotation.y = Math.atan2(dirX, dirZ);
-        }
+        const drive = (keys.forward ? 1 : 0) - (keys.backward ? 1 : 0);
+        this.riderInput = drive !== 0 ? { wishX: camDir.x * drive, wishZ: camDir.z * drive } : null;
+        this.update(dt);
     }
 }
 

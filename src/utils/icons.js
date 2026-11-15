@@ -85,6 +85,7 @@ export const ITEM_CATALOG = {
     enchanting_table: { name: 'Meja Enchant' },
     piston: { name: 'Piston' },
     rail: { name: 'Rel Kereta' },
+    powered_rail: { name: 'Rel Berdaya' },
     pressure_plate: { name: 'Pelat Tekanan' },
     button: { name: 'Tombol Batu' },
     lever: { name: 'Tuas Saklar' },

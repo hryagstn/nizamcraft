@@ -88,7 +88,8 @@ export class Player {
             backward: false,
             left: false,
             right: false,
-            jump: false
+            jump: false,
+            shift: false
         };
 
         this.minHeightLimit = -10;
@@ -134,6 +135,12 @@ export class Player {
         this.inventory[11] = { type: 'enchanting_table', count: 1 };
         this.inventory[12] = { type: 'golden_apple', count: 3 };
         this.inventory[13] = { type: 'coal', count: 8 };
+        this.inventory[14] = { type: 'minecart', count: 1 };
+        this.inventory[15] = { type: 'rail', count: 16 };
+        this.inventory[16] = { type: 'powered_rail', count: 4 };
+        this.inventory[17] = { type: 'piston', count: 2 };
+        this.inventory[18] = { type: 'lever', count: 2 };
+        this.inventory[19] = { type: 'pressure_plate', count: 2 };
     }
 
     respawn() {
@@ -180,6 +187,10 @@ export class Player {
                 case 'Space':
                     this.keys.jump = true;
                     break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    this.keys.shift = true;
+                    break;
             }
         };
 
@@ -204,6 +215,10 @@ export class Player {
                 case 'Space':
                     this.keys.jump = false;
                     break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    this.keys.shift = false;
+                    break;
             }
         };
 
@@ -222,25 +237,28 @@ export class Player {
             this.keys.left = false;
             this.keys.right = false;
             this.keys.jump = false;
+            this.keys.shift = false;
             return;
         }
 
         if (this.ridingMinecart) {
-            if (this.keys.jump) {
-                this.ridingMinecart.rider = null;
-                this.ridingMinecart = null;
-                this.position.y += 1.0;
-                this.camera.position.set(this.position.x, this.position.y + this.eyeHeight, this.position.z);
-                sounds.playClickSound();
+            if (this.keys.jump || this.keys.shift) {
+                this.ridingMinecart.dismountRider();
+                this.keys.jump = false;
+                this.keys.shift = false;
                 return;
             }
 
-            this.ridingMinecart.updateFromRider(dt, this.keys);
-            this.position.copy(this.ridingMinecart.position);
-            this.position.y += 0.35;
-            this.velocity.set(0, 0, 0);
-            this.isGrounded = true;
-            this.camera.position.set(this.position.x, this.position.y + this.eyeHeight, this.position.z);
+            const camDir = new THREE.Vector3();
+            this.camera.getWorldDirection(camDir);
+            camDir.y = 0;
+            if (camDir.lengthSq() > 1e-6) camDir.normalize();
+
+            const drive = (this.keys.forward ? 1 : 0) - (this.keys.backward ? 1 : 0);
+            this.ridingMinecart.riderInput = drive !== 0
+                ? { wishX: camDir.x * drive, wishZ: camDir.z * drive }
+                : null;
+            this.ridingMinecart.syncRider();
             return;
         }
 
@@ -780,9 +798,20 @@ export class Player {
             this.heldItem.rotation.set(0.25, 0.45, 0.1);
             this.handContainer.add(this.heldItem);
         } else if (type === 'minecart') {
-            const mat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.09), mat);
-            this.heldItem = mesh;
+            const cartGroup = new THREE.Group();
+            const ironMat = new THREE.MeshLambertMaterial({ color: 0x8b95a5 });
+            const darkMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+            const base = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.015, 0.095), darkMat);
+            const front = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.012), ironMat);
+            front.position.set(0, 0.02, 0.042);
+            const back = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.012), ironMat);
+            back.position.set(0, 0.02, -0.042);
+            const left = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.04, 0.084), ironMat);
+            left.position.set(-0.034, 0.02, 0);
+            const right = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.04, 0.084), ironMat);
+            right.position.set(0.034, 0.02, 0);
+            cartGroup.add(base, front, back, left, right);
+            this.heldItem = cartGroup;
             this.heldItem.position.set(-0.02, 0.04, -0.06);
             this.heldItem.rotation.set(0.2, 0.4, 0.1);
             this.handContainer.add(this.heldItem);

@@ -1,10 +1,37 @@
 // Shared pure game data, physics AABB helpers, Minecraft crafting grid engine, and enchantment/anvil rules
 
-const STATE_SUFFIX_RE = /_(source|[1-4]|on|pressed|extended)$/;
+const STATE_SUFFIX_RE = /(?:_(?:source|[1-4]|asc_[nsew]|ns|ew|ne|nw|se|sw|up|down|[nsew]|on|pressed|extended))+$/;
 
 export function normalizeBlockType(type) {
     if (!type || typeof type !== 'string') return '';
     return type.replace(STATE_SUFFIX_RE, '');
+}
+
+export function parseBlockState(type) {
+    if (!type || typeof type !== 'string') {
+        return { base: '', shape: 'ns', facing: 'up', active: false, extended: false, pressed: false };
+    }
+    const base = normalizeBlockType(type);
+    const suffix = type.slice(base.length);
+    const active = /(?:^|_)on(?:_|$)/.test(suffix);
+    const extended = /(?:^|_)extended(?:_|$)/.test(suffix);
+    const pressed = /(?:^|_)pressed(?:_|$)/.test(suffix);
+
+    let shape = 'ns';
+    const shapeMatch = suffix.match(/(?:^|_)(asc_[nsew]|ns|ew|ne|nw|se|sw)(?:_|$)/);
+    if (shapeMatch) {
+        shape = shapeMatch[1];
+    }
+
+    let facing = 'up';
+    if (!shapeMatch) {
+        const facingMatch = suffix.match(/(?:^|_)(up|down|[nsew])(?:_|$)/);
+        if (facingMatch) {
+            facing = facingMatch[1];
+        }
+    }
+
+    return { base, shape, facing, active, extended, pressed };
 }
 
 export const PASSABLE_BLOCKS = new Set([
@@ -12,6 +39,7 @@ export const PASSABLE_BLOCKS = new Set([
     'lava',
     'crop',
     'rail',
+    'powered_rail',
     'pressure_plate',
     'button',
     'lever'
@@ -878,7 +906,9 @@ export const HOTBAR_ITEMS = [
     { type: 'pressure_plate', label: 'Plate', key: 'M', category: 'redstone', nameId: 'Pelat Tekanan' },
     { type: 'button', label: 'Button', key: 'B', category: 'redstone', nameId: 'Tombol Batu' },
     { type: 'lever', label: 'Lever', key: 'T', category: 'redstone', nameId: 'Tuas Saklar' },
-    { type: 'dispenser', label: 'Dispenser', key: 'R', category: 'redstone', nameId: 'Dispenser' }
+    { type: 'dispenser', label: 'Dispenser', key: 'R', category: 'redstone', nameId: 'Dispenser' },
+    { type: 'powered_rail', label: 'Pow Rail', key: '[', category: 'redstone', nameId: 'Rel Berdaya' },
+    { type: 'minecart', label: 'Minecart', key: ']', category: 'redstone', nameId: 'Kereta Tambang' }
 ];
 
 // ==========================================
@@ -1233,6 +1263,16 @@ export const CRAFTING_RECIPES = [
         description: 'Jalur besi tempat Minecart meluncur.'
     }),
     defineRecipe({
+        id: 'powered_rail',
+        category: 'block',
+        result: 'powered_rail',
+        resultName: 'Rel Berdaya',
+        resultCount: 6,
+        pattern: ['G G', 'GSG', 'GCG'],
+        key: { G: 'gold_ingot', S: 'stick', C: 'coal' },
+        description: 'Mempercepat Minecart saat aktif daya, atau mengerem saat mati.'
+    }),
+    defineRecipe({
         id: 'minecart',
         category: 'block',
         result: 'minecart',
@@ -1509,4 +1549,502 @@ export function deductRecipeFromSlots(slots, recipe) {
         }
     }
     return true;
+}
+
+// ==========================================
+// RAILS, MINECART, REDSTONE & PISTON LOGIC
+// ==========================================
+
+export const DIRECTION_VECTORS = {
+    n: { x: 0, y: 0, z: -1 },
+    s: { x: 0, y: 0, z: 1 },
+    e: { x: 1, y: 0, z: 0 },
+    w: { x: -1, y: 0, z: 0 },
+    up: { x: 0, y: 1, z: 0 },
+    down: { x: 0, y: -1, z: 0 }
+};
+
+const RAIL_CORNER_ARCS = {
+    ne: { cx: 0.5, cz: -0.5, tMin: Math.PI / 2, tMax: Math.PI },
+    nw: { cx: -0.5, cz: -0.5, tMin: 0, tMax: Math.PI / 2 },
+    sw: { cx: -0.5, cz: 0.5, tMin: -Math.PI / 2, tMax: 0 },
+    se: { cx: 0.5, cz: 0.5, tMin: -Math.PI, tMax: -Math.PI / 2 }
+};
+
+const RAIL_ASC_DIRS = {
+    asc_n: { x: 0, z: -1 },
+    asc_s: { x: 0, z: 1 },
+    asc_e: { x: 1, z: 0 },
+    asc_w: { x: -1, z: 0 }
+};
+
+const PISTON_IMMOVABLE_BASES = new Set([
+    'obsidian',
+    'chest',
+    'enchanting_table',
+    'crafting',
+    'piston_head'
+]);
+
+const PISTON_CRUSHABLE_BASES = new Set([
+    'water',
+    'lava',
+    'crop',
+    'rail',
+    'powered_rail',
+    'pressure_plate',
+    'button',
+    'lever'
+]);
+
+function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+}
+
+export function isRailBlock(type) {
+    const base = normalizeBlockType(type);
+    return base === 'rail' || base === 'powered_rail';
+}
+
+export function getRailShape(type) {
+    return parseBlockState(type).shape;
+}
+
+export function computeRailShape(getBlockAt, x, y, z, allowCurves = true, fallbackShape = 'ns') {
+    const upN = isRailBlock(getBlockAt(x, y + 1, z - 1));
+    const upS = isRailBlock(getBlockAt(x, y + 1, z + 1));
+    const upE = isRailBlock(getBlockAt(x + 1, y + 1, z));
+    const upW = isRailBlock(getBlockAt(x - 1, y + 1, z));
+
+    if (upN) return 'asc_n';
+    if (upS) return 'asc_s';
+    if (upE) return 'asc_e';
+    if (upW) return 'asc_w';
+
+    const hasDir = (dx, dz) =>
+        isRailBlock(getBlockAt(x + dx, y, z + dz)) ||
+        isRailBlock(getBlockAt(x + dx, y - 1, z + dz));
+
+    const n = hasDir(0, -1);
+    const s = hasDir(0, 1);
+    const e = hasDir(1, 0);
+    const w = hasDir(-1, 0);
+
+    if ((n || s) && !(e || w)) return 'ns';
+    if ((e || w) && !(n || s)) return 'ew';
+
+    if (allowCurves) {
+        if (n && e && !s && !w) return 'ne';
+        if (n && w && !s && !e) return 'nw';
+        if (s && e && !n && !w) return 'se';
+        if (s && w && !n && !e) return 'sw';
+    }
+
+    if (n && s) return 'ns';
+    if (e && w) return 'ew';
+    if (n || s) return 'ns';
+    if (e || w) return 'ew';
+    return allowCurves ? fallbackShape : (fallbackShape === 'ew' ? 'ew' : 'ns');
+}
+
+function getRailSurfaceY(rx, ry, rz, shape, x, z) {
+    const baseSurface = ry - 0.44;
+    if (shape === 'asc_n') return baseSurface + clamp01(0.5 - (z - rz));
+    if (shape === 'asc_s') return baseSurface + clamp01(0.5 + (z - rz));
+    if (shape === 'asc_e') return baseSurface + clamp01(0.5 + (x - rx));
+    if (shape === 'asc_w') return baseSurface + clamp01(0.5 - (x - rx));
+    return baseSurface;
+}
+
+export function findRailAtCartPos(getBlockAt, x, y, z) {
+    const rx = Math.round(x);
+    const rz = Math.round(z);
+    const baseY = Math.round(y);
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const cy of [baseY, baseY - 1, baseY + 1]) {
+        const raw = getBlockAt(rx, cy, rz);
+        if (!isRailBlock(raw)) continue;
+        const parsed = parseBlockState(raw);
+        const surfY = getRailSurfaceY(rx, cy, rz, parsed.shape, x, z);
+        const dist = Math.abs(y - surfY);
+        if (dist <= 0.85 && dist < bestDist) {
+            bestDist = dist;
+            best = {
+                x: rx,
+                y: cy,
+                z: rz,
+                type: raw,
+                base: parsed.base,
+                shape: parsed.shape,
+                active: parsed.active
+            };
+        }
+    }
+    return best;
+}
+
+export function stepMinecartOnRail({
+    x, y, z, vx, vz, yaw = 0,
+    rail,
+    isPowered = false,
+    riderInput = null,
+    getBlockAt,
+    dt
+}) {
+    const stepDt = Math.min(Math.max(dt || 0, 0), 0.05);
+    const rx = rail.x;
+    const ry = rail.y;
+    const rz = rail.z;
+    const shape = rail.shape;
+    const isPoweredRail = rail.base === 'powered_rail';
+    const arc = RAIL_CORNER_ARCS[shape];
+
+    if (arc) {
+        const cx = rx + arc.cx;
+        const cz = rz + arc.cz;
+        const tMid = (arc.tMin + arc.tMax) * 0.5;
+        let theta = Math.atan2(z - cz, x - cx);
+        while (theta - tMid > Math.PI) theta -= Math.PI * 2;
+        while (theta - tMid < -Math.PI) theta += Math.PI * 2;
+        theta = Math.max(arc.tMin, Math.min(arc.tMax, theta));
+
+        const tx = -Math.sin(theta);
+        const tz = Math.cos(theta);
+        let tSpeed = vx * tx + vz * tz;
+
+        if (riderInput && (riderInput.wishX || riderInput.wishZ)) {
+            const wishDot = (riderInput.wishX || 0) * tx + (riderInput.wishZ || 0) * tz;
+            if (Math.abs(wishDot) > 0.2 && Math.abs(tSpeed) < 6.5) {
+                tSpeed += Math.sign(wishDot) * 9.0 * stepDt;
+            }
+        }
+
+        tSpeed *= Math.exp(-0.35 * stepDt);
+        tSpeed = Math.max(-12.0, Math.min(12.0, tSpeed));
+        if (!riderInput && Math.abs(tSpeed) < 0.06) tSpeed = 0;
+
+        const thetaNext = theta + (tSpeed * stepDt) / 0.5;
+        if (thetaNext < arc.tMin) {
+            const over = (arc.tMin - thetaNext) * 0.5;
+            const eTx = -Math.sin(arc.tMin);
+            const eTz = Math.cos(arc.tMin);
+            const outVx = tSpeed * eTx;
+            const outVz = tSpeed * eTz;
+            const nx = cx + 0.5 * Math.cos(arc.tMin) - eTx * over;
+            const nz = cz + 0.5 * Math.sin(arc.tMin) - eTz * over;
+            const probeDist = Math.max(over, 0.05);
+            const gx = Math.round(cx + 0.5 * Math.cos(arc.tMin) - eTx * probeDist);
+            const gz = Math.round(cz + 0.5 * Math.sin(arc.tMin) - eTz * probeDist);
+            if (getBlockAt && isSolidBlock(getBlockAt(gx, ry, gz))) {
+                const bouncedSpeed = -tSpeed * 0.65;
+                const bTheta = Math.min(arc.tMax, arc.tMin + 0.08);
+                return {
+                    x: cx + 0.5 * Math.cos(bTheta),
+                    y: ry - 0.44,
+                    z: cz + 0.5 * Math.sin(bTheta),
+                    vx: bouncedSpeed * (-Math.sin(bTheta)),
+                    vz: bouncedSpeed * Math.cos(bTheta),
+                    yaw: Math.abs(bouncedSpeed) > 0.05 ? Math.atan2(bouncedSpeed * (-Math.sin(bTheta)), bouncedSpeed * Math.cos(bTheta)) : yaw,
+                    pitch: 0,
+                    bounced: true
+                };
+            }
+            return {
+                x: nx,
+                y: ry - 0.44,
+                z: nz,
+                vx: outVx,
+                vz: outVz,
+                yaw: Math.abs(tSpeed) > 0.05 ? Math.atan2(outVx, outVz) : yaw,
+                pitch: 0,
+                bounced: false
+            };
+        }
+
+        if (thetaNext > arc.tMax) {
+            const over = (thetaNext - arc.tMax) * 0.5;
+            const eTx = -Math.sin(arc.tMax);
+            const eTz = Math.cos(arc.tMax);
+            const outVx = tSpeed * eTx;
+            const outVz = tSpeed * eTz;
+            const nx = cx + 0.5 * Math.cos(arc.tMax) + eTx * over;
+            const nz = cz + 0.5 * Math.sin(arc.tMax) + eTz * over;
+            const probeDist = Math.max(over, 0.05);
+            const gx = Math.round(cx + 0.5 * Math.cos(arc.tMax) + eTx * probeDist);
+            const gz = Math.round(cz + 0.5 * Math.sin(arc.tMax) + eTz * probeDist);
+            if (getBlockAt && isSolidBlock(getBlockAt(gx, ry, gz))) {
+                const bouncedSpeed = -tSpeed * 0.65;
+                const bTheta = Math.max(arc.tMin, arc.tMax - 0.08);
+                return {
+                    x: cx + 0.5 * Math.cos(bTheta),
+                    y: ry - 0.44,
+                    z: cz + 0.5 * Math.sin(bTheta),
+                    vx: bouncedSpeed * (-Math.sin(bTheta)),
+                    vz: bouncedSpeed * Math.cos(bTheta),
+                    yaw: Math.abs(bouncedSpeed) > 0.05 ? Math.atan2(bouncedSpeed * (-Math.sin(bTheta)), bouncedSpeed * Math.cos(bTheta)) : yaw,
+                    pitch: 0,
+                    bounced: true
+                };
+            }
+            return {
+                x: nx,
+                y: ry - 0.44,
+                z: nz,
+                vx: outVx,
+                vz: outVz,
+                yaw: Math.abs(tSpeed) > 0.05 ? Math.atan2(outVx, outVz) : yaw,
+                pitch: 0,
+                bounced: false
+            };
+        }
+
+        const nx = cx + 0.5 * Math.cos(thetaNext);
+        const nz = cz + 0.5 * Math.sin(thetaNext);
+        const nTx = -Math.sin(thetaNext);
+        const nTz = Math.cos(thetaNext);
+        const outVx = tSpeed * nTx;
+        const outVz = tSpeed * nTz;
+        return {
+            x: nx,
+            y: ry - 0.44,
+            z: nz,
+            vx: outVx,
+            vz: outVz,
+            yaw: Math.abs(tSpeed) > 0.05 ? Math.atan2(outVx, outVz) : yaw,
+            pitch: 0,
+            bounced: false
+        };
+    }
+
+    const isEastWest = shape === 'ew' || shape === 'asc_e' || shape === 'asc_w';
+    const ax = isEastWest ? 1 : 0;
+    const az = isEastWest ? 0 : 1;
+    let vAxis = vx * ax + vz * az;
+
+    if (riderInput && (riderInput.wishX || riderInput.wishZ)) {
+        const wishDot = (riderInput.wishX || 0) * ax + (riderInput.wishZ || 0) * az;
+        if (Math.abs(wishDot) > 0.2) {
+            const wishSign = Math.sign(wishDot);
+            const reversing = Math.abs(vAxis) > 0.2 && Math.sign(vAxis) !== wishSign;
+            if (reversing || Math.abs(vAxis) < 6.5) {
+                vAxis += wishSign * (reversing ? 12.0 : 9.0) * stepDt;
+            }
+        }
+    }
+
+    const ascVec = RAIL_ASC_DIRS[shape];
+    if (ascVec) {
+        const ascSign = ascVec.x * ax + ascVec.z * az;
+        vAxis -= ascSign * 10.0 * stepDt;
+    }
+
+    if (isPoweredRail && isPowered) {
+        if (Math.abs(vAxis) < 0.25 && getBlockAt) {
+            const posBlocked = isSolidBlock(getBlockAt(rx + ax, ry, rz + az));
+            const negBlocked = isSolidBlock(getBlockAt(rx - ax, ry, rz - az));
+            if (negBlocked && !posBlocked) {
+                vAxis = 8.5;
+            } else if (posBlocked && !negBlocked) {
+                vAxis = -8.5;
+            } else if (riderInput && (riderInput.wishX || riderInput.wishZ)) {
+                const wishDot = (riderInput.wishX || 0) * ax + (riderInput.wishZ || 0) * az;
+                if (Math.abs(wishDot) > 0.15) vAxis = Math.sign(wishDot) * 8.5;
+            }
+        } else if (Math.abs(vAxis) >= 0.05) {
+            vAxis += Math.sign(vAxis) * 26.0 * stepDt;
+        }
+    } else if (isPoweredRail && !isPowered) {
+        const brakeDrop = Math.min(Math.abs(vAxis), 18.0 * stepDt);
+        vAxis -= Math.sign(vAxis) * brakeDrop;
+        if (Math.abs(vAxis) < 0.15) vAxis = 0;
+    } else {
+        vAxis *= Math.exp(-0.28 * stepDt);
+        if (!ascVec && !riderInput && Math.abs(vAxis) < 0.08) vAxis = 0;
+    }
+
+    vAxis = Math.max(-12.0, Math.min(12.0, vAxis));
+
+    const sCur = isEastWest ? (x - rx) : (z - rz);
+    const sNext = sCur + vAxis * stepDt;
+    let nextX = isEastWest ? (rx + sNext) : rx;
+    let nextZ = isEastWest ? rz : (rz + sNext);
+    let nextY = getRailSurfaceY(rx, ry, rz, shape, nextX, nextZ);
+
+    let bounced = false;
+    if (getBlockAt && Math.abs(sNext) > 0.42) {
+        const checkX = isEastWest ? (rx + Math.sign(sNext)) : rx;
+        const checkZ = isEastWest ? rz : (rz + Math.sign(sNext));
+        const checkY = ascVec ? Math.round(nextY + 0.25) : ry;
+        if (isSolidBlock(getBlockAt(checkX, checkY, checkZ))) {
+            vAxis = -vAxis * 0.65;
+            const clampedS = Math.sign(sNext) * 0.28;
+            nextX = isEastWest ? (rx + clampedS) : rx;
+            nextZ = isEastWest ? rz : (rz + clampedS);
+            nextY = getRailSurfaceY(rx, ry, rz, shape, nextX, nextZ);
+            bounced = true;
+        }
+    }
+
+    const outVx = vAxis * ax;
+    const outVz = vAxis * az;
+    const nextYaw = Math.abs(vAxis) > 0.05 ? Math.atan2(outVx, outVz) : yaw;
+    let pitch = 0;
+    if (ascVec && Math.abs(vAxis) > 0.05) {
+        const ascSign = ascVec.x * ax + ascVec.z * az;
+        pitch = (Math.sign(vAxis) === Math.sign(ascSign)) ? -Math.PI / 5 : Math.PI / 5;
+    }
+
+    return {
+        x: nextX,
+        y: nextY,
+        z: nextZ,
+        vx: outVx,
+        vz: outVz,
+        yaw: nextYaw,
+        pitch,
+        bounced
+    };
+}
+
+export function getAttachedSupportPos(x, y, z, type) {
+    const parsed = parseBlockState(type);
+    if (parsed.base === 'pressure_plate' || parsed.base === 'rail' || parsed.base === 'powered_rail') {
+        return { x, y: y - 1, z };
+    }
+    const dir = DIRECTION_VECTORS[parsed.facing] || DIRECTION_VECTORS.up;
+    return { x: x - dir.x, y: y - dir.y, z: z - dir.z };
+}
+
+export function isPowerSourceActive(getBlockAt, x, y, z) {
+    const raw = getBlockAt(x, y, z);
+    if (!raw) return false;
+    const parsed = parseBlockState(raw);
+    if (parsed.base === 'lever') return parsed.active;
+    if (parsed.base === 'button') return parsed.pressed;
+    if (parsed.base === 'pressure_plate') return parsed.pressed || parsed.active;
+    return false;
+}
+
+export function isBlockDirectlyPowered(getBlockAt, x, y, z) {
+    const raw = getBlockAt(x, y, z);
+    const base = normalizeBlockType(raw);
+    if (!raw || !isSolidBlock(raw) || base === 'piston' || base === 'piston_head') {
+        return false;
+    }
+
+    for (const dir of Object.values(DIRECTION_VECTORS)) {
+        const sx = x + dir.x;
+        const sy = y + dir.y;
+        const sz = z + dir.z;
+        if (!isPowerSourceActive(getBlockAt, sx, sy, sz)) continue;
+        const sup = getAttachedSupportPos(sx, sy, sz, getBlockAt(sx, sy, sz));
+        if (sup.x === x && sup.y === y && sup.z === z) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export function isMechanismPowered(getBlockAt, x, y, z) {
+    for (const dir of Object.values(DIRECTION_VECTORS)) {
+        const nx = x + dir.x;
+        const ny = y + dir.y;
+        const nz = z + dir.z;
+        if (isPowerSourceActive(getBlockAt, nx, ny, nz)) return true;
+        if (isBlockDirectlyPowered(getBlockAt, nx, ny, nz)) return true;
+    }
+    return false;
+}
+
+export function isPoweredRailActive(getBlockAt, x, y, z, maxHops = 8) {
+    const queue = [{ x, y, z, dist: 0 }];
+    const visited = new Set([`${x},${y},${z}`]);
+
+    while (queue.length > 0) {
+        const cur = queue.shift();
+        if (isMechanismPowered(getBlockAt, cur.x, cur.y, cur.z)) {
+            return true;
+        }
+        if (cur.dist >= maxHops) continue;
+
+        const shape = getRailShape(getBlockAt(cur.x, cur.y, cur.z));
+        const isEW = shape === 'ew' || shape === 'asc_e' || shape === 'asc_w';
+        const axes = isEW ? [{ dx: 1, dz: 0 }, { dx: -1, dz: 0 }] : [{ dx: 0, dz: -1 }, { dx: 0, dz: 1 }];
+
+        for (const a of axes) {
+            for (const dy of [-1, 0, 1]) {
+                const nx = cur.x + a.dx;
+                const ny = cur.y + dy;
+                const nz = cur.z + a.dz;
+                const key = `${nx},${ny},${nz}`;
+                if (visited.has(key)) continue;
+                if (normalizeBlockType(getBlockAt(nx, ny, nz)) !== 'powered_rail') continue;
+                visited.add(key);
+                queue.push({ x: nx, y: ny, z: nz, dist: cur.dist + 1 });
+            }
+        }
+    }
+    return false;
+}
+
+export function computePistonFacing(lookDir) {
+    if (!lookDir) return 'up';
+    const ax = Math.abs(lookDir.x || 0);
+    const ay = Math.abs(lookDir.y || 0);
+    const az = Math.abs(lookDir.z || 0);
+    if ((lookDir.y || 0) < -0.65 && ay >= ax && ay >= az) return 'up';
+    if ((lookDir.y || 0) > 0.65 && ay >= ax && ay >= az) return 'down';
+    if (ax >= az) return (lookDir.x || 0) >= 0 ? 'w' : 'e';
+    return (lookDir.z || 0) >= 0 ? 'n' : 's';
+}
+
+export function planPistonPush(getBlockAt, px, py, pz, facing = 'up', maxPush = 12, bounds = null) {
+    const dir = DIRECTION_VECTORS[facing] || DIRECTION_VECTORS.up;
+    const minY = bounds?.minY ?? 1;
+    const maxY = bounds?.maxY ?? 63;
+    const blocks = [];
+
+    for (let step = 1; step <= maxPush + 1; step++) {
+        const cx = px + dir.x * step;
+        const cy = py + dir.y * step;
+        const cz = pz + dir.z * step;
+
+        if (cy < minY || cy > maxY) {
+            return { canPush: false, reason: 'out_of_bounds', blocks: [], crushPos: null };
+        }
+        if (bounds) {
+            if (cx < bounds.minX || cx > bounds.maxX || cz < bounds.minZ || cz > bounds.maxZ) {
+                return { canPush: false, reason: 'out_of_bounds', blocks: [], crushPos: null };
+            }
+        }
+
+        const raw = getBlockAt(cx, cy, cz);
+        if (!raw) {
+            return { canPush: true, pushCount: blocks.length, blocks, crushPos: null };
+        }
+
+        const parsed = parseBlockState(raw);
+        if (PISTON_CRUSHABLE_BASES.has(parsed.base)) {
+            return {
+                canPush: true,
+                pushCount: blocks.length,
+                blocks,
+                crushPos: { x: cx, y: cy, z: cz, type: raw }
+            };
+        }
+
+        if (PISTON_IMMOVABLE_BASES.has(parsed.base) || (parsed.base === 'piston' && parsed.extended)) {
+            return { canPush: false, reason: 'immovable', blocks: [], crushPos: null };
+        }
+
+        if (step > maxPush) {
+            return { canPush: false, reason: 'limit', blocks: [], crushPos: null };
+        }
+
+        blocks.push({ x: cx, y: cy, z: cz, type: raw });
+    }
+
+    return { canPush: false, reason: 'limit', blocks: [], crushPos: null };
 }

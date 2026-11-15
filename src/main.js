@@ -12,8 +12,17 @@ import { sounds } from './utils/audio.js';
 import { svgIcon, getItemName, getItemVisualHTML } from './utils/icons.js';
 import {
     normalizeBlockType,
+    parseBlockState,
+    DIRECTION_VECTORS,
     isSolidBlock,
     entityOverlapsBlock,
+    isRailBlock,
+    computeRailShape,
+    getAttachedSupportPos,
+    isMechanismPowered,
+    isPoweredRailActive,
+    computePistonFacing,
+    planPistonPush,
     getEquipmentCategory,
     getArmorSlotName,
     insertItemIntoSlots,
@@ -127,6 +136,7 @@ let lastWorkbenchTab = 'crafting';
 let activePickerCategory = 'all';
 let activeCraftCategory = 'all';
 let craftReadyOnly = false;
+let craftStackMode = false;
 let craftGridSize = 2;
 let craftGrid = Array(4).fill(null);
 let selectedCraftMaterial = null;
@@ -921,6 +931,24 @@ function handleBlockDig(targetPos) {
     if (baseType === 'tnt') {
         world.removeBlock(tx, ty, tz, true);
         game.tnts.push(new PrimedTNT(tx, ty, tz, scene, world, game));
+        onWorldTopologyChanged(tx, ty, tz);
+        return;
+    }
+
+    if (baseType === 'piston_head') {
+        const parsedHead = parseBlockState(blockType);
+        const dir = DIRECTION_VECTORS[parsedHead.facing] || DIRECTION_VECTORS.up;
+        world.removeBlock(tx, ty, tz);
+        const px = tx - dir.x;
+        const py = ty - dir.y;
+        const pz = tz - dir.z;
+        const parentBlock = world.getBlockAt(px, py, pz);
+        if (parentBlock && normalizeBlockType(parentBlock) === 'piston') {
+            world.removeBlock(px, py, pz, true);
+            addItemToInventory('piston', 1);
+            onWorldTopologyChanged(px, py, pz);
+        }
+        onWorldTopologyChanged(tx, ty, tz);
         return;
     }
 
@@ -951,6 +979,19 @@ function handleBlockDig(targetPos) {
     }
 
     if (!blockDestroyed) return;
+
+    if (baseType === 'piston') {
+        const parsedPiston = parseBlockState(blockType);
+        if (parsedPiston.extended) {
+            const dir = DIRECTION_VECTORS[parsedPiston.facing] || DIRECTION_VECTORS.up;
+            const hx = tx + dir.x;
+            const hy = ty + dir.y;
+            const hz = tz + dir.z;
+            if (normalizeBlockType(world.getBlockAt(hx, hy, hz)) === 'piston_head') {
+                world.removeBlock(hx, hy, hz, true);
+            }
+        }
+    }
 
     if (baseType === 'chest') {
         const key = `${tx},${ty},${tz}`;
@@ -1031,6 +1072,8 @@ function handleBlockDig(targetPos) {
     if (itemToGive !== 'lucky') {
         addItemToInventory(itemToGive, dropCount);
     }
+
+    onWorldTopologyChanged(tx, ty, tz);
 }
 
 function handleGolemSpawn(type, x, y, z) {
@@ -1113,11 +1156,11 @@ function handleSecondaryAction() {
         openEnchantMenu({ x: targetPos.x, y: targetPos.y, z: targetPos.z });
         return;
     }
-    if (targetedBlockType === 'lever' || targetedBlockType === 'lever_on') {
+    if (targetedBase === 'lever') {
         toggleLever(targetPos.x, targetPos.y, targetPos.z);
         return;
     }
-    if (targetedBlockType === 'button' || targetedBlockType === 'button_pressed') {
+    if (targetedBase === 'button') {
         pressButton(targetPos.x, targetPos.y, targetPos.z);
         return;
     }
@@ -1153,9 +1196,10 @@ function handleSecondaryAction() {
     }
 
     if (blockToPlace === 'minecart') {
-        const railPos = targetedBase === 'rail'
+        const aboveBlock = world.getBlockAt(targetPos.x, targetPos.y + 1, targetPos.z);
+        const railPos = isRailBlock(targetedBlockType)
             ? targetPos
-            : (world.getBlockAt(targetPos.x, targetPos.y + 1, targetPos.z) === 'rail'
+            : (isRailBlock(aboveBlock)
                 ? new THREE.Vector3(targetPos.x, targetPos.y + 1, targetPos.z)
                 : null);
 
@@ -1173,7 +1217,7 @@ function handleSecondaryAction() {
             }
             game.showNotification('Minecart diletakkan di atas rel. Klik kanan atau tekan [.] untuk naik.');
         } else {
-            game.showNotification('Arahkan ke blok Rel Kereta untuk meletakkan Minecart.');
+            game.showNotification('Arahkan ke blok Rel untuk meletakkan Minecart.');
         }
         return;
     }
@@ -1203,7 +1247,33 @@ function handleSecondaryAction() {
         return;
     }
 
-    world.addBlock(buildX, buildY, buildZ, blockToPlace);
+    let finalBlockState = blockToPlace;
+
+    if (blockToPlace === 'rail' || blockToPlace === 'powered_rail' || blockToPlace === 'pressure_plate') {
+        const below = world.getBlockAt(buildX, buildY - 1, buildZ);
+        if (!isSolidBlock(below) || normalizeBlockType(below) === 'piston_head') {
+            game.showNotification(
+                blockToPlace === 'pressure_plate'
+                    ? 'Pasang Pelat Tekanan di atas blok padat.'
+                    : 'Pasang Rel di atas permukaan blok padat.'
+            );
+            return;
+        }
+    } else if (blockToPlace === 'lever' || blockToPlace === 'button') {
+        if (!isSolidBlock(targetedBlockType) || targetedBase === 'piston_head') {
+            game.showNotification('Pasang saklar menempel pada blok padat.');
+            return;
+        }
+        const attachFace = facingFromNormal(normal);
+        finalBlockState = `${blockToPlace}_${attachFace}`;
+    } else if (blockToPlace === 'piston') {
+        player.camera.getWorldDirection(lookDirVec);
+        const pistonFace = computePistonFacing(lookDirVec);
+        finalBlockState = `piston_${pistonFace}`;
+    }
+
+    world.addBlock(buildX, buildY, buildZ, finalBlockState);
+    onWorldTopologyChanged(buildX, buildY, buildZ);
 }
 
 // ==========================================
@@ -1853,7 +1923,7 @@ function renderCraftingMenu() {
                     ? `Taruh 1 ${getItemName(selectedCraftMaterial)}`
                     : 'Kotak kosong';
             }
-            btn.addEventListener('click', (e) => handleCraftCellClick(idx, e.shiftKey));
+            btn.addEventListener('click', (e) => handleCraftCellClick(idx, e.shiftKey || craftStackMode));
             btn.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 handleCraftCellClick(idx, true);
@@ -1996,6 +2066,7 @@ function renderCraftingMenu() {
                     return;
                 }
                 sounds.playClickSound();
+                setCraftMobilePane('grid');
                 syncHeldVisual();
                 updateInventoryUI();
                 renderCraftingMenu();
@@ -2006,12 +2077,33 @@ function renderCraftingMenu() {
     });
 }
 
+function setCraftMobilePane(pane = 'grid') {
+    const cols = document.querySelector('#crafting-modal .crafting-columns');
+    if (cols) cols.setAttribute('data-active-pane', pane);
+    document.querySelectorAll('#craft-mobile-tabs .mobile-wb-tab').forEach(btn => {
+        const isActive = btn.getAttribute('data-craft-pane') === pane;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+}
+
+function setEnchantMobilePane(pane = 'table') {
+    const cols = document.querySelector('#enchant-modal .enchant-columns');
+    if (cols) cols.setAttribute('data-active-pane', pane);
+    document.querySelectorAll('#enchant-mobile-tabs .mobile-wb-tab').forEach(btn => {
+        const isActive = btn.getAttribute('data-enchant-pane') === pane;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+}
+
 function openCraftingMenu(forceTable = false) {
     lastWorkbenchTab = 'crafting';
     flushCraftingGridToInventory();
     const hasNearbyTable = forceTable || findNearbyStationBlock('crafting', 5) !== null;
     craftGridSize = hasNearbyTable ? 3 : 2;
     craftGrid = Array(craftGridSize * craftGridSize).fill(null);
+    setCraftMobilePane('grid');
     openGameplayModal('crafting-modal');
     renderCraftingMenu();
 }
@@ -2404,6 +2496,7 @@ function openEnchantMenu(tablePos = null) {
     if (tablePos && typeof tablePos.x === 'number') {
         activeEnchantTablePos = tablePos;
     }
+    setEnchantMobilePane(anvilSacrificeRef && !tablePos ? 'anvil' : 'table');
     openGameplayModal('enchant-modal');
     renderEnchantMenu();
 }
@@ -2412,6 +2505,25 @@ document.getElementById('switch-to-enchant-btn')?.addEventListener('click', () =
 document.getElementById('switch-to-craft-btn')?.addEventListener('click', () => openCraftingMenu(false));
 document.getElementById('close-crafting-btn')?.addEventListener('click', () => closeAllGameplayModals(true));
 document.getElementById('close-enchant-btn')?.addEventListener('click', () => closeAllGameplayModals(true));
+
+document.querySelectorAll('#craft-mobile-tabs .mobile-wb-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        setCraftMobilePane(tab.getAttribute('data-craft-pane') || 'grid');
+    });
+});
+document.querySelectorAll('#enchant-mobile-tabs .mobile-wb-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        setEnchantMobilePane(tab.getAttribute('data-enchant-pane') || 'table');
+    });
+});
+
+document.getElementById('craft-stack-mode-btn')?.addEventListener('click', (e) => {
+    craftStackMode = !craftStackMode;
+    const btn = e.currentTarget;
+    btn.textContent = craftStackMode ? 'Mode: +1 Tumpuk' : 'Mode: Lepas';
+    btn.setAttribute('aria-pressed', craftStackMode ? 'true' : 'false');
+    btn.classList.toggle('active-toggle', craftStackMode);
+});
 
 document.getElementById('clear-craft-grid-btn')?.addEventListener('click', () => {
     flushCraftingGridToInventory();
@@ -2477,29 +2589,285 @@ document.getElementById('apply-anvil-btn')?.addEventListener('click', () => {
 });
 
 // ==========================================
-// REDSTONE & INTERACTIVE BLOCKS
+// REDSTONE, RAILS, PISTONS & INTERACTIVE BLOCKS
 // ==========================================
 
+const poweredDispensers = new Set();
+const activePlateTimers = new Map();
+let isRefreshingRedstone = false;
+
+function facingFromNormal(normal) {
+    if (!normal) return 'up';
+    if (normal.y > 0.5) return 'up';
+    if (normal.y < -0.5) return 'down';
+    if (normal.z < -0.5) return 'n';
+    if (normal.z > 0.5) return 's';
+    if (normal.x > 0.5) return 'e';
+    if (normal.x < -0.5) return 'w';
+    return 'up';
+}
+
+function getWorldPistonBounds() {
+    return {
+        minX: world.xOffset,
+        maxX: world.xOffset + world.width - 1,
+        minY: 1,
+        maxY: world.height - 1,
+        minZ: world.zOffset,
+        maxZ: world.zOffset + world.depth - 1
+    };
+}
+
+function cleanUnsupportedAttachmentsAround(cx, cy, cz, radius = 2) {
+    let removedAny = false;
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                const x = cx + dx;
+                const y = cy + dy;
+                const z = cz + dz;
+                const raw = world.getBlockAt(x, y, z);
+                if (!raw) continue;
+                const base = normalizeBlockType(raw);
+                if (
+                    base === 'rail' ||
+                    base === 'powered_rail' ||
+                    base === 'pressure_plate' ||
+                    base === 'lever' ||
+                    base === 'button'
+                ) {
+                    const sup = getAttachedSupportPos(x, y, z, raw);
+                    const supRaw = world.getBlockAt(sup.x, sup.y, sup.z);
+                    if (!isSolidBlock(supRaw) || normalizeBlockType(supRaw) === 'piston_head') {
+                        world.removeBlock(x, y, z, true, true);
+                        world.spawnBlockBreakParticles(x, y, z, base);
+                        addItemToInventory(base, 1);
+                        activePlateTimers.delete(`${x},${y},${z}`);
+                        removedAny = true;
+                    }
+                }
+            }
+        }
+    }
+    if (removedAny) {
+        world.updateMesh();
+    }
+    return removedAny;
+}
+
+function updateRailNetworkAround(cx, cy, cz, radius = 1) {
+    let changed = false;
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                const x = cx + dx;
+                const y = cy + dy;
+                const z = cz + dz;
+                const raw = world.getBlockAt(x, y, z);
+                if (!raw || !isRailBlock(raw)) continue;
+
+                const parsed = parseBlockState(raw);
+                const allowCurves = parsed.base === 'rail';
+                const nextShape = computeRailShape(world.boundGetBlockAt, x, y, z, allowCurves, parsed.shape);
+                let nextType = `${parsed.base}_${nextShape}`;
+                if (parsed.base === 'powered_rail' && parsed.active) {
+                    nextType += '_on';
+                }
+                if (raw !== nextType) {
+                    world.addBlock(x, y, z, nextType, true, true);
+                    changed = true;
+                }
+            }
+        }
+    }
+    if (changed) {
+        world.updateMesh();
+    }
+    return changed;
+}
+
+function pushEntitiesInBox(bx, by, bz, dir) {
+    if (!player.ridingMinecart) {
+        if (entityOverlapsBlock(player.position.x, player.position.y, player.position.z, player.width / 2, player.height, bx, by, bz)) {
+            player.position.x += dir.x * 1.05;
+            player.position.y += dir.y * 1.05;
+            player.position.z += dir.z * 1.05;
+            if (dir.y > 0) {
+                player.velocity.y = Math.max(player.velocity.y, 6.0);
+                player.isGrounded = false;
+            }
+            player.camera.position.set(player.position.x, player.position.y + player.eyeHeight, player.position.z);
+        }
+    }
+
+    for (let i = 0; i < game.mobs.length; i++) {
+        const mob = game.mobs[i];
+        const rad = (mob.width || 0.6) / 2;
+        const h = mob.height || 1.2;
+        if (entityOverlapsBlock(mob.position.x, mob.position.y, mob.position.z, rad, h, bx, by, bz)) {
+            mob.position.x += dir.x * 1.05;
+            mob.position.y += dir.y * 1.05;
+            mob.position.z += dir.z * 1.05;
+            if (mob.type === 'minecart' && typeof mob.pushImpulse === 'function') {
+                mob.pushImpulse(dir.x * 6, dir.z * 6);
+                mob.syncRider?.();
+            } else if (dir.y > 0) {
+                mob.velocity.y = Math.max(mob.velocity.y, 6.0);
+                mob.isGrounded = false;
+            }
+        }
+    }
+}
+
+function refreshRedstoneAround(cx, cy, cz) {
+    if (isRefreshingRedstone) return;
+    isRefreshingRedstone = true;
+    try {
+        let dirty = false;
+        const pushedCoords = [];
+        const bounds = getWorldPistonBounds();
+
+        // 1. Update Powered Rails (supports up to 8-rail propagation)
+        for (let dx = -8; dx <= 8; dx++) {
+            for (let dy = -3; dy <= 3; dy++) {
+                for (let dz = -8; dz <= 8; dz++) {
+                    const x = cx + dx;
+                    const y = cy + dy;
+                    const z = cz + dz;
+                    const raw = world.getBlockAt(x, y, z);
+                    if (!raw || normalizeBlockType(raw) !== 'powered_rail') continue;
+                    const parsed = parseBlockState(raw);
+                    const nextActive = isPoweredRailActive(world.boundGetBlockAt, x, y, z);
+                    const nextType = `powered_rail_${parsed.shape}${nextActive ? '_on' : ''}`;
+                    if (raw !== nextType) {
+                        world.addBlock(x, y, z, nextType, true, true);
+                        dirty = true;
+                    }
+                }
+            }
+        }
+
+        // 2. Evaluate Pistons, Dispensers, and TNT within direct/strong power range (<= 2 blocks)
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dy = -2; dy <= 2; dy++) {
+                for (let dz = -2; dz <= 2; dz++) {
+                    const x = cx + dx;
+                    const y = cy + dy;
+                    const z = cz + dz;
+                    const raw = world.getBlockAt(x, y, z);
+                    if (!raw) continue;
+                    const parsed = parseBlockState(raw);
+                    const base = parsed.base;
+                    const powered = isMechanismPowered(world.boundGetBlockAt, x, y, z);
+
+                    if (base === 'piston') {
+                        const facing = parsed.facing || 'up';
+                        const dir = DIRECTION_VECTORS[facing] || DIRECTION_VECTORS.up;
+                        const headX = x + dir.x;
+                        const headY = y + dir.y;
+                        const headZ = z + dir.z;
+
+                        if (powered && !parsed.extended) {
+                            const plan = planPistonPush(world.boundGetBlockAt, x, y, z, facing, 12, bounds);
+                            if (plan.canPush) {
+                                if (plan.crushPos) {
+                                    world.removeBlock(plan.crushPos.x, plan.crushPos.y, plan.crushPos.z, true, true);
+                                    world.spawnBlockBreakParticles(
+                                        plan.crushPos.x,
+                                        plan.crushPos.y,
+                                        plan.crushPos.z,
+                                        normalizeBlockType(plan.crushPos.type)
+                                    );
+                                }
+                                for (let i = plan.blocks.length - 1; i >= 0; i--) {
+                                    const b = plan.blocks[i];
+                                    const destX = b.x + dir.x;
+                                    const destY = b.y + dir.y;
+                                    const destZ = b.z + dir.z;
+                                    pushEntitiesInBox(b.x, b.y, b.z, dir);
+                                    world.removeBlock(b.x, b.y, b.z, true, true);
+                                    world.addBlock(destX, destY, destZ, b.type, true, true);
+                                    pushedCoords.push({ x: destX, y: destY, z: destZ });
+                                }
+                                pushEntitiesInBox(headX, headY, headZ, dir);
+                                world.addBlock(headX, headY, headZ, `piston_head_${facing}`, true, true);
+                                world.addBlock(x, y, z, `piston_${facing}_extended`, true, true);
+                                pushedCoords.push({ x: headX, y: headY, z: headZ });
+                                sounds.playPistonSound(true);
+                                dirty = true;
+                            }
+                        } else if (!powered && parsed.extended) {
+                            const curHead = world.getBlockAt(headX, headY, headZ);
+                            if (curHead && normalizeBlockType(curHead) === 'piston_head') {
+                                world.removeBlock(headX, headY, headZ, true, true);
+                            }
+                            world.addBlock(x, y, z, `piston_${facing}`, true, true);
+                            pushedCoords.push({ x: headX, y: headY, z: headZ });
+                            sounds.playPistonSound(false);
+                            dirty = true;
+                        }
+                    } else if (base === 'dispenser') {
+                        const dKey = `${x},${y},${z}`;
+                        if (powered && !poweredDispensers.has(dKey)) {
+                            poweredDispensers.add(dKey);
+                            activateDispenser(x, y, z);
+                        } else if (!powered) {
+                            poweredDispensers.delete(dKey);
+                        }
+                    } else if (base === 'tnt' && powered) {
+                        world.removeBlock(x, y, z, true, true);
+                        game.tnts.push(new PrimedTNT(x, y, z, scene, world, game));
+                        dirty = true;
+                    }
+                }
+            }
+        }
+
+        if (dirty) {
+            world.updateMesh();
+            for (const pt of pushedCoords) {
+                updateRailNetworkAround(pt.x, pt.y, pt.z, 1);
+            }
+        }
+    } finally {
+        isRefreshingRedstone = false;
+    }
+}
+
+function onWorldTopologyChanged(x, y, z) {
+    cleanUnsupportedAttachmentsAround(x, y, z, 2);
+    updateRailNetworkAround(x, y, z, 1);
+    refreshRedstoneAround(x, y, z);
+}
+
 function toggleLever(x, y, z) {
-    const isOn = world.getBlockAt(x, y, z) === 'lever_on';
-    world.addBlock(x, y, z, isOn ? 'lever' : 'lever_on');
-    sounds.playClickSound();
-    game.showNotification(`Tuas saklar: ${!isOn ? 'Aktif' : 'Mati'}`);
-    triggerRedstoneSignal(x, y, z, !isOn);
+    const raw = world.getBlockAt(x, y, z);
+    const parsed = parseBlockState(raw);
+    if (parsed.base !== 'lever') return;
+    const facing = parsed.facing || 'up';
+    const nextOn = !parsed.active;
+    world.addBlock(x, y, z, `lever_${facing}${nextOn ? '_on' : ''}`, true);
+    sounds.playSwitchSound(nextOn);
+    game.showNotification(`Tuas saklar: ${nextOn ? 'Aktif' : 'Mati'}`);
+    refreshRedstoneAround(x, y, z);
 }
 
 function pressButton(x, y, z) {
-    if (world.getBlockAt(x, y, z) === 'button_pressed') return;
-    world.addBlock(x, y, z, 'button_pressed');
-    sounds.playClickSound();
+    const raw = world.getBlockAt(x, y, z);
+    const parsed = parseBlockState(raw);
+    if (parsed.base !== 'button' || parsed.pressed) return;
+    const facing = parsed.facing || 'up';
+    const pressedState = `button_${facing}_pressed`;
+    world.addBlock(x, y, z, pressedState, true);
+    sounds.playSwitchSound(true);
     game.showNotification('Tombol batu ditekan.');
-    triggerRedstoneSignal(x, y, z, true);
+    refreshRedstoneAround(x, y, z);
 
     setTimeout(() => {
-        if (world.getBlockAt(x, y, z) === 'button_pressed') {
-            world.addBlock(x, y, z, 'button');
-            sounds.playClickSound();
-            triggerRedstoneSignal(x, y, z, false);
+        if (world.getBlockAt(x, y, z) === pressedState) {
+            world.addBlock(x, y, z, `button_${facing}`, true);
+            sounds.playSwitchSound(false);
+            refreshRedstoneAround(x, y, z);
         }
     }, 1000);
 }
@@ -2537,76 +2905,60 @@ function activateDispenser(x, y, z) {
     }
 }
 
-function triggerRedstoneSignal(x, y, z, active) {
-    const neighbors = [
-        { x: x + 1, y, z },
-        { x: x - 1, y, z },
-        { x, y: y + 1, z },
-        { x, y: y - 1, z },
-        { x, y, z: z + 1 },
-        { x, y, z: z - 1 }
-    ];
+function checkPressurePlates(dt = 0.016) {
+    const occupiedNow = new Set();
 
-    neighbors.forEach(n => {
-        const block = world.getBlockAt(n.x, n.y, n.z);
-        if (!block) return;
-        const base = normalizeBlockType(block);
-
-        if (base === 'piston') {
-            if (active) {
-                world.addBlock(n.x, n.y, n.z, 'piston_extended');
-                const dx = n.x - x;
-                const dy = n.y - y;
-                const dz = n.z - z;
-                const pushX = n.x + dx;
-                const pushY = n.y + dy;
-                const pushZ = n.z + dz;
-                const pushBlock = world.getBlockAt(pushX, pushY, pushZ);
-                if (pushBlock && pushBlock !== 'obsidian' && !pushBlock.startsWith('water') && !pushBlock.startsWith('lava')) {
-                    const destX = pushX + dx;
-                    const destY = pushY + dy;
-                    const destZ = pushZ + dz;
-                    if (!world.getBlockAt(destX, destY, destZ)) {
-                        world.removeBlock(pushX, pushY, pushZ, true);
-                        world.addBlock(destX, destY, destZ, pushBlock);
-                        world.spawnBlockBreakParticles(pushX, pushY, pushZ, pushBlock);
-                        game.showNotification('Piston mendorong blok.');
-                    }
-                }
-            } else {
-                world.addBlock(n.x, n.y, n.z, 'piston');
-            }
-        } else if (base === 'dispenser' && active) {
-            activateDispenser(n.x, n.y, n.z);
+    const markPos = (px, py, pz) => {
+        const bx = Math.round(px);
+        const by = Math.floor(py + 0.6);
+        const bz = Math.round(pz);
+        const block = world.getBlockAt(bx, by, bz);
+        if (normalizeBlockType(block) === 'pressure_plate') {
+            occupiedNow.add(`${bx},${by},${bz}`);
         }
-    });
-}
+    };
 
-let activePressurePlates = {};
+    if (!player.ridingMinecart) {
+        markPos(player.position.x, player.position.y, player.position.z);
+    }
+    for (let i = 0; i < game.mobs.length; i++) {
+        const m = game.mobs[i];
+        markPos(m.position.x, m.position.y, m.position.z);
+    }
 
-function checkPressurePlates() {
-    const px = Math.round(player.position.x);
-    const py = Math.floor(player.position.y + 0.55);
-    const pz = Math.round(player.position.z);
-
-    const block = world.getBlockAt(px, py, pz);
-    if (block === 'pressure_plate' || block === 'pressure_plate_on') {
-        const key = `${px},${py},${pz}`;
-        if (!activePressurePlates[key]) {
-            world.addBlock(px, py, pz, 'pressure_plate_on');
-            sounds.playClickSound();
-            triggerRedstoneSignal(px, py, pz, true);
-            activePressurePlates[key] = true;
-        }
-    } else {
-        for (const key in activePressurePlates) {
+    const changed = [];
+    for (const key of occupiedNow) {
+        const wasActive = activePlateTimers.has(key);
+        activePlateTimers.set(key, 0.45);
+        if (!wasActive) {
             const [x, y, z] = key.split(',').map(Number);
-            if (world.getBlockAt(x, y, z) === 'pressure_plate_on') {
-                world.addBlock(x, y, z, 'pressure_plate');
-                sounds.playClickSound();
-                triggerRedstoneSignal(x, y, z, false);
+            if (normalizeBlockType(world.getBlockAt(x, y, z)) === 'pressure_plate') {
+                world.addBlock(x, y, z, 'pressure_plate_pressed', true, true);
+                changed.push({ x, y, z, pressed: true });
             }
-            delete activePressurePlates[key];
+        }
+    }
+
+    for (const [key, remaining] of activePlateTimers.entries()) {
+        if (occupiedNow.has(key)) continue;
+        const nextRemaining = remaining - dt;
+        if (nextRemaining > 0) {
+            activePlateTimers.set(key, nextRemaining);
+        } else {
+            activePlateTimers.delete(key);
+            const [x, y, z] = key.split(',').map(Number);
+            if (normalizeBlockType(world.getBlockAt(x, y, z)) === 'pressure_plate') {
+                world.addBlock(x, y, z, 'pressure_plate', true, true);
+                changed.push({ x, y, z, pressed: false });
+            }
+        }
+    }
+
+    if (changed.length > 0) {
+        world.updateMesh();
+        sounds.playSwitchSound(changed.some(c => c.pressed));
+        for (const c of changed) {
+            refreshRedstoneAround(c.x, c.y, c.z);
         }
     }
 }
@@ -2719,7 +3071,7 @@ function animate() {
         world.liquidTimer = 0;
     }
 
-    checkPressurePlates();
+    checkPressurePlates(dt);
     gameRenderer.render();
 }
 

@@ -5,6 +5,7 @@ import { resolveSafePath } from '../server.js';
 
 import {
     normalizeBlockType,
+    parseBlockState,
     isSolidBlock,
     checkGridAABB,
     rollUndergroundBlock,
@@ -28,7 +29,15 @@ import {
     matchCraftingGrid,
     consumeCraftingGrid,
     returnGridToInventory,
-    populateGridForRecipe
+    populateGridForRecipe,
+    isRailBlock,
+    computeRailShape,
+    findRailAtCartPos,
+    stepMinecartOnRail,
+    isMechanismPowered,
+    isPoweredRailActive,
+    computePistonFacing,
+    planPistonPush
 } from '../src/utils/gameData.js';
 
 test('normalizeBlockType keeps multi-word block names intact while stripping state suffixes', () => {
@@ -343,7 +352,7 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     assert.equal(storageMap.has('nizamcraft-player'), false);
 
     // 2. Surface is 100% flat grass at y = 6 with zero trees (no wood or leaf anywhere)
-    assert.equal(world.blockTypesList.length, 34);
+    assert.equal(world.blockTypesList.length, 35);
     for (let x = -world.width / 2; x < world.width / 2; x++) {
         for (let z = -world.depth / 2; z < world.depth / 2; z++) {
             assert.equal(world.getBlockAt(x, 0, z), 'obsidian');
@@ -405,7 +414,7 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     }
 
     // Verify flat mechanism blocks sit flush on the cell floor [-0.5, < 0] with opaque side materials
-    for (const thinType of ['rail', 'pressure_plate', 'button', 'lever']) {
+    for (const thinType of ['rail', 'powered_rail', 'pressure_plate', 'button', 'lever']) {
         const mesh = world.instancedMeshMap.get(thinType);
         mesh.geometry.computeBoundingBox();
         assert.ok(Math.abs(mesh.geometry.boundingBox.min.y - (-0.5)) < 1e-6, `${thinType} does not sit on cell floor`);
@@ -413,4 +422,194 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         assert.ok(mats.every(m => m.opacity !== 0), `${thinType} still has invisible opacity=0 side material`);
     }
+
+    // Verify auxMeshMap instances for curved rail, sloped rail, active powered rail, extended piston+head, lever handle, and depressed plate
+    assert.equal(world.addBlock(0, 10, 0, 'rail_ne', true), true);
+    assert.equal(world.addBlock(2, 10, 0, 'rail_asc_n', true), true);
+    assert.equal(world.addBlock(4, 10, 0, 'powered_rail_ns_on', true), true);
+    assert.equal(world.addBlock(6, 10, 0, 'piston_e_extended', true), true);
+    assert.equal(world.addBlock(7, 10, 0, 'piston_head_e', true), true);
+    assert.equal(world.addBlock(8, 10, 0, 'lever_n_on', true), true);
+    assert.equal(world.addBlock(10, 10, 0, 'pressure_plate_pressed', true), true);
+
+    assert.ok(world.auxMeshMap.get('rail_curve').count >= 1);
+    assert.ok(world.auxMeshMap.get('rail_slope').count >= 1);
+    assert.ok(world.auxMeshMap.get('powered_rail_on').count >= 1);
+    assert.ok(world.auxMeshMap.get('piston_ext_base').count >= 1);
+    assert.ok(world.auxMeshMap.get('piston_head_plate').count >= 1);
+    assert.ok(world.auxMeshMap.get('piston_head_rod').count >= 1);
+    assert.ok(world.auxMeshMap.get('lever_handle_on').count >= 1);
+    assert.ok(world.auxMeshMap.get('pressure_plate_depressed').count >= 1);
+});
+
+test('parseBlockState handles rail shapes, slopes, powered rails, 6-dir levers and pistons', () => {
+    assert.equal(normalizeBlockType('powered_rail_asc_e_on'), 'powered_rail');
+    assert.equal(normalizeBlockType('piston_w_extended'), 'piston');
+    assert.equal(normalizeBlockType('piston_head_down'), 'piston_head');
+    assert.equal(normalizeBlockType('lever_s_on'), 'lever');
+
+    assert.deepEqual(parseBlockState('powered_rail_asc_e_on'), {
+        base: 'powered_rail',
+        shape: 'asc_e',
+        facing: 'up',
+        active: true,
+        extended: false,
+        pressed: false
+    });
+    assert.deepEqual(parseBlockState('piston_n_extended'), {
+        base: 'piston',
+        shape: 'ns',
+        facing: 'n',
+        active: false,
+        extended: true,
+        pressed: false
+    });
+    assert.deepEqual(parseBlockState('lever_w_on'), {
+        base: 'lever',
+        shape: 'ns',
+        facing: 'w',
+        active: true,
+        extended: false,
+        pressed: false
+    });
+});
+
+test('computeRailShape connects straight, curved corners, 45-degree slopes, and keeps powered rails uncurved', () => {
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    blocks.set(key(0, 7, 0), 'rail');
+    blocks.set(key(0, 7, -1), 'rail');
+    assert.equal(computeRailShape(getBlockAt, 0, 7, 0, true), 'ns');
+
+    blocks.set(key(1, 7, 0), 'rail');
+    assert.equal(computeRailShape(getBlockAt, 0, 7, 0, true), 'ne');
+    assert.equal(computeRailShape(getBlockAt, 0, 7, 0, false), 'ns');
+
+    blocks.set(key(0, 8, -1), 'rail');
+    assert.equal(computeRailShape(getBlockAt, 0, 7, 0, true), 'asc_n');
+
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'rail');
+    blocks.set(key(0, 7, 1), 'rail');
+    blocks.set(key(-1, 7, 0), 'rail');
+    assert.equal(computeRailShape(getBlockAt, 0, 7, 0, true), 'sw');
+});
+
+test('stepMinecartOnRail drives curves, slopes, powered rail launch/brake, and wall bounces', () => {
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    // 1. Powered rail with solid stopper launches stationary cart East
+    blocks.set(key(-1, 7, 0), 'stone');
+    blocks.set(key(0, 7, 0), 'powered_rail_ew_on');
+    blocks.set(key(1, 7, 0), 'rail_ew');
+    const rail0 = findRailAtCartPos(getBlockAt, 0, 6.56, 0);
+    assert.equal(rail0.base, 'powered_rail');
+    assert.equal(rail0.shape, 'ew');
+
+    const launched = stepMinecartOnRail({
+        x: 0, y: 6.56, z: 0, vx: 0, vz: 0, yaw: 0,
+        rail: rail0, isPowered: true, riderInput: null, getBlockAt, dt: 0.04
+    });
+    assert.ok(launched.vx > 5, `Expected East launch > 5, got ${launched.vx}`);
+
+    // 2. Unpowered powered rail brakes fast-moving cart
+    const braked = stepMinecartOnRail({
+        x: 0, y: 6.56, z: 0, vx: 6.0, vz: 0, yaw: Math.PI / 2,
+        rail: { ...rail0, active: false }, isPowered: false, riderInput: null, getBlockAt, dt: 0.05
+    });
+    assert.ok(braked.vx < 5.5, `Expected brake < 5.5, got ${braked.vx}`);
+
+    // 3. 90-degree curve ('se') smoothly redirects South -> East with speed preserved
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'rail_se');
+    blocks.set(key(1, 7, 0), 'rail_ew');
+    let state = { x: 0, y: 6.56, z: 0.45, vx: 0, vz: -5.0, yaw: Math.PI };
+    for (let i = 0; i < 12; i++) {
+        const r = findRailAtCartPos(getBlockAt, state.x, state.y, state.z);
+        assert.ok(r, `Lost rail at step ${i}: (${state.x}, ${state.y}, ${state.z})`);
+        state = stepMinecartOnRail({ ...state, rail: r, isPowered: false, getBlockAt, dt: 0.025 });
+    }
+    assert.ok(state.vx > 3.5 && state.x > 0.35, `Cart should turn East, got vx=${state.vx}, x=${state.x}`);
+
+    // 4. Solid buffer block bounces cart back
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'rail_ns');
+    blocks.set(key(0, 7, -1), 'stone');
+    const hitWall = stepMinecartOnRail({
+        x: 0, y: 6.56, z: -0.45, vx: 0, vz: -6.0, yaw: Math.PI,
+        rail: { x: 0, y: 7, z: 0, base: 'rail', shape: 'ns', active: false },
+        isPowered: false, getBlockAt, dt: 0.05
+    });
+    assert.equal(hitWall.bounced, true);
+    assert.ok(hitWall.vz > 0, `Expected rebound +Z, got vz=${hitWall.vz}`);
+});
+
+test('redstone evaluator powers direct neighbors, attached blocks, and 8-rail powered chains', () => {
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    // Wall lever on stone pushes piston on opposite side of stone
+    blocks.set(key(0, 7, 0), 'stone');
+    blocks.set(key(-1, 7, 0), 'lever_w_on');
+    blocks.set(key(1, 7, 0), 'piston_e');
+    assert.equal(isMechanismPowered(getBlockAt, 1, 7, 0), true);
+
+    blocks.set(key(-1, 7, 0), 'lever_w');
+    assert.equal(isMechanismPowered(getBlockAt, 1, 7, 0), false);
+
+    // Powered rail propagation reaches 8 rails, stops at 9th
+    blocks.clear();
+    for (let x = 0; x <= 9; x++) {
+        blocks.set(key(x, 7, 0), 'powered_rail_ew');
+    }
+    blocks.set(key(0, 7, 1), 'lever_up_on');
+    assert.equal(isPoweredRailActive(getBlockAt, 8, 7, 0), true);
+    assert.equal(isPoweredRailActive(getBlockAt, 9, 7, 0), false);
+});
+
+test('planPistonPush handles 12-block push limit, immovable blocks, crushables, and camera facing', () => {
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    assert.equal(computePistonFacing({ x: 0, y: -0.9, z: -0.1 }), 'up');
+    assert.equal(computePistonFacing({ x: 0, y: 0.9, z: -0.1 }), 'down');
+    assert.equal(computePistonFacing({ x: -0.95, y: 0, z: 0 }), 'e');
+
+    // 12 blocks succeed
+    blocks.set(key(0, 7, 0), 'piston_e');
+    for (let i = 1; i <= 12; i++) blocks.set(key(i, 7, 0), 'stone');
+    const ok12 = planPistonPush(getBlockAt, 0, 7, 0, 'e', 12);
+    assert.equal(ok12.canPush, true);
+    assert.equal(ok12.pushCount, 12);
+
+    // 13 blocks exceed limit
+    blocks.set(key(13, 7, 0), 'stone');
+    const fail13 = planPistonPush(getBlockAt, 0, 7, 0, 'e', 12);
+    assert.equal(fail13.canPush, false);
+    assert.equal(fail13.reason, 'limit');
+
+    // Obsidian blocks push
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'piston_e');
+    blocks.set(key(1, 7, 0), 'stone');
+    blocks.set(key(2, 7, 0), 'obsidian');
+    const failObs = planPistonPush(getBlockAt, 0, 7, 0, 'e', 12);
+    assert.equal(failObs.canPush, false);
+    assert.equal(failObs.reason, 'immovable');
+
+    // Fragile rail gets marked as crushPos
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'piston_e');
+    blocks.set(key(1, 7, 0), 'stone');
+    blocks.set(key(2, 7, 0), 'rail_ew');
+    const crush = planPistonPush(getBlockAt, 0, 7, 0, 'e', 12);
+    assert.equal(crush.canPush, true);
+    assert.equal(crush.pushCount, 1);
+    assert.deepEqual(crush.crushPos, { x: 2, y: 7, z: 0, type: 'rail_ew' });
 });

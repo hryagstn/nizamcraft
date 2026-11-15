@@ -865,6 +865,69 @@ textures.railTop = createPixelTexture((ctx) => {
     ctx.fillRect(13, 0, 1, 16);
 });
 
+// 35b. Rail Corner Top (North y=0 to East x=15)
+textures.railCorner = createPixelTexture((ctx) => {
+    ctx.clearRect(0, 0, 16, 16);
+
+    // Diagonal wood sleepers
+    ctx.fillStyle = '#5c3d24';
+    ctx.fillRect(1, 2, 13, 2);
+    ctx.fillRect(3, 6, 12, 2);
+    ctx.fillRect(6, 10, 9, 2);
+    ctx.fillRect(10, 13, 5, 2);
+
+    // Inner rail curve (aligns with x=12..13 at y=0 and y=2..3 at x=15)
+    ctx.fillStyle = '#cccccc';
+    ctx.fillRect(12, 0, 4, 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(13, 0, 3, 2);
+    ctx.clearRect(14, 0, 2, 2);
+
+    // Outer rail curve (aligns with x=2..3 at y=0 and y=12..13 at x=15)
+    ctx.fillStyle = '#cccccc';
+    ctx.fillRect(2, 0, 2, 6);
+    ctx.fillRect(3, 5, 2, 4);
+    ctx.fillRect(4, 8, 3, 3);
+    ctx.fillRect(6, 10, 4, 3);
+    ctx.fillRect(9, 12, 7, 2);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(3, 0, 1, 5);
+    ctx.fillRect(4, 5, 1, 3);
+    ctx.fillRect(5, 8, 2, 2);
+    ctx.fillRect(7, 10, 3, 2);
+    ctx.fillRect(10, 12, 6, 1);
+});
+
+// 35c. Powered Rail (Unpowered & Active)
+function drawPoweredRail(ctx, isActive) {
+    ctx.clearRect(0, 0, 16, 16);
+
+    // Wood sleepers
+    ctx.fillStyle = '#5c3d24';
+    ctx.fillRect(1, 2, 14, 2);
+    ctx.fillRect(1, 6, 14, 2);
+    ctx.fillRect(1, 10, 14, 2);
+    ctx.fillRect(1, 14, 14, 2);
+
+    // Golden rails (columns 2..3 and 12..13)
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(2, 0, 2, 16);
+    ctx.fillRect(12, 0, 2, 16);
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(3, 0, 1, 16);
+    ctx.fillRect(13, 0, 1, 16);
+
+    // Center redstone track
+    ctx.fillStyle = isActive ? '#dc2626' : '#4c1d1d';
+    ctx.fillRect(6, 0, 4, 16);
+    ctx.fillStyle = isActive ? '#fca5a5' : '#7f1d1d';
+    ctx.fillRect(7, 0, 2, 16);
+}
+
+textures.poweredRailOff = createPixelTexture((ctx) => drawPoweredRail(ctx, false));
+textures.poweredRailOn = createPixelTexture((ctx) => drawPoweredRail(ctx, true));
+
 // 36. Pressure Plate Top
 textures.pressurePlateTop = createPixelTexture((ctx) => {
     ctx.fillStyle = '#8c5b36'; // Oak wood plate
@@ -1108,6 +1171,7 @@ const BLOCK_TEXTURE_KEY = {
     enchanting_table: 'enchantingTop',
     piston: 'pistonSide',
     rail: 'railTop',
+    powered_rail: 'poweredRailOn',
     pressure_plate: 'pressurePlateTop',
     button: 'buttonTop',
     lever: 'leverTop',

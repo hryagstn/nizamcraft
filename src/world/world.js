@@ -3,9 +3,41 @@ import { sounds } from '../utils/audio.js';
 import { textures } from '../utils/textures.js';
 import {
     normalizeBlockType,
+    parseBlockState,
     checkGridAABB,
     rollUndergroundBlock
 } from '../utils/gameData.js';
+
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+const AXIS_Z = new THREE.Vector3(0, 0, 1);
+const UNIT_SCALE = new THREE.Vector3(1, 1, 1);
+
+const FACING_QUATS = {
+    up: new THREE.Quaternion(),
+    down: new THREE.Quaternion().setFromAxisAngle(AXIS_X, Math.PI),
+    s: new THREE.Quaternion().setFromAxisAngle(AXIS_X, Math.PI / 2),
+    n: new THREE.Quaternion().setFromAxisAngle(AXIS_X, -Math.PI / 2),
+    e: new THREE.Quaternion().setFromAxisAngle(AXIS_Z, -Math.PI / 2),
+    w: new THREE.Quaternion().setFromAxisAngle(AXIS_Z, Math.PI / 2)
+};
+
+const RAIL_Y_QUATS = {
+    ns: new THREE.Quaternion(),
+    ew: new THREE.Quaternion().setFromAxisAngle(AXIS_Y, Math.PI / 2),
+    ne: new THREE.Quaternion(),
+    nw: new THREE.Quaternion().setFromAxisAngle(AXIS_Y, Math.PI / 2),
+    sw: new THREE.Quaternion().setFromAxisAngle(AXIS_Y, Math.PI),
+    se: new THREE.Quaternion().setFromAxisAngle(AXIS_Y, -Math.PI / 2)
+};
+
+const SLOPE_TILT_QUAT = new THREE.Quaternion().setFromAxisAngle(AXIS_X, Math.PI / 4);
+const RAIL_SLOPE_QUATS = {
+    asc_n: SLOPE_TILT_QUAT.clone(),
+    asc_w: new THREE.Quaternion().setFromAxisAngle(AXIS_Y, Math.PI / 2).multiply(SLOPE_TILT_QUAT),
+    asc_s: new THREE.Quaternion().setFromAxisAngle(AXIS_Y, Math.PI).multiply(SLOPE_TILT_QUAT),
+    asc_e: new THREE.Quaternion().setFromAxisAngle(AXIS_Y, -Math.PI / 2).multiply(SLOPE_TILT_QUAT)
+};
 
 export const WORLD_SAVE_VERSION = 2;
 
@@ -44,17 +76,22 @@ export const BLOCK_TYPES = {
     enchanting_table: { id: 31, name: 'Enchanting Table', color: 0x7b2cbf },
     planks: { id: 32, name: 'Planks', color: 0xc29563 },
     bookshelf: { id: 33, name: 'Bookshelf', color: 0x9c6b3b },
-    lapis_ore: { id: 34, name: 'Lapis Ore', color: 0x2563eb }
+    lapis_ore: { id: 34, name: 'Lapis Ore', color: 0x2563eb },
+    powered_rail: { id: 35, name: 'Powered Rail', color: 0xeab308 },
+    piston_head: { id: 36, name: 'Piston Head', color: 0xa06a42 }
 };
 
 const TRANSPARENT_BASE_TYPES = new Set([
     'water',
     'leaf',
     'rail',
+    'powered_rail',
     'pressure_plate',
     'button',
     'lever',
-    'crop'
+    'crop',
+    'piston',
+    'piston_head'
 ]);
 
 export class World {
@@ -72,14 +109,15 @@ export class World {
 
         this.grid = new Array(this.width * this.height * this.depth);
         this.instancedMeshMap = new Map();
+        this.auxMeshMap = new Map();
         this.loadedFromSave = false;
         this.blockTypesList = [
             'grass', 'dirt', 'stone', 'obsidian', 'wood', 'planks', 'leaf', 'brick',
             'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz',
             'sand', 'farmland', 'lucky', 'magma', 'crop', 'coal_ore',
             'iron_ore', 'gold_ore', 'lapis_ore', 'bookshelf', 'chest', 'crafting',
-            'enchanting_table', 'piston', 'rail', 'pressure_plate', 'button',
-            'lever', 'dispenser'
+            'enchanting_table', 'piston', 'rail', 'powered_rail', 'pressure_plate',
+            'button', 'lever', 'dispenser'
         ];
 
         this.highlightBox = null;
@@ -190,11 +228,32 @@ export class World {
 
         const pistonSideMat = new THREE.MeshLambertMaterial({ map: textures.pistonSide });
         const pistonTopMat = new THREE.MeshLambertMaterial({ map: textures.pistonTop });
+        const pistonExtTopMat = new THREE.MeshLambertMaterial({ map: textures.pistonExtendedTop });
 
         const railTopMat = new THREE.MeshLambertMaterial({
             map: textures.railTop,
             transparent: true,
             alphaTest: 0.15,
+            side: THREE.DoubleSide
+        });
+        const railCornerMat = new THREE.MeshLambertMaterial({
+            map: textures.railCorner,
+            transparent: true,
+            alphaTest: 0.15,
+            side: THREE.DoubleSide
+        });
+        const poweredRailOffMat = new THREE.MeshLambertMaterial({
+            map: textures.poweredRailOff,
+            transparent: true,
+            alphaTest: 0.15,
+            side: THREE.DoubleSide
+        });
+        const poweredRailOnMat = new THREE.MeshLambertMaterial({
+            map: textures.poweredRailOn,
+            transparent: true,
+            alphaTest: 0.15,
+            emissive: new THREE.Color(0x991b1b),
+            emissiveIntensity: 0.55,
             side: THREE.DoubleSide
         });
         const hiddenSideMat = new THREE.MeshLambertMaterial({
@@ -205,23 +264,52 @@ export class World {
         });
 
         const pressurePlateTopMat = new THREE.MeshLambertMaterial({ map: textures.pressurePlateTop });
+        const pressurePlatePressedMat = new THREE.MeshLambertMaterial({
+            map: textures.pressurePlateTop,
+            emissive: new THREE.Color(0x7c2d12),
+            emissiveIntensity: 0.35
+        });
         const buttonTopMat = new THREE.MeshLambertMaterial({ map: textures.buttonTop });
         const leverTopMat = new THREE.MeshLambertMaterial({ map: textures.leverTop });
+        const leverHandleOffMat = new THREE.MeshLambertMaterial({ color: 0x6b4423 });
+        const leverHandleOnMat = new THREE.MeshLambertMaterial({
+            color: 0xef4444,
+            emissive: new THREE.Color(0x991b1b),
+            emissiveIntensity: 0.65
+        });
 
         const dispenserFrontMat = new THREE.MeshLambertMaterial({ map: textures.dispenserFront });
 
         const geometry = new THREE.BoxGeometry(1, 1, 1);
         const railGeo = new THREE.BoxGeometry(1, 0.06, 1);
         railGeo.translate(0, -0.47, 0);
+        const railSlopeGeo = new THREE.BoxGeometry(1, 0.06, Math.SQRT2);
         const plateGeo = new THREE.BoxGeometry(0.88, 0.08, 0.88);
         plateGeo.translate(0, -0.46, 0);
+        const plateDepressedGeo = new THREE.BoxGeometry(0.88, 0.03, 0.88);
+        plateDepressedGeo.translate(0, -0.485, 0);
         const buttonGeo = new THREE.BoxGeometry(0.36, 0.14, 0.26);
         buttonGeo.translate(0, -0.43, 0);
         const leverGeo = new THREE.BoxGeometry(0.46, 0.22, 0.46);
         leverGeo.translate(0, -0.39, 0);
+        const leverHandleOffGeo = new THREE.BoxGeometry(0.11, 0.52, 0.11);
+        leverHandleOffGeo.translate(0, 0.24, 0);
+        leverHandleOffGeo.rotateX(-0.55);
+        leverHandleOffGeo.translate(0, -0.34, 0);
+        const leverHandleOnGeo = new THREE.BoxGeometry(0.11, 0.52, 0.11);
+        leverHandleOnGeo.translate(0, 0.24, 0);
+        leverHandleOnGeo.rotateX(0.55);
+        leverHandleOnGeo.translate(0, -0.34, 0);
+        const pistonExtBaseGeo = new THREE.BoxGeometry(1, 0.75, 1);
+        pistonExtBaseGeo.translate(0, -0.125, 0);
+        const pistonHeadPlateGeo = new THREE.BoxGeometry(1, 0.25, 1);
+        pistonHeadPlateGeo.translate(0, 0.375, 0);
+        const pistonHeadRodGeo = new THREE.BoxGeometry(0.26, 1.0, 0.26);
+        pistonHeadRodGeo.translate(0, -0.25, 0);
 
         const geometryConfigs = {
             rail: railGeo,
+            powered_rail: railGeo,
             pressure_plate: plateGeo,
             button: buttonGeo,
             lever: leverGeo
@@ -258,6 +346,7 @@ export class World {
             enchanting_table: 1000,
             piston: 2000,
             rail: 5000,
+            powered_rail: 2000,
             pressure_plate: 2000,
             button: 2000,
             lever: 2000,
@@ -295,6 +384,7 @@ export class World {
             enchanting_table: [enchantingSideMat, enchantingSideMat, enchantingTopMat, obsidianMat, enchantingSideMat, enchantingSideMat],
             piston: [pistonSideMat, pistonSideMat, pistonTopMat, stoneMat, pistonSideMat, pistonSideMat],
             rail: [woodSideMat, woodSideMat, railTopMat, railTopMat, woodSideMat, woodSideMat],
+            powered_rail: [woodSideMat, woodSideMat, poweredRailOffMat, poweredRailOffMat, woodSideMat, woodSideMat],
             pressure_plate: [woodSideMat, woodSideMat, pressurePlateTopMat, woodTopMat, woodSideMat, woodSideMat],
             button: [stoneMat, stoneMat, buttonTopMat, stoneMat, stoneMat, stoneMat],
             lever: [stoneMat, stoneMat, leverTopMat, stoneMat, stoneMat, stoneMat],
@@ -313,6 +403,30 @@ export class World {
             instMesh.maxInstances = maxInst;
             this.scene.add(instMesh);
             this.instancedMeshMap.set(type, instMesh);
+        });
+
+        const auxConfigs = [
+            ['rail_curve', railGeo, [woodSideMat, woodSideMat, railCornerMat, railCornerMat, woodSideMat, woodSideMat], 2500],
+            ['rail_slope', railSlopeGeo, [woodSideMat, woodSideMat, railTopMat, railTopMat, woodSideMat, woodSideMat], 2000],
+            ['powered_rail_on', railGeo, [woodSideMat, woodSideMat, poweredRailOnMat, poweredRailOnMat, woodSideMat, woodSideMat], 2000],
+            ['powered_rail_slope_off', railSlopeGeo, [woodSideMat, woodSideMat, poweredRailOffMat, poweredRailOffMat, woodSideMat, woodSideMat], 1000],
+            ['powered_rail_slope_on', railSlopeGeo, [woodSideMat, woodSideMat, poweredRailOnMat, poweredRailOnMat, woodSideMat, woodSideMat], 1000],
+            ['piston_ext_base', pistonExtBaseGeo, [pistonSideMat, pistonSideMat, stoneMat, stoneMat, pistonSideMat, pistonSideMat], 2000],
+            ['piston_head_plate', pistonHeadPlateGeo, [woodSideMat, woodSideMat, pistonExtTopMat, pistonTopMat, woodSideMat, woodSideMat], 2000],
+            ['piston_head_rod', pistonHeadRodGeo, woodSideMat, 2000],
+            ['lever_handle_off', leverHandleOffGeo, leverHandleOffMat, 2000],
+            ['lever_handle_on', leverHandleOnGeo, leverHandleOnMat, 2000],
+            ['pressure_plate_depressed', plateDepressedGeo, [woodSideMat, woodSideMat, pressurePlatePressedMat, woodTopMat, woodSideMat, woodSideMat], 2000]
+        ];
+
+        auxConfigs.forEach(([key, geo, mat, maxInst]) => {
+            const auxMesh = new THREE.InstancedMesh(geo, mat, maxInst);
+            auxMesh.castShadow = true;
+            auxMesh.receiveShadow = true;
+            auxMesh.frustumCulled = false;
+            auxMesh.maxInstances = maxInst;
+            this.scene.add(auxMesh);
+            this.auxMeshMap.set(key, auxMesh);
         });
 
         // Highlight Box Setup
@@ -426,8 +540,26 @@ export class World {
         for (let i = 0; i < this.blockTypesList.length; i++) {
             counts[this.blockTypesList[i]] = 0;
         }
+        const auxCounts = {};
+        this.auxMeshMap.forEach((_, key) => {
+            auxCounts[key] = 0;
+        });
 
         const matrix = new THREE.Matrix4();
+        const posVec = new THREE.Vector3();
+        const identityQuat = FACING_QUATS.up;
+
+        const pushToMap = (meshMap, countMap, key, px, py, pz, quat = identityQuat) => {
+            const mesh = meshMap.get(key);
+            if (!mesh) return;
+            const instanceIdx = countMap[key] || 0;
+            if (instanceIdx < mesh.maxInstances) {
+                posVec.set(px, py, pz);
+                matrix.compose(posVec, quat, UNIT_SCALE);
+                mesh.setMatrixAt(instanceIdx, matrix);
+                countMap[key] = instanceIdx + 1;
+            }
+        };
 
         let idx = 0;
         for (let x = 0; x < this.width; x++) {
@@ -436,14 +568,51 @@ export class World {
                 for (let z = 0; z < this.depth; z++) {
                     const type = this.grid[idx];
                     if (type !== undefined) {
-                        const baseType = normalizeBlockType(type);
-                        const mesh = this.instancedMeshMap.get(baseType);
-                        if (mesh && this.isBlockVisibleAtIndex(x, y, z, baseType)) {
-                            const instanceIdx = counts[baseType];
-                            if (instanceIdx < mesh.maxInstances) {
-                                matrix.makeTranslation(worldX, y, z + this.zOffset);
-                                mesh.setMatrixAt(instanceIdx, matrix);
-                                counts[baseType] = instanceIdx + 1;
+                        const parsed = parseBlockState(type);
+                        const baseType = parsed.base;
+                        if (this.isBlockVisibleAtIndex(x, y, z, baseType)) {
+                            const worldZ = z + this.zOffset;
+                            if (baseType === 'rail') {
+                                if (parsed.shape.startsWith('asc_')) {
+                                    pushToMap(this.auxMeshMap, auxCounts, 'rail_slope', worldX, y, worldZ, RAIL_SLOPE_QUATS[parsed.shape] || RAIL_SLOPE_QUATS.asc_n);
+                                } else if (parsed.shape === 'ns' || parsed.shape === 'ew') {
+                                    pushToMap(this.instancedMeshMap, counts, 'rail', worldX, y, worldZ, RAIL_Y_QUATS[parsed.shape] || identityQuat);
+                                } else {
+                                    pushToMap(this.auxMeshMap, auxCounts, 'rail_curve', worldX, y, worldZ, RAIL_Y_QUATS[parsed.shape] || identityQuat);
+                                }
+                            } else if (baseType === 'powered_rail') {
+                                if (parsed.shape.startsWith('asc_')) {
+                                    const slopeKey = parsed.active ? 'powered_rail_slope_on' : 'powered_rail_slope_off';
+                                    pushToMap(this.auxMeshMap, auxCounts, slopeKey, worldX, y, worldZ, RAIL_SLOPE_QUATS[parsed.shape] || RAIL_SLOPE_QUATS.asc_n);
+                                } else if (parsed.active) {
+                                    pushToMap(this.auxMeshMap, auxCounts, 'powered_rail_on', worldX, y, worldZ, RAIL_Y_QUATS[parsed.shape] || identityQuat);
+                                } else {
+                                    pushToMap(this.instancedMeshMap, counts, 'powered_rail', worldX, y, worldZ, RAIL_Y_QUATS[parsed.shape] || identityQuat);
+                                }
+                            } else if (baseType === 'piston') {
+                                const q = FACING_QUATS[parsed.facing] || identityQuat;
+                                if (parsed.extended) {
+                                    pushToMap(this.auxMeshMap, auxCounts, 'piston_ext_base', worldX, y, worldZ, q);
+                                } else {
+                                    pushToMap(this.instancedMeshMap, counts, 'piston', worldX, y, worldZ, q);
+                                }
+                            } else if (baseType === 'piston_head') {
+                                const q = FACING_QUATS[parsed.facing] || identityQuat;
+                                pushToMap(this.auxMeshMap, auxCounts, 'piston_head_plate', worldX, y, worldZ, q);
+                                pushToMap(this.auxMeshMap, auxCounts, 'piston_head_rod', worldX, y, worldZ, q);
+                            } else if (baseType === 'lever') {
+                                const q = FACING_QUATS[parsed.facing] || identityQuat;
+                                pushToMap(this.instancedMeshMap, counts, 'lever', worldX, y, worldZ, q);
+                                pushToMap(this.auxMeshMap, auxCounts, parsed.active ? 'lever_handle_on' : 'lever_handle_off', worldX, y, worldZ, q);
+                            } else if (baseType === 'pressure_plate') {
+                                if (parsed.pressed || parsed.active) {
+                                    pushToMap(this.auxMeshMap, auxCounts, 'pressure_plate_depressed', worldX, y, worldZ, identityQuat);
+                                } else {
+                                    pushToMap(this.instancedMeshMap, counts, 'pressure_plate', worldX, y, worldZ, identityQuat);
+                                }
+                            } else {
+                                const q = baseType === 'button' ? (FACING_QUATS[parsed.facing] || identityQuat) : identityQuat;
+                                pushToMap(this.instancedMeshMap, counts, baseType, worldX, y, worldZ, q);
                             }
                         }
                     }
@@ -452,16 +621,21 @@ export class World {
             }
         }
 
-        this.instancedMeshMap.forEach((mesh, type) => {
-            const nextCount = counts[type] || 0;
-            mesh.count = nextCount;
-            mesh.instanceMatrix.needsUpdate = true;
-            if (nextCount > 0) {
-                mesh.computeBoundingSphere();
-            } else {
-                mesh.boundingSphere = null;
-            }
-        });
+        const finalizeMeshGroup = (meshMap, countMap) => {
+            meshMap.forEach((mesh, type) => {
+                const nextCount = countMap[type] || 0;
+                mesh.count = nextCount;
+                mesh.instanceMatrix.needsUpdate = true;
+                if (nextCount > 0) {
+                    mesh.computeBoundingSphere();
+                } else {
+                    mesh.boundingSphere = null;
+                }
+            });
+        };
+
+        finalizeMeshGroup(this.instancedMeshMap, counts);
+        finalizeMeshGroup(this.auxMeshMap, auxCounts);
     }
 
     /**
@@ -551,7 +725,7 @@ export class World {
         return idx !== -1 ? (this.grid[idx] || null) : null;
     }
 
-    addBlock(x, y, z, type) {
+    addBlock(x, y, z, type, silent = false, skipUpdate = false) {
         const idx = this.getGridIndex(x, y, z);
         if (idx === -1) return false;
         if (this.grid[idx] !== undefined) {
@@ -563,8 +737,12 @@ export class World {
         if (type === 'lava') finalType = 'lava_source';
 
         this.grid[idx] = finalType;
-        this.updateMesh();
-        sounds.playPlaceSound();
+        if (!skipUpdate) {
+            this.updateMesh();
+        }
+        if (!silent) {
+            sounds.playPlaceSound();
+        }
 
         if (finalType === 'crop') {
             setTimeout(() => {

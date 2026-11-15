@@ -248,6 +248,47 @@ class SoundManager {
             osc.stop(start + 0.34);
         });
     }
+
+    playSwitchSound(turnOn = true) {
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(turnOn ? 580 : 410, now);
+        osc.frequency.exponentialRampToValueAtTime(turnOn ? 780 : 280, now + 0.045);
+
+        gain.gain.setValueAtTime(0.14, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.065);
+    }
+
+    playPistonSound(extending = true) {
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(extending ? 110 : 155, now);
+        osc.frequency.exponentialRampToValueAtTime(extending ? 175 : 75, now + 0.14);
+
+        gain.gain.setValueAtTime(0.24, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.17);
+        this.playNoise(0.11, extending ? 620 : 420, 0.16);
+    }
 }
 
 export const sounds = new SoundManager();

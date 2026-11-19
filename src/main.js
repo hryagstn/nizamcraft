@@ -18,6 +18,9 @@ import {
     entityOverlapsBlock,
     isRailBlock,
     computeRailShape,
+    cycleRailShape,
+    findRailAtCartPos,
+    computeRailLaunchVelocity,
     getAttachedSupportPos,
     isMechanismPowered,
     isPoweredRailActive,
@@ -750,7 +753,9 @@ function updateTargeting() {
 
     raycaster.setFromCamera(screenCenter, camera);
 
-    const mobMeshes = game.mobs.map(mob => mob.mesh);
+    const mobMeshes = game.mobs
+        .filter(mob => mob !== player.ridingMinecart)
+        .map(mob => mob.mesh);
     const mobIntersects = mobMeshes.length > 0 ? raycaster.intersectObjects(mobMeshes, true) : [];
     const closestMob = mobIntersects.length > 0 ? mobIntersects[0] : null;
 
@@ -1181,6 +1186,27 @@ function handleSecondaryAction() {
     }
 
     const blockToPlace = held ? held.type : selectedBlockType;
+
+    if (isRailBlock(targetedBlockType) && (isRailBlock(blockToPlace) || getEquipmentCategory(blockToPlace) !== null)) {
+        const parsedRail = parseBlockState(targetedBlockType);
+        const allowCurves = parsedRail.base === 'rail';
+        const nextShape = cycleRailShape(
+            world.boundGetBlockAt,
+            targetPos.x,
+            targetPos.y,
+            targetPos.z,
+            parsedRail.shape,
+            allowCurves
+        );
+        const nextState = `${parsedRail.base}_${nextShape}${parsedRail.base === 'powered_rail' && parsedRail.active ? '_on' : ''}`;
+        if (nextState !== targetedBlockType) {
+            world.addBlock(targetPos.x, targetPos.y, targetPos.z, nextState, true);
+            refreshRedstoneAround(targetPos.x, targetPos.y, targetPos.z);
+            sounds.playClickSound();
+            game.showNotification(`Arah rel diubah (${nextShape.toUpperCase()})`);
+        }
+        return;
+    }
 
     if (
         getEquipmentCategory(blockToPlace) !== null ||
@@ -2840,6 +2866,33 @@ function onWorldTopologyChanged(x, y, z) {
     refreshRedstoneAround(x, y, z);
 }
 
+function launchMinecartsNear(bx, by, bz) {
+    const raw = world.getBlockAt(bx, by, bz);
+    const sup = raw ? getAttachedSupportPos(bx, by, bz, raw) : { x: bx, y: by, z: bz };
+    for (const mob of game.mobs) {
+        if (mob.type !== 'minecart') continue;
+        const nearTrigger =
+            Math.abs(mob.position.x - bx) <= 2.6 &&
+            Math.abs(mob.position.y - by) <= 2.2 &&
+            Math.abs(mob.position.z - bz) <= 2.6;
+        const nearSupport =
+            Math.abs(mob.position.x - sup.x) <= 2.2 &&
+            Math.abs(mob.position.y - sup.y) <= 2.2 &&
+            Math.abs(mob.position.z - sup.z) <= 2.2;
+        if (!nearTrigger && !nearSupport) continue;
+
+        const rail = findRailAtCartPos(world.boundGetBlockAt, mob.position.x, mob.position.y, mob.position.z);
+        if (!rail) continue;
+        if (Math.hypot(mob.velocity.x, mob.velocity.z) >= 1.2) continue;
+
+        const launch = computeRailLaunchVelocity(world.boundGetBlockAt, rail, bx, bz, 8.5);
+        if (Math.hypot(launch.vx, launch.vz) > 0.1) {
+            mob.velocity.set(launch.vx, 0, launch.vz);
+            mob.cartYaw = Math.atan2(launch.vx, launch.vz);
+        }
+    }
+}
+
 function toggleLever(x, y, z) {
     const raw = world.getBlockAt(x, y, z);
     const parsed = parseBlockState(raw);
@@ -2850,6 +2903,7 @@ function toggleLever(x, y, z) {
     sounds.playSwitchSound(nextOn);
     game.showNotification(`Tuas saklar: ${nextOn ? 'Aktif' : 'Mati'}`);
     refreshRedstoneAround(x, y, z);
+    if (nextOn) launchMinecartsNear(x, y, z);
 }
 
 function pressButton(x, y, z) {
@@ -2862,6 +2916,7 @@ function pressButton(x, y, z) {
     sounds.playSwitchSound(true);
     game.showNotification('Tombol batu ditekan.');
     refreshRedstoneAround(x, y, z);
+    launchMinecartsNear(x, y, z);
 
     setTimeout(() => {
         if (world.getBlockAt(x, y, z) === pressedState) {

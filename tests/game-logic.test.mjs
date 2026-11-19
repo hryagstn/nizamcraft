@@ -32,8 +32,10 @@ import {
     populateGridForRecipe,
     isRailBlock,
     computeRailShape,
+    cycleRailShape,
     findRailAtCartPos,
     stepMinecartOnRail,
+    computeRailLaunchVelocity,
     isMechanismPowered,
     isPoweredRailActive,
     computePistonFacing,
@@ -612,4 +614,63 @@ test('planPistonPush handles 12-block push limit, immovable blocks, crushables, 
     assert.equal(crush.canPush, true);
     assert.equal(crush.pushCount, 1);
     assert.deepEqual(crush.crushPos, { x: 2, y: 7, z: 0, type: 'rail_ew' });
+});
+
+test('minecart stays on open-end rails, launches from button trigger, and completes 360-degree loops', () => {
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    // 1. Open-end straight rail never derails cart
+    blocks.set(key(0, 7, 0), 'rail_ew');
+    let endState = { x: 0.2, y: 6.56, z: 0, vx: 8.0, vz: 0, yaw: Math.PI / 2 };
+    for (let i = 0; i < 15; i++) {
+        const r = findRailAtCartPos(getBlockAt, endState.x, endState.y, endState.z);
+        assert.ok(r, `Cart derailed off open rail at step ${i}`);
+        endState = stepMinecartOnRail({ ...endState, rail: r, isPowered: false, getBlockAt, dt: 0.05 });
+    }
+    assert.ok(endState.x <= 0.45 && endState.vx === 0);
+
+    // 2. Open-end curved rail never derails cart
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'rail_se');
+    let curveEnd = { x: 0, y: 6.56, z: 0.4, vx: 0, vz: -7.0, yaw: Math.PI };
+    for (let i = 0; i < 15; i++) {
+        const r = findRailAtCartPos(getBlockAt, curveEnd.x, curveEnd.y, curveEnd.z);
+        assert.ok(r, `Cart derailed off open curved rail at step ${i}`);
+        curveEnd = stepMinecartOnRail({ ...curveEnd, rail: r, isPowered: false, getBlockAt, dt: 0.05 });
+    }
+    assert.ok(findRailAtCartPos(getBlockAt, curveEnd.x, curveEnd.y, curveEnd.z));
+
+    // 3. Button near start rail launches stationary minecart toward continuing track
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'rail_ew');
+    blocks.set(key(1, 7, 0), 'rail_ew');
+    blocks.set(key(0, 7, 1), 'button_up_pressed');
+    const launch = computeRailLaunchVelocity(getBlockAt, { x: 0, y: 7, z: 0, base: 'rail', shape: 'ew' }, 0, 1, 8.5);
+    assert.equal(launch.vx, 8.5);
+    assert.equal(launch.vz, 0);
+
+    // 4. 2x2 closed 360-degree loop runs full orbit without derailing
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'rail_se');
+    blocks.set(key(1, 7, 0), 'rail_sw');
+    blocks.set(key(1, 7, 1), 'rail_nw');
+    blocks.set(key(0, 7, 1), 'rail_ne');
+    let loopState = { x: 0, y: 6.56, z: 0.4, vx: 0, vz: -10.0, yaw: Math.PI };
+    const visited = new Set();
+    for (let i = 0; i < 80; i++) {
+        const r = findRailAtCartPos(getBlockAt, loopState.x, loopState.y, loopState.z);
+        assert.ok(r, `Lost rail on 360 loop at step ${i}`);
+        visited.add(`${r.x},${r.z}`);
+        loopState = stepMinecartOnRail({ ...loopState, rail: r, isPowered: false, getBlockAt, dt: 0.025 });
+    }
+    assert.equal(visited.size, 4);
+
+    // 5. Manual rail cycling & T-junction curve preservation
+    blocks.set(key(-1, 7, 0), 'rail_ew');
+    assert.equal(computeRailShape(getBlockAt, 0, 7, 0, true, 'se'), 'se');
+    assert.equal(cycleRailShape(getBlockAt, 0, 7, 0, 'se', true), 'ew');
+    assert.equal(cycleRailShape(getBlockAt, 0, 7, 0, 'ew', true), 'sw');
+    assert.equal(cycleRailShape(getBlockAt, 0, 7, 0, 'sw', true), 'se');
 });

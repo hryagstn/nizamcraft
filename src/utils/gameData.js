@@ -1610,6 +1610,50 @@ export function getRailShape(type) {
     return parseBlockState(type).shape;
 }
 
+export const RAIL_SHAPES_ORDER = ['ns', 'ew', 'ne', 'nw', 'sw', 'se'];
+
+const RAIL_SHAPE_ENDPOINTS = {
+    ns: ['n', 's'],
+    ew: ['e', 'w'],
+    ne: ['n', 'e'],
+    nw: ['n', 'w'],
+    sw: ['s', 'w'],
+    se: ['s', 'e']
+};
+
+export function hasConnectingRailAt(getBlockAt, x, y, z) {
+    if (!getBlockAt) return false;
+    return (
+        isRailBlock(getBlockAt(x, y, z)) ||
+        isRailBlock(getBlockAt(x, y - 1, z)) ||
+        isRailBlock(getBlockAt(x, y + 1, z))
+    );
+}
+
+export function cycleRailShape(getBlockAt, x, y, z, currentShape = 'ns', allowCurves = true) {
+    if (!allowCurves) {
+        return currentShape === 'ew' ? 'ns' : 'ew';
+    }
+    const n = hasConnectingRailAt(getBlockAt, x, y, z - 1);
+    const s = hasConnectingRailAt(getBlockAt, x, y, z + 1);
+    const e = hasConnectingRailAt(getBlockAt, x + 1, y, z);
+    const w = hasConnectingRailAt(getBlockAt, x - 1, y, z);
+    const dirs = { n, s, e, w };
+    const neighborCount = (n ? 1 : 0) + (s ? 1 : 0) + (e ? 1 : 0) + (w ? 1 : 0);
+
+    let candidates = RAIL_SHAPES_ORDER;
+    if (neighborCount >= 3) {
+        const connected = RAIL_SHAPES_ORDER.filter((sh) => {
+            const [d1, d2] = RAIL_SHAPE_ENDPOINTS[sh];
+            return dirs[d1] && dirs[d2];
+        });
+        if (connected.length > 0) candidates = connected;
+    }
+
+    const idx = candidates.indexOf(currentShape);
+    return candidates[(idx + 1) % candidates.length];
+}
+
 export function computeRailShape(getBlockAt, x, y, z, allowCurves = true, fallbackShape = 'ns') {
     const upN = isRailBlock(getBlockAt(x, y + 1, z - 1));
     const upS = isRailBlock(getBlockAt(x, y + 1, z + 1));
@@ -1638,6 +1682,14 @@ export function computeRailShape(getBlockAt, x, y, z, allowCurves = true, fallba
         if (n && w && !s && !e) return 'nw';
         if (s && e && !n && !w) return 'se';
         if (s && w && !n && !e) return 'sw';
+
+        const endpoints = RAIL_SHAPE_ENDPOINTS[fallbackShape];
+        if (endpoints) {
+            const dirs = { n, s, e, w };
+            if (dirs[endpoints[0]] && dirs[endpoints[1]]) {
+                return fallbackShape;
+            }
+        }
     }
 
     if (n && s) return 'ns';
@@ -1685,15 +1737,14 @@ export function findRailAtCartPos(getBlockAt, x, y, z) {
     return best;
 }
 
-export function stepMinecartOnRail({
+function stepMinecartSubstep({
     x, y, z, vx, vz, yaw = 0,
     rail,
     isPowered = false,
     riderInput = null,
     getBlockAt,
-    dt
+    stepDt
 }) {
-    const stepDt = Math.min(Math.max(dt || 0, 0), 0.05);
     const rx = rail.x;
     const ry = rail.y;
     const rz = rail.z;
@@ -1751,6 +1802,19 @@ export function stepMinecartOnRail({
                     bounced: true
                 };
             }
+            if (getBlockAt && !hasConnectingRailAt(getBlockAt, gx, ry, gz)) {
+                const clampTheta = Math.min(arc.tMax, arc.tMin + 0.02);
+                return {
+                    x: cx + 0.5 * Math.cos(clampTheta),
+                    y: ry - 0.44,
+                    z: cz + 0.5 * Math.sin(clampTheta),
+                    vx: 0,
+                    vz: 0,
+                    yaw,
+                    pitch: 0,
+                    bounced: false
+                };
+            }
             return {
                 x: nx,
                 y: ry - 0.44,
@@ -1786,6 +1850,19 @@ export function stepMinecartOnRail({
                     yaw: Math.abs(bouncedSpeed) > 0.05 ? Math.atan2(bouncedSpeed * (-Math.sin(bTheta)), bouncedSpeed * Math.cos(bTheta)) : yaw,
                     pitch: 0,
                     bounced: true
+                };
+            }
+            if (getBlockAt && !hasConnectingRailAt(getBlockAt, gx, ry, gz)) {
+                const clampTheta = Math.max(arc.tMin, arc.tMax - 0.02);
+                return {
+                    x: cx + 0.5 * Math.cos(clampTheta),
+                    y: ry - 0.44,
+                    z: cz + 0.5 * Math.sin(clampTheta),
+                    vx: 0,
+                    vz: 0,
+                    yaw,
+                    pitch: 0,
+                    bounced: false
                 };
             }
             return {
@@ -1844,9 +1921,15 @@ export function stepMinecartOnRail({
         if (Math.abs(vAxis) < 0.25 && getBlockAt) {
             const posBlocked = isSolidBlock(getBlockAt(rx + ax, ry, rz + az));
             const negBlocked = isSolidBlock(getBlockAt(rx - ax, ry, rz - az));
+            const posHasRail = hasConnectingRailAt(getBlockAt, rx + ax, ry, rz + az);
+            const negHasRail = hasConnectingRailAt(getBlockAt, rx - ax, ry, rz - az);
             if (negBlocked && !posBlocked) {
                 vAxis = 8.5;
             } else if (posBlocked && !negBlocked) {
+                vAxis = -8.5;
+            } else if (!posBlocked && posHasRail && !negHasRail) {
+                vAxis = 8.5;
+            } else if (!negBlocked && negHasRail && !posHasRail) {
                 vAxis = -8.5;
             } else if (riderInput && (riderInput.wishX || riderInput.wishZ)) {
                 const wishDot = (riderInput.wishX || 0) * ax + (riderInput.wishZ || 0) * az;
@@ -1874,16 +1957,23 @@ export function stepMinecartOnRail({
 
     let bounced = false;
     if (getBlockAt && Math.abs(sNext) > 0.42) {
-        const checkX = isEastWest ? (rx + Math.sign(sNext)) : rx;
-        const checkZ = isEastWest ? rz : (rz + Math.sign(sNext));
+        const sign = Math.sign(sNext);
+        const checkX = isEastWest ? (rx + sign) : rx;
+        const checkZ = isEastWest ? rz : (rz + sign);
         const checkY = ascVec ? Math.round(nextY + 0.25) : ry;
         if (isSolidBlock(getBlockAt(checkX, checkY, checkZ))) {
             vAxis = -vAxis * 0.65;
-            const clampedS = Math.sign(sNext) * 0.28;
+            const clampedS = sign * 0.28;
             nextX = isEastWest ? (rx + clampedS) : rx;
             nextZ = isEastWest ? rz : (rz + clampedS);
             nextY = getRailSurfaceY(rx, ry, rz, shape, nextX, nextZ);
             bounced = true;
+        } else if (Math.abs(sNext) > 0.44 && !hasConnectingRailAt(getBlockAt, checkX, ry, checkZ)) {
+            vAxis = 0;
+            const clampedS = sign * 0.44;
+            nextX = isEastWest ? (rx + clampedS) : rx;
+            nextZ = isEastWest ? rz : (rz + clampedS);
+            nextY = getRailSurfaceY(rx, ry, rz, shape, nextX, nextZ);
         }
     }
 
@@ -1906,6 +1996,112 @@ export function stepMinecartOnRail({
         pitch,
         bounced
     };
+}
+
+export function stepMinecartOnRail({
+    x, y, z, vx, vz, yaw = 0,
+    rail,
+    isPowered = false,
+    riderInput = null,
+    getBlockAt,
+    dt
+}) {
+    const totalDt = Math.min(Math.max(dt || 0, 0), 0.05);
+    if (totalDt <= 0) {
+        return { x, y, z, vx, vz, yaw, pitch: 0, bounced: false };
+    }
+
+    const horizSpeed = Math.hypot(vx, vz);
+    const steps = Math.max(1, Math.min(4, Math.ceil((Math.max(horizSpeed, 4) * totalDt) / 0.22)));
+    const stepDt = totalDt / steps;
+
+    let state = { x, y, z, vx, vz, yaw, pitch: 0, bounced: false };
+    let curRail = rail;
+    let anyBounced = false;
+
+    for (let i = 0; i < steps; i++) {
+        if (i > 0 && getBlockAt) {
+            const nextRail = findRailAtCartPos(getBlockAt, state.x, state.y, state.z);
+            if (!nextRail) break;
+            curRail = nextRail;
+        }
+        const res = stepMinecartSubstep({
+            x: state.x,
+            y: state.y,
+            z: state.z,
+            vx: state.vx,
+            vz: state.vz,
+            yaw: state.yaw,
+            rail: curRail,
+            isPowered: curRail.base === 'powered_rail' ? isPowered : false,
+            riderInput,
+            getBlockAt,
+            stepDt
+        });
+        state = res;
+        if (res.bounced) anyBounced = true;
+    }
+
+    return { ...state, bounced: anyBounced };
+}
+
+export function computeRailLaunchVelocity(getBlockAt, rail, triggerX, triggerZ, speed = 8.5) {
+    if (!rail) return { vx: 0, vz: 0 };
+    const rx = rail.x;
+    const ry = rail.y;
+    const rz = rail.z;
+    const shape = rail.shape;
+    const arc = RAIL_CORNER_ARCS[shape];
+
+    if (arc) {
+        const thetaMid = (arc.tMin + arc.tMax) * 0.5;
+        const tx = -Math.sin(thetaMid);
+        const tz = Math.cos(thetaMid);
+        const endpoints = RAIL_SHAPE_ENDPOINTS[shape] || ['n', 'e'];
+        const d0 = DIRECTION_VECTORS[endpoints[0]];
+        const d1 = DIRECTION_VECTORS[endpoints[1]];
+        const open0 = !getBlockAt || (hasConnectingRailAt(getBlockAt, rx + d0.x, ry, rz + d0.z) && !isSolidBlock(getBlockAt(rx + d0.x, ry, rz + d0.z)));
+        const open1 = !getBlockAt || (hasConnectingRailAt(getBlockAt, rx + d1.x, ry, rz + d1.z) && !isSolidBlock(getBlockAt(rx + d1.x, ry, rz + d1.z)));
+
+        let targetDir = d0;
+        if (open1 && !open0) {
+            targetDir = d1;
+        } else if (open0 === open1) {
+            const awayX = rx - triggerX;
+            const awayZ = rz - triggerZ;
+            const score0 = awayX * d0.x + awayZ * d0.z;
+            const score1 = awayX * d1.x + awayZ * d1.z;
+            targetDir = score1 > score0 ? d1 : d0;
+        }
+        const dot = tx * targetDir.x + tz * targetDir.z;
+        const sign = dot >= 0 ? 1 : -1;
+        return { vx: tx * sign * speed, vz: tz * sign * speed };
+    }
+
+    const isEastWest = shape === 'ew' || shape === 'asc_e' || shape === 'asc_w';
+    const ax = isEastWest ? 1 : 0;
+    const az = isEastWest ? 0 : 1;
+
+    const posBlocked = getBlockAt ? isSolidBlock(getBlockAt(rx + ax, ry, rz + az)) : false;
+    const negBlocked = getBlockAt ? isSolidBlock(getBlockAt(rx - ax, ry, rz - az)) : false;
+    const posHasRail = getBlockAt ? hasConnectingRailAt(getBlockAt, rx + ax, ry, rz + az) : true;
+    const negHasRail = getBlockAt ? hasConnectingRailAt(getBlockAt, rx - ax, ry, rz - az) : true;
+
+    let sign = 1;
+    if (!posBlocked && posHasRail && (negBlocked || !negHasRail)) {
+        sign = 1;
+    } else if (!negBlocked && negHasRail && (posBlocked || !posHasRail)) {
+        sign = -1;
+    } else if (negBlocked && !posBlocked) {
+        sign = 1;
+    } else if (posBlocked && !negBlocked) {
+        sign = -1;
+    } else {
+        const awayDot = (rx - triggerX) * ax + (rz - triggerZ) * az;
+        sign = awayDot >= 0 ? 1 : -1;
+    }
+
+    return { vx: ax * sign * speed, vz: az * sign * speed };
 }
 
 export function getAttachedSupportPos(x, y, z, type) {

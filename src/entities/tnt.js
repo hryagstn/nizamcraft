@@ -166,6 +166,7 @@ export class PrimedTNT {
 
         if (blocksChanged) {
             this.world.updateMesh();
+            this.game?.onTopologyChanged?.(Math.round(ex), Math.round(ey), Math.round(ez), Math.ceil(radius) + 1);
         }
 
         if (this.game.player) {

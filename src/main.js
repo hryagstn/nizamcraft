@@ -8,6 +8,7 @@ import {
     Chicken, Pig, Cow, BloodGolem, GiantIronGolem, WitherSkeleton, Minecart
 } from './entities/mob.js';
 import { PrimedTNT } from './entities/tnt.js';
+import { FallingBlock } from './entities/fallingBlock.js';
 import { sounds } from './utils/audio.js';
 import { svgIcon, getItemName, getItemVisualHTML } from './utils/icons.js';
 import {
@@ -16,14 +17,20 @@ import {
     DIRECTION_VECTORS,
     isSolidBlock,
     entityOverlapsBlock,
+    collectUnsupportedGravityBlocks,
     isRailBlock,
+    computeInitialRailShape,
     computeRailShape,
     cycleRailShape,
     findRailAtCartPos,
     computeRailLaunchVelocity,
     getAttachedSupportPos,
+    isRedstoneWireActive,
     isMechanismPowered,
     isPoweredRailActive,
+    computeLaserBeam,
+    isEntityInLaserBeam,
+    isEntityTouchingSaw,
     computePistonFacing,
     planPistonPush,
     getEquipmentCategory,
@@ -69,10 +76,14 @@ const game = {
     player: null,
     mobs: [],
     tnts: [],
+    fallingBlocks: [],
     particles: [],
     arrows: [],
     chests: {},
     blockHits: {},
+    onTopologyChanged(x, y, z, radius = 1) {
+        onWorldTopologyChanged(x, y, z, radius);
+    },
     showNotification(message) {
         if (this.player) {
             this.player.showNotification(message);
@@ -409,7 +420,10 @@ function restorePlayerAndChests() {
 function handleLoad() {
     craftGrid = Array(craftGridSize * craftGridSize).fill(null);
     if (world.load()) {
+        game.fallingBlocks.forEach(fb => fb.cleanup?.());
+        game.fallingBlocks = [];
         restorePlayerAndChests();
+        syncLaserBeams();
         buildHotbarDOM();
         syncHeldVisual();
         updateArmorUI();
@@ -429,6 +443,8 @@ function handleReset() {
     game.mobs = [];
     game.tnts.forEach(tnt => tnt.cleanup?.());
     game.tnts = [];
+    game.fallingBlocks.forEach(fb => fb.cleanup?.());
+    game.fallingBlocks = [];
     game.arrows.forEach(arr => arr.destroy?.());
     game.arrows = [];
     game.chests = {};
@@ -442,6 +458,7 @@ function handleReset() {
     equippedBagSlot = null;
 
     world.reset();
+    syncLaserBeams();
     player.respawn();
     if (hasGameStarted) {
         spawnInitialMobs();
@@ -681,7 +698,10 @@ const INTERACTIVE_PROMPT_LABELS = {
     lever: '[Klik Kanan / .] Saklar',
     button: '[Klik Kanan / .] Tekan Tombol',
     dispenser: '[Klik Kanan / .] Aktifkan Dispenser',
-    tnt: '[Klik / .] Sulut TNT'
+    tnt: '[Klik / .] Sulut TNT',
+    rail: '[Klik Kanan / .] Putar Arah Rel (pegang Rel/Alat)',
+    powered_rail: '[Klik Kanan / .] Putar Arah Rel (pegang Rel/Alat)',
+    laser: '[Klik Kanan / .] Putar Arah Laser'
 };
 
 function syncContextualHUD(target) {
@@ -1187,16 +1207,34 @@ function handleSecondaryAction() {
 
     const blockToPlace = held ? held.type : selectedBlockType;
 
+    if (
+        targetedBase === 'laser' &&
+        blockToPlace !== 'lever' &&
+        blockToPlace !== 'button' &&
+        blockToPlace !== 'redstone'
+    ) {
+        const parsedLaser = parseBlockState(targetedBlockType);
+        const order = ['n', 'e', 's', 'w', 'up', 'down'];
+        const curIdx = order.indexOf(parsedLaser.facing || 'e');
+        const nextFacing = order[(curIdx + 1) % order.length];
+        const nextState = `laser_${nextFacing}${parsedLaser.active ? '_on' : ''}`;
+        world.addBlock(targetPos.x, targetPos.y, targetPos.z, nextState, true);
+        refreshRedstoneAround(targetPos.x, targetPos.y, targetPos.z);
+        syncLaserBeams();
+        sounds.playClickSound();
+        game.showNotification(`Arah Laser diubah (${nextFacing.toUpperCase()})`);
+        return;
+    }
+
     if (isRailBlock(targetedBlockType) && (isRailBlock(blockToPlace) || getEquipmentCategory(blockToPlace) !== null)) {
         const parsedRail = parseBlockState(targetedBlockType);
-        const allowCurves = parsedRail.base === 'rail';
         const nextShape = cycleRailShape(
             world.boundGetBlockAt,
             targetPos.x,
             targetPos.y,
             targetPos.z,
             parsedRail.shape,
-            allowCurves
+            true
         );
         const nextState = `${parsedRail.base}_${nextShape}${parsedRail.base === 'powered_rail' && parsedRail.active ? '_on' : ''}`;
         if (nextState !== targetedBlockType) {
@@ -1275,15 +1313,26 @@ function handleSecondaryAction() {
 
     let finalBlockState = blockToPlace;
 
-    if (blockToPlace === 'rail' || blockToPlace === 'powered_rail' || blockToPlace === 'pressure_plate') {
+    if (
+        blockToPlace === 'rail' ||
+        blockToPlace === 'powered_rail' ||
+        blockToPlace === 'pressure_plate' ||
+        blockToPlace === 'redstone'
+    ) {
         const below = world.getBlockAt(buildX, buildY - 1, buildZ);
         if (!isSolidBlock(below) || normalizeBlockType(below) === 'piston_head') {
             game.showNotification(
                 blockToPlace === 'pressure_plate'
                     ? 'Pasang Pelat Tekanan di atas blok padat.'
-                    : 'Pasang Rel di atas permukaan blok padat.'
+                    : blockToPlace === 'redstone'
+                        ? 'Pasang Kabel Redstone di atas blok padat.'
+                        : 'Pasang Rel di atas permukaan blok padat.'
             );
             return;
+        }
+        if (blockToPlace === 'rail' || blockToPlace === 'powered_rail') {
+            player.camera.getWorldDirection(lookDirVec);
+            finalBlockState = `${blockToPlace}_${computeInitialRailShape(lookDirVec)}`;
         }
     } else if (blockToPlace === 'lever' || blockToPlace === 'button') {
         if (!isSolidBlock(targetedBlockType) || targetedBase === 'piston_head') {
@@ -1292,10 +1341,10 @@ function handleSecondaryAction() {
         }
         const attachFace = facingFromNormal(normal);
         finalBlockState = `${blockToPlace}_${attachFace}`;
-    } else if (blockToPlace === 'piston') {
+    } else if (blockToPlace === 'piston' || blockToPlace === 'laser') {
         player.camera.getWorldDirection(lookDirVec);
-        const pistonFace = computePistonFacing(lookDirVec);
-        finalBlockState = `piston_${pistonFace}`;
+        const facing = computePistonFacing(lookDirVec);
+        finalBlockState = `${blockToPlace}_${facing}`;
     }
 
     world.addBlock(buildX, buildY, buildZ, finalBlockState);
@@ -2658,6 +2707,7 @@ function cleanUnsupportedAttachmentsAround(cx, cy, cz, radius = 2) {
                 if (
                     base === 'rail' ||
                     base === 'powered_rail' ||
+                    base === 'redstone' ||
                     base === 'pressure_plate' ||
                     base === 'lever' ||
                     base === 'button'
@@ -2693,8 +2743,7 @@ function updateRailNetworkAround(cx, cy, cz, radius = 1) {
                 if (!raw || !isRailBlock(raw)) continue;
 
                 const parsed = parseBlockState(raw);
-                const allowCurves = parsed.base === 'rail';
-                const nextShape = computeRailShape(world.boundGetBlockAt, x, y, z, allowCurves, parsed.shape);
+                const nextShape = computeRailShape(world.boundGetBlockAt, x, y, z, true, parsed.shape);
                 let nextType = `${parsed.base}_${nextShape}`;
                 if (parsed.base === 'powered_rail' && parsed.active) {
                     nextType += '_on';
@@ -2745,18 +2794,119 @@ function pushEntitiesInBox(bx, by, bz, dir) {
     }
 }
 
+const laserBeamGroup = new THREE.Group();
+scene.add(laserBeamGroup);
+const laserCoreMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.95
+});
+const laserGlowMat = new THREE.MeshBasicMaterial({
+    color: 0xff1e38,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false
+});
+let activeLaserBeams = [];
+
+function syncLaserBeams() {
+    while (laserBeamGroup.children.length > 0) {
+        const child = laserBeamGroup.children[0];
+        laserBeamGroup.remove(child);
+        child.geometry?.dispose();
+    }
+    activeLaserBeams = [];
+
+    let idx = 0;
+    for (let x = 0; x < world.width; x++) {
+        const worldX = x + world.xOffset;
+        for (let y = 0; y < world.height; y++) {
+            for (let z = 0; z < world.depth; z++) {
+                const raw = world.grid[idx++];
+                if (!raw || !raw.startsWith('laser_')) continue;
+                const parsed = parseBlockState(raw);
+                if (!parsed.active) continue;
+                const worldZ = z + world.zOffset;
+                const beam = computeLaserBeam(world.boundGetBlockAt, worldX, y, worldZ, parsed.facing || 'e', 20);
+                activeLaserBeams.push(beam);
+
+                if (beam.length > 0) {
+                    const len = beam.length;
+                    const midOffset = 0.5 + len * 0.5;
+                    const mx = worldX + beam.dir.x * midOffset;
+                    const my = y + beam.dir.y * midOffset;
+                    const mz = worldZ + beam.dir.z * midOffset;
+                    const isX = beam.dir.x !== 0;
+                    const isY = beam.dir.y !== 0;
+                    const coreGeo = new THREE.BoxGeometry(
+                        isX ? len : 0.1,
+                        isY ? len : 0.1,
+                        (!isX && !isY) ? len : 0.1
+                    );
+                    const glowGeo = new THREE.BoxGeometry(
+                        isX ? len : 0.28,
+                        isY ? len : 0.28,
+                        (!isX && !isY) ? len : 0.28
+                    );
+                    const coreMesh = new THREE.Mesh(coreGeo, laserCoreMat);
+                    coreMesh.position.set(mx, my, mz);
+                    const glowMesh = new THREE.Mesh(glowGeo, laserGlowMat);
+                    glowMesh.position.set(mx, my, mz);
+                    laserBeamGroup.add(coreMesh, glowMesh);
+                }
+            }
+        }
+    }
+}
+
+function triggerGravityBlocksAround(cx, cy, cz, radius = 1) {
+    const unsupported = collectUnsupportedGravityBlocks(world.boundGetBlockAt, cx, cy, cz, radius, world.height - 1);
+    if (unsupported.length === 0) return false;
+
+    for (const b of unsupported) {
+        world.removeBlock(b.x, b.y, b.z, true, true);
+        game.fallingBlocks.push(new FallingBlock(b.x, b.y, b.z, b.type, scene, world, game));
+    }
+    world.updateMesh();
+    for (const b of unsupported) {
+        cleanUnsupportedAttachmentsAround(b.x, b.y, b.z, 1);
+    }
+    return true;
+}
+
 function refreshRedstoneAround(cx, cy, cz) {
     if (isRefreshingRedstone) return;
     isRefreshingRedstone = true;
     try {
         let dirty = false;
         const pushedCoords = [];
+        const wireCoords = [];
         const bounds = getWorldPistonBounds();
 
-        // 1. Update Powered Rails (supports up to 8-rail propagation)
-        for (let dx = -8; dx <= 8; dx++) {
-            for (let dy = -3; dy <= 3; dy++) {
-                for (let dz = -8; dz <= 8; dz++) {
+        // 0. Update Redstone circuit wires (up to 15-hop signal propagation)
+        for (let dx = -15; dx <= 15; dx++) {
+            for (let dy = -4; dy <= 4; dy++) {
+                for (let dz = -15; dz <= 15; dz++) {
+                    const x = cx + dx;
+                    const y = cy + dy;
+                    const z = cz + dz;
+                    const raw = world.getBlockAt(x, y, z);
+                    if (!raw || normalizeBlockType(raw) !== 'redstone') continue;
+                    wireCoords.push({ x, y, z });
+                    const nextActive = isRedstoneWireActive(world.boundGetBlockAt, x, y, z);
+                    const nextType = nextActive ? 'redstone_on' : 'redstone';
+                    if (raw !== nextType) {
+                        world.addBlock(x, y, z, nextType, true, true);
+                        dirty = true;
+                    }
+                }
+            }
+        }
+
+        // 1. Update Powered Rails (supports up to 8-rail propagation from switches or wires)
+        for (let dx = -16; dx <= 16; dx++) {
+            for (let dy = -4; dy <= 4; dy++) {
+                for (let dz = -16; dz <= 16; dz++) {
                     const x = cx + dx;
                     const y = cy + dy;
                     const z = cz + dz;
@@ -2773,78 +2923,96 @@ function refreshRedstoneAround(cx, cy, cz) {
             }
         }
 
-        // 2. Evaluate Pistons, Dispensers, and TNT within direct/strong power range (<= 2 blocks)
-        for (let dx = -2; dx <= 2; dx++) {
-            for (let dy = -2; dy <= 2; dy++) {
-                for (let dz = -2; dz <= 2; dz++) {
-                    const x = cx + dx;
-                    const y = cy + dy;
-                    const z = cz + dz;
-                    const raw = world.getBlockAt(x, y, z);
-                    if (!raw) continue;
-                    const parsed = parseBlockState(raw);
-                    const base = parsed.base;
-                    const powered = isMechanismPowered(world.boundGetBlockAt, x, y, z);
+        // 2. Evaluate Pistons, Dispensers, TNT, and Lasers near origin or connected wires
+        const mechCoords = new Set();
+        const addMechWindow = (ox, oy, oz, r) => {
+            for (let dx = -r; dx <= r; dx++) {
+                for (let dy = -r; dy <= r; dy++) {
+                    for (let dz = -r; dz <= r; dz++) {
+                        mechCoords.add(`${ox + dx},${oy + dy},${oz + dz}`);
+                    }
+                }
+            }
+        };
+        addMechWindow(cx, cy, cz, 2);
+        for (const w of wireCoords) {
+            addMechWindow(w.x, w.y, w.z, 1);
+        }
 
-                    if (base === 'piston') {
-                        const facing = parsed.facing || 'up';
-                        const dir = DIRECTION_VECTORS[facing] || DIRECTION_VECTORS.up;
-                        const headX = x + dir.x;
-                        const headY = y + dir.y;
-                        const headZ = z + dir.z;
+        for (const coordKey of mechCoords) {
+            const [x, y, z] = coordKey.split(',').map(Number);
+            const raw = world.getBlockAt(x, y, z);
+            if (!raw) continue;
+            const parsed = parseBlockState(raw);
+            const base = parsed.base;
+            if (base !== 'piston' && base !== 'dispenser' && base !== 'tnt' && base !== 'laser') continue;
+            const powered = isMechanismPowered(world.boundGetBlockAt, x, y, z);
 
-                        if (powered && !parsed.extended) {
-                            const plan = planPistonPush(world.boundGetBlockAt, x, y, z, facing, 12, bounds);
-                            if (plan.canPush) {
-                                if (plan.crushPos) {
-                                    world.removeBlock(plan.crushPos.x, plan.crushPos.y, plan.crushPos.z, true, true);
-                                    world.spawnBlockBreakParticles(
-                                        plan.crushPos.x,
-                                        plan.crushPos.y,
-                                        plan.crushPos.z,
-                                        normalizeBlockType(plan.crushPos.type)
-                                    );
-                                }
-                                for (let i = plan.blocks.length - 1; i >= 0; i--) {
-                                    const b = plan.blocks[i];
-                                    const destX = b.x + dir.x;
-                                    const destY = b.y + dir.y;
-                                    const destZ = b.z + dir.z;
-                                    pushEntitiesInBox(b.x, b.y, b.z, dir);
-                                    world.removeBlock(b.x, b.y, b.z, true, true);
-                                    world.addBlock(destX, destY, destZ, b.type, true, true);
-                                    pushedCoords.push({ x: destX, y: destY, z: destZ });
-                                }
-                                pushEntitiesInBox(headX, headY, headZ, dir);
-                                world.addBlock(headX, headY, headZ, `piston_head_${facing}`, true, true);
-                                world.addBlock(x, y, z, `piston_${facing}_extended`, true, true);
-                                pushedCoords.push({ x: headX, y: headY, z: headZ });
-                                sounds.playPistonSound(true);
-                                dirty = true;
-                            }
-                        } else if (!powered && parsed.extended) {
-                            const curHead = world.getBlockAt(headX, headY, headZ);
-                            if (curHead && normalizeBlockType(curHead) === 'piston_head') {
-                                world.removeBlock(headX, headY, headZ, true, true);
-                            }
-                            world.addBlock(x, y, z, `piston_${facing}`, true, true);
-                            pushedCoords.push({ x: headX, y: headY, z: headZ });
-                            sounds.playPistonSound(false);
-                            dirty = true;
+            if (base === 'piston') {
+                const facing = parsed.facing || 'up';
+                const dir = DIRECTION_VECTORS[facing] || DIRECTION_VECTORS.up;
+                const headX = x + dir.x;
+                const headY = y + dir.y;
+                const headZ = z + dir.z;
+
+                if (powered && !parsed.extended) {
+                    const plan = planPistonPush(world.boundGetBlockAt, x, y, z, facing, 12, bounds);
+                    if (plan.canPush) {
+                        if (plan.crushPos) {
+                            world.removeBlock(plan.crushPos.x, plan.crushPos.y, plan.crushPos.z, true, true);
+                            world.spawnBlockBreakParticles(
+                                plan.crushPos.x,
+                                plan.crushPos.y,
+                                plan.crushPos.z,
+                                normalizeBlockType(plan.crushPos.type)
+                            );
                         }
-                    } else if (base === 'dispenser') {
-                        const dKey = `${x},${y},${z}`;
-                        if (powered && !poweredDispensers.has(dKey)) {
-                            poweredDispensers.add(dKey);
-                            activateDispenser(x, y, z);
-                        } else if (!powered) {
-                            poweredDispensers.delete(dKey);
+                        for (let i = plan.blocks.length - 1; i >= 0; i--) {
+                            const b = plan.blocks[i];
+                            const destX = b.x + dir.x;
+                            const destY = b.y + dir.y;
+                            const destZ = b.z + dir.z;
+                            pushEntitiesInBox(b.x, b.y, b.z, dir);
+                            world.removeBlock(b.x, b.y, b.z, true, true);
+                            world.addBlock(destX, destY, destZ, b.type, true, true);
+                            pushedCoords.push({ x: destX, y: destY, z: destZ });
                         }
-                    } else if (base === 'tnt' && powered) {
-                        world.removeBlock(x, y, z, true, true);
-                        game.tnts.push(new PrimedTNT(x, y, z, scene, world, game));
+                        pushEntitiesInBox(headX, headY, headZ, dir);
+                        world.addBlock(headX, headY, headZ, `piston_head_${facing}`, true, true);
+                        world.addBlock(x, y, z, `piston_${facing}_extended`, true, true);
+                        pushedCoords.push({ x: headX, y: headY, z: headZ });
+                        sounds.playPistonSound(true);
                         dirty = true;
                     }
+                } else if (!powered && parsed.extended) {
+                    const curHead = world.getBlockAt(headX, headY, headZ);
+                    if (curHead && normalizeBlockType(curHead) === 'piston_head') {
+                        world.removeBlock(headX, headY, headZ, true, true);
+                    }
+                    world.addBlock(x, y, z, `piston_${facing}`, true, true);
+                    pushedCoords.push({ x: headX, y: headY, z: headZ });
+                    sounds.playPistonSound(false);
+                    dirty = true;
+                }
+            } else if (base === 'dispenser') {
+                const dKey = `${x},${y},${z}`;
+                if (powered && !poweredDispensers.has(dKey)) {
+                    poweredDispensers.add(dKey);
+                    activateDispenser(x, y, z);
+                } else if (!powered) {
+                    poweredDispensers.delete(dKey);
+                }
+            } else if (base === 'tnt' && powered) {
+                world.removeBlock(x, y, z, true, true);
+                game.tnts.push(new PrimedTNT(x, y, z, scene, world, game));
+                dirty = true;
+            } else if (base === 'laser') {
+                const facing = parsed.facing || 'e';
+                const nextType = `laser_${facing}${powered ? '_on' : ''}`;
+                if (raw !== nextType) {
+                    world.addBlock(x, y, z, nextType, true, true);
+                    sounds.playLaserSound(powered);
+                    dirty = true;
                 }
             }
         }
@@ -2853,16 +3021,19 @@ function refreshRedstoneAround(cx, cy, cz) {
             world.updateMesh();
             for (const pt of pushedCoords) {
                 updateRailNetworkAround(pt.x, pt.y, pt.z, 1);
+                triggerGravityBlocksAround(pt.x, pt.y, pt.z, 1);
             }
         }
+        syncLaserBeams();
     } finally {
         isRefreshingRedstone = false;
     }
 }
 
-function onWorldTopologyChanged(x, y, z) {
-    cleanUnsupportedAttachmentsAround(x, y, z, 2);
-    updateRailNetworkAround(x, y, z, 1);
+function onWorldTopologyChanged(x, y, z, radius = 1) {
+    cleanUnsupportedAttachmentsAround(x, y, z, Math.max(2, radius));
+    triggerGravityBlocksAround(x, y, z, radius);
+    updateRailNetworkAround(x, y, z, Math.max(1, radius));
     refreshRedstoneAround(x, y, z);
 }
 
@@ -3066,6 +3237,93 @@ function updateXpUI() {
 updateArmorUI();
 updateHealthUI();
 updateXpUI();
+syncLaserBeams();
+
+let playerHazardCooldown = 0;
+
+function checkHazardDamage(dt) {
+    playerHazardCooldown = Math.max(0, playerHazardCooldown - dt);
+
+    const isPlayerInLaser = activeLaserBeams.some(beam =>
+        isEntityInLaserBeam(player.position.x, player.position.y, player.position.z, player.width / 2, player.height, beam)
+    );
+    const isPlayerOnSaw = isEntityTouchingSaw(
+        world.boundGetBlockAt,
+        player.position.x,
+        player.position.y,
+        player.position.z,
+        player.width / 2,
+        player.height
+    );
+
+    if (playerHazardCooldown <= 0 && (isPlayerInLaser || isPlayerOnSaw)) {
+        playerHazardCooldown = 0.45;
+        if (isPlayerInLaser) {
+            player.takeDamage(12, 'fire');
+            world.spawnBlockBreakParticles(
+                Math.round(player.position.x),
+                Math.round(player.position.y + 0.8),
+                Math.round(player.position.z),
+                null,
+                0xef4444
+            );
+        }
+        if (isPlayerOnSaw) {
+            player.takeDamage(10);
+            player.velocity.y = Math.max(player.velocity.y, 4.5);
+            player.isGrounded = false;
+            world.spawnBlockBreakParticles(
+                Math.round(player.position.x),
+                Math.round(player.position.y + 0.3),
+                Math.round(player.position.z),
+                null,
+                0xe2e8f0
+            );
+            sounds.playSawHitSound();
+        }
+    }
+
+    for (let i = game.mobs.length - 1; i >= 0; i--) {
+        const mob = game.mobs[i];
+        if (!mob || mob.type === 'minecart') continue;
+        mob._hazardCooldown = Math.max(0, (mob._hazardCooldown || 0) - dt);
+        if (mob._hazardCooldown > 0) continue;
+
+        const rad = (mob.width || 0.6) / 2;
+        const h = mob.height || 1.2;
+        const inLaser = activeLaserBeams.some(beam =>
+            isEntityInLaserBeam(mob.position.x, mob.position.y, mob.position.z, rad, h, beam)
+        );
+        const onSaw = isEntityTouchingSaw(world.boundGetBlockAt, mob.position.x, mob.position.y, mob.position.z, rad, h);
+
+        if (inLaser) {
+            mob._hazardCooldown = 0.45;
+            world.spawnBlockBreakParticles(
+                Math.round(mob.position.x),
+                Math.round(mob.position.y + 0.6),
+                Math.round(mob.position.z),
+                null,
+                0xef4444
+            );
+            mob.takeDamage(15);
+            if (mob.hp <= 0) continue;
+        }
+        if (onSaw) {
+            mob._hazardCooldown = 0.45;
+            mob.velocity.y = Math.max(mob.velocity.y, 4.5);
+            mob.isGrounded = false;
+            world.spawnBlockBreakParticles(
+                Math.round(mob.position.x),
+                Math.round(mob.position.y + 0.3),
+                Math.round(mob.position.z),
+                null,
+                0xe2e8f0
+            );
+            sounds.playSawHitSound();
+            mob.takeDamage(14);
+        }
+    }
+}
 
 const clock = new THREE.Clock(false);
 
@@ -3082,10 +3340,15 @@ function animate() {
     const dt = Math.min(clock.getDelta(), 0.1);
 
     player.update(dt);
-    updateHealthUI();
 
     for (let i = game.mobs.length - 1; i >= 0; i--) {
         game.mobs[i].update(dt);
+    }
+
+    for (let i = game.fallingBlocks.length - 1; i >= 0; i--) {
+        if (!game.fallingBlocks[i].update(dt)) {
+            game.fallingBlocks.splice(i, 1);
+        }
     }
 
     for (let i = game.tnts.length - 1; i >= 0; i--) {
@@ -3118,6 +3381,13 @@ function animate() {
         }
     }
 
+    world.updateAnimatedBlocks(dt);
+    if (laserBeamGroup.children.length > 0) {
+        laserGlowMat.opacity = 0.36 + 0.14 * Math.sin(performance.now() * 0.012);
+    }
+
+    checkHazardDamage(dt);
+    updateHealthUI();
     updateTargeting();
 
     world.liquidTimer += dt;

@@ -141,6 +141,10 @@ export class Player {
         this.inventory[17] = { type: 'piston', count: 2 };
         this.inventory[18] = { type: 'lever', count: 2 };
         this.inventory[19] = { type: 'pressure_plate', count: 2 };
+        this.inventory[20] = { type: 'redstone', count: 16 };
+        this.inventory[21] = { type: 'laser', count: 2 };
+        this.inventory[22] = { type: 'saw', count: 2 };
+        this.inventory[23] = { type: 'sand', count: 16 };
     }
 
     respawn() {
@@ -846,6 +850,9 @@ export class Player {
             if (instMesh) {
                 const heldDims = {
                     rail: [0.09, 0.014, 0.09],
+                    powered_rail: [0.09, 0.014, 0.09],
+                    redstone: [0.08, 0.012, 0.08],
+                    saw: [0.08, 0.048, 0.08],
                     pressure_plate: [0.08, 0.018, 0.08],
                     button: [0.05, 0.026, 0.04],
                     lever: [0.06, 0.036, 0.06]

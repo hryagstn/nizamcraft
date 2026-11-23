@@ -40,10 +40,51 @@ export const PASSABLE_BLOCKS = new Set([
     'crop',
     'rail',
     'powered_rail',
+    'redstone',
     'pressure_plate',
     'button',
     'lever'
 ]);
+
+export const GRAVITY_BLOCKS = new Set(['sand']);
+
+export function isGravityBlock(type) {
+    if (!type) return false;
+    return GRAVITY_BLOCKS.has(normalizeBlockType(type));
+}
+
+export function shouldBlockFall(getBlockAt, x, y, z) {
+    if (y <= 1) return false;
+    const raw = getBlockAt(x, y, z);
+    if (!isGravityBlock(raw)) return false;
+    return !isSolidBlock(getBlockAt(x, y - 1, z));
+}
+
+export function collectUnsupportedGravityBlocks(getBlockAt, cx, cy, cz, radius = 1, maxY = 23) {
+    const falling = [];
+    const queued = new Set();
+    const minY = Math.max(1, cy - 1);
+
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+            const x = cx + dx;
+            const z = cz + dz;
+            for (let y = minY; y <= maxY; y++) {
+                const raw = getBlockAt(x, y, z);
+                if (!isGravityBlock(raw)) continue;
+                const belowRaw = getBlockAt(x, y - 1, z);
+                const belowFalls = queued.has(`${x},${y - 1},${z}`);
+                if (belowFalls || !isSolidBlock(belowRaw)) {
+                    queued.add(`${x},${y},${z}`);
+                    falling.push({ x, y, z, type: raw });
+                }
+            }
+        }
+    }
+
+    falling.sort((a, b) => a.y - b.y);
+    return falling;
+}
 
 export function isSolidBlock(type) {
     if (!type) return false;
@@ -908,7 +949,10 @@ export const HOTBAR_ITEMS = [
     { type: 'lever', label: 'Lever', key: 'T', category: 'redstone', nameId: 'Tuas Saklar' },
     { type: 'dispenser', label: 'Dispenser', key: 'R', category: 'redstone', nameId: 'Dispenser' },
     { type: 'powered_rail', label: 'Pow Rail', key: '[', category: 'redstone', nameId: 'Rel Berdaya' },
-    { type: 'minecart', label: 'Minecart', key: ']', category: 'redstone', nameId: 'Kereta Tambang' }
+    { type: 'minecart', label: 'Minecart', key: ']', category: 'redstone', nameId: 'Kereta Tambang' },
+    { type: 'redstone', label: 'Redstone', key: ':', category: 'redstone', nameId: 'Kabel Redstone' },
+    { type: 'laser', label: 'Laser', key: '{', category: 'redstone', nameId: 'Blok Laser' },
+    { type: 'saw', label: 'Gergaji', key: '}', category: 'redstone', nameId: 'Blok Gergaji' }
 ];
 
 // ==========================================
@@ -1331,6 +1375,36 @@ export const CRAFTING_RECIPES = [
         pattern: ['R'],
         key: { R: 'stone' },
         description: 'Mengirim sinyal mekanis sesaat selama 1 detik (bisa di 2x2).'
+    }),
+    defineRecipe({
+        id: 'redstone',
+        category: 'block',
+        result: 'redstone',
+        resultName: 'Kabel Redstone',
+        resultCount: 8,
+        pattern: [' C ', 'CIC', ' C '],
+        key: { C: 'coal', I: 'iron_ingot' },
+        description: 'Menghantarkan sinyal dari tuas/tombol/pelat hingga 15 blok ke mekanisme dan laser.'
+    }),
+    defineRecipe({
+        id: 'laser',
+        category: 'block',
+        result: 'laser',
+        resultName: 'Blok Laser',
+        resultCount: 1,
+        pattern: ['III', 'RDR', 'III'],
+        key: { I: 'iron_ingot', R: 'redstone', D: 'diamond' },
+        description: 'Memancarkan sinar laser berbahaya saat dialiri sinyal Redstone atau tuas.'
+    }),
+    defineRecipe({
+        id: 'saw',
+        category: 'block',
+        result: 'saw',
+        resultName: 'Blok Gergaji',
+        resultCount: 1,
+        pattern: [' I ', 'IRI', 'SSS'],
+        key: { I: 'iron_ingot', R: 'redstone', S: 'stone' },
+        description: 'Gergaji cakram berputar otomatis yang melukai siapa saja yang menyentuhnya.'
     })
 ];
 
@@ -1592,6 +1666,7 @@ const PISTON_CRUSHABLE_BASES = new Set([
     'crop',
     'rail',
     'powered_rail',
+    'redstone',
     'pressure_plate',
     'button',
     'lever'
@@ -1652,6 +1727,11 @@ export function cycleRailShape(getBlockAt, x, y, z, currentShape = 'ns', allowCu
 
     const idx = candidates.indexOf(currentShape);
     return candidates[(idx + 1) % candidates.length];
+}
+
+export function computeInitialRailShape(lookDir) {
+    if (!lookDir) return 'ns';
+    return Math.abs(lookDir.x || 0) >= Math.abs(lookDir.z || 0) ? 'ew' : 'ns';
 }
 
 export function computeRailShape(getBlockAt, x, y, z, allowCurves = true, fallbackShape = 'ns') {
@@ -1767,14 +1847,52 @@ function stepMinecartSubstep({
 
         if (riderInput && (riderInput.wishX || riderInput.wishZ)) {
             const wishDot = (riderInput.wishX || 0) * tx + (riderInput.wishZ || 0) * tz;
-            if (Math.abs(wishDot) > 0.2 && Math.abs(tSpeed) < 6.5) {
-                tSpeed += Math.sign(wishDot) * 9.0 * stepDt;
+            if (Math.abs(wishDot) > 0.2) {
+                const wishSign = Math.sign(wishDot);
+                const reversing = Math.abs(tSpeed) > 0.2 && Math.sign(tSpeed) !== wishSign;
+                if (reversing || Math.abs(tSpeed) < 7.5) {
+                    tSpeed += wishSign * (reversing ? 12.0 : 9.0) * stepDt;
+                }
             }
         }
 
-        tSpeed *= Math.exp(-0.35 * stepDt);
-        tSpeed = Math.max(-12.0, Math.min(12.0, tSpeed));
-        if (!riderInput && Math.abs(tSpeed) < 0.06) tSpeed = 0;
+        if (isPoweredRail && isPowered) {
+            if (Math.abs(tSpeed) < 0.25 && getBlockAt) {
+                const minDx = Math.round(Math.sin(arc.tMin));
+                const minDz = Math.round(-Math.cos(arc.tMin));
+                const maxDx = Math.round(-Math.sin(arc.tMax));
+                const maxDz = Math.round(Math.cos(arc.tMax));
+                const minBlocked = isSolidBlock(getBlockAt(rx + minDx, ry, rz + minDz));
+                const maxBlocked = isSolidBlock(getBlockAt(rx + maxDx, ry, rz + maxDz));
+                const minHasRail = hasConnectingRailAt(getBlockAt, rx + minDx, ry, rz + minDz);
+                const maxHasRail = hasConnectingRailAt(getBlockAt, rx + maxDx, ry, rz + maxDz);
+
+                if (minBlocked && !maxBlocked) {
+                    tSpeed = 9.5;
+                } else if (maxBlocked && !minBlocked) {
+                    tSpeed = -9.5;
+                } else if (!maxBlocked && maxHasRail && !minHasRail) {
+                    tSpeed = 9.5;
+                } else if (!minBlocked && minHasRail && !maxHasRail) {
+                    tSpeed = -9.5;
+                } else if (riderInput && (riderInput.wishX || riderInput.wishZ)) {
+                    const wishDot = (riderInput.wishX || 0) * tx + (riderInput.wishZ || 0) * tz;
+                    if (Math.abs(wishDot) > 0.15) tSpeed = Math.sign(wishDot) * 9.5;
+                }
+            } else if (Math.abs(tSpeed) >= 0.05) {
+                tSpeed += Math.sign(tSpeed) * 28.0 * stepDt;
+            }
+        } else if (isPoweredRail && !isPowered) {
+            const brakeDrop = Math.min(Math.abs(tSpeed), 18.0 * stepDt);
+            tSpeed -= Math.sign(tSpeed) * brakeDrop;
+            if (Math.abs(tSpeed) < 0.15) tSpeed = 0;
+        } else {
+            tSpeed *= Math.exp(-0.18 * stepDt);
+            if (!riderInput && Math.abs(tSpeed) < 0.06) tSpeed = 0;
+        }
+
+        tSpeed = Math.max(-16.0, Math.min(16.0, tSpeed));
+        const bank = Math.max(-0.34, Math.min(0.34, tSpeed * 0.028));
 
         const thetaNext = theta + (tSpeed * stepDt) / 0.5;
         if (thetaNext < arc.tMin) {
@@ -1799,6 +1917,7 @@ function stepMinecartSubstep({
                     vz: bouncedSpeed * Math.cos(bTheta),
                     yaw: Math.abs(bouncedSpeed) > 0.05 ? Math.atan2(bouncedSpeed * (-Math.sin(bTheta)), bouncedSpeed * Math.cos(bTheta)) : yaw,
                     pitch: 0,
+                    bank: 0,
                     bounced: true
                 };
             }
@@ -1812,6 +1931,7 @@ function stepMinecartSubstep({
                     vz: 0,
                     yaw,
                     pitch: 0,
+                    bank: 0,
                     bounced: false
                 };
             }
@@ -1823,6 +1943,7 @@ function stepMinecartSubstep({
                 vz: outVz,
                 yaw: Math.abs(tSpeed) > 0.05 ? Math.atan2(outVx, outVz) : yaw,
                 pitch: 0,
+                bank,
                 bounced: false
             };
         }
@@ -1849,6 +1970,7 @@ function stepMinecartSubstep({
                     vz: bouncedSpeed * Math.cos(bTheta),
                     yaw: Math.abs(bouncedSpeed) > 0.05 ? Math.atan2(bouncedSpeed * (-Math.sin(bTheta)), bouncedSpeed * Math.cos(bTheta)) : yaw,
                     pitch: 0,
+                    bank: 0,
                     bounced: true
                 };
             }
@@ -1862,6 +1984,7 @@ function stepMinecartSubstep({
                     vz: 0,
                     yaw,
                     pitch: 0,
+                    bank: 0,
                     bounced: false
                 };
             }
@@ -1873,6 +1996,7 @@ function stepMinecartSubstep({
                 vz: outVz,
                 yaw: Math.abs(tSpeed) > 0.05 ? Math.atan2(outVx, outVz) : yaw,
                 pitch: 0,
+                bank,
                 bounced: false
             };
         }
@@ -1891,6 +2015,7 @@ function stepMinecartSubstep({
             vz: outVz,
             yaw: Math.abs(tSpeed) > 0.05 ? Math.atan2(outVx, outVz) : yaw,
             pitch: 0,
+            bank,
             bounced: false
         };
     }
@@ -1905,7 +2030,7 @@ function stepMinecartSubstep({
         if (Math.abs(wishDot) > 0.2) {
             const wishSign = Math.sign(wishDot);
             const reversing = Math.abs(vAxis) > 0.2 && Math.sign(vAxis) !== wishSign;
-            if (reversing || Math.abs(vAxis) < 6.5) {
+            if (reversing || Math.abs(vAxis) < 7.5) {
                 vAxis += wishSign * (reversing ? 12.0 : 9.0) * stepDt;
             }
         }
@@ -1914,7 +2039,7 @@ function stepMinecartSubstep({
     const ascVec = RAIL_ASC_DIRS[shape];
     if (ascVec) {
         const ascSign = ascVec.x * ax + ascVec.z * az;
-        vAxis -= ascSign * 10.0 * stepDt;
+        vAxis -= ascSign * 11.0 * stepDt;
     }
 
     if (isPoweredRail && isPowered) {
@@ -1924,30 +2049,30 @@ function stepMinecartSubstep({
             const posHasRail = hasConnectingRailAt(getBlockAt, rx + ax, ry, rz + az);
             const negHasRail = hasConnectingRailAt(getBlockAt, rx - ax, ry, rz - az);
             if (negBlocked && !posBlocked) {
-                vAxis = 8.5;
+                vAxis = 9.5;
             } else if (posBlocked && !negBlocked) {
-                vAxis = -8.5;
+                vAxis = -9.5;
             } else if (!posBlocked && posHasRail && !negHasRail) {
-                vAxis = 8.5;
+                vAxis = 9.5;
             } else if (!negBlocked && negHasRail && !posHasRail) {
-                vAxis = -8.5;
+                vAxis = -9.5;
             } else if (riderInput && (riderInput.wishX || riderInput.wishZ)) {
                 const wishDot = (riderInput.wishX || 0) * ax + (riderInput.wishZ || 0) * az;
-                if (Math.abs(wishDot) > 0.15) vAxis = Math.sign(wishDot) * 8.5;
+                if (Math.abs(wishDot) > 0.15) vAxis = Math.sign(wishDot) * 9.5;
             }
         } else if (Math.abs(vAxis) >= 0.05) {
-            vAxis += Math.sign(vAxis) * 26.0 * stepDt;
+            vAxis += Math.sign(vAxis) * 28.0 * stepDt;
         }
     } else if (isPoweredRail && !isPowered) {
         const brakeDrop = Math.min(Math.abs(vAxis), 18.0 * stepDt);
         vAxis -= Math.sign(vAxis) * brakeDrop;
         if (Math.abs(vAxis) < 0.15) vAxis = 0;
     } else {
-        vAxis *= Math.exp(-0.28 * stepDt);
+        vAxis *= Math.exp(-0.20 * stepDt);
         if (!ascVec && !riderInput && Math.abs(vAxis) < 0.08) vAxis = 0;
     }
 
-    vAxis = Math.max(-12.0, Math.min(12.0, vAxis));
+    vAxis = Math.max(-16.0, Math.min(16.0, vAxis));
 
     const sCur = isEastWest ? (x - rx) : (z - rz);
     const sNext = sCur + vAxis * stepDt;
@@ -1994,6 +2119,7 @@ function stepMinecartSubstep({
         vz: outVz,
         yaw: nextYaw,
         pitch,
+        bank: 0,
         bounced
     };
 }
@@ -2008,14 +2134,14 @@ export function stepMinecartOnRail({
 }) {
     const totalDt = Math.min(Math.max(dt || 0, 0), 0.05);
     if (totalDt <= 0) {
-        return { x, y, z, vx, vz, yaw, pitch: 0, bounced: false };
+        return { x, y, z, vx, vz, yaw, pitch: 0, bank: 0, bounced: false };
     }
 
     const horizSpeed = Math.hypot(vx, vz);
     const steps = Math.max(1, Math.min(4, Math.ceil((Math.max(horizSpeed, 4) * totalDt) / 0.22)));
     const stepDt = totalDt / steps;
 
-    let state = { x, y, z, vx, vz, yaw, pitch: 0, bounced: false };
+    let state = { x, y, z, vx, vz, yaw, pitch: 0, bank: 0, bounced: false };
     let curRail = rail;
     let anyBounced = false;
 
@@ -2106,7 +2232,12 @@ export function computeRailLaunchVelocity(getBlockAt, rail, triggerX, triggerZ, 
 
 export function getAttachedSupportPos(x, y, z, type) {
     const parsed = parseBlockState(type);
-    if (parsed.base === 'pressure_plate' || parsed.base === 'rail' || parsed.base === 'powered_rail') {
+    if (
+        parsed.base === 'pressure_plate' ||
+        parsed.base === 'rail' ||
+        parsed.base === 'powered_rail' ||
+        parsed.base === 'redstone'
+    ) {
         return { x, y: y - 1, z };
     }
     const dir = DIRECTION_VECTORS[parsed.facing] || DIRECTION_VECTORS.up;
@@ -2143,6 +2274,46 @@ export function isBlockDirectlyPowered(getBlockAt, x, y, z) {
     return false;
 }
 
+const HORIZ_WIRE_DIRS = [
+    { dx: 1, dz: 0 },
+    { dx: -1, dz: 0 },
+    { dx: 0, dz: 1 },
+    { dx: 0, dz: -1 }
+];
+
+export function isRedstoneWireActive(getBlockAt, x, y, z, maxHops = 15) {
+    if (normalizeBlockType(getBlockAt(x, y, z)) !== 'redstone') return false;
+    const queue = [{ x, y, z, dist: 0 }];
+    const visited = new Set([`${x},${y},${z}`]);
+
+    while (queue.length > 0) {
+        const cur = queue.shift();
+        for (const dir of Object.values(DIRECTION_VECTORS)) {
+            const nx = cur.x + dir.x;
+            const ny = cur.y + dir.y;
+            const nz = cur.z + dir.z;
+            if (isPowerSourceActive(getBlockAt, nx, ny, nz) || isBlockDirectlyPowered(getBlockAt, nx, ny, nz)) {
+                return true;
+            }
+        }
+        if (cur.dist >= maxHops) continue;
+
+        for (const d of HORIZ_WIRE_DIRS) {
+            for (const dy of [-1, 0, 1]) {
+                const nx = cur.x + d.dx;
+                const ny = cur.y + dy;
+                const nz = cur.z + d.dz;
+                const key = `${nx},${ny},${nz}`;
+                if (visited.has(key)) continue;
+                if (normalizeBlockType(getBlockAt(nx, ny, nz)) !== 'redstone') continue;
+                visited.add(key);
+                queue.push({ x: nx, y: ny, z: nz, dist: cur.dist + 1 });
+            }
+        }
+    }
+    return false;
+}
+
 export function isMechanismPowered(getBlockAt, x, y, z) {
     for (const dir of Object.values(DIRECTION_VECTORS)) {
         const nx = x + dir.x;
@@ -2150,6 +2321,9 @@ export function isMechanismPowered(getBlockAt, x, y, z) {
         const nz = z + dir.z;
         if (isPowerSourceActive(getBlockAt, nx, ny, nz)) return true;
         if (isBlockDirectlyPowered(getBlockAt, nx, ny, nz)) return true;
+        if (normalizeBlockType(getBlockAt(nx, ny, nz)) === 'redstone' && isRedstoneWireActive(getBlockAt, nx, ny, nz)) {
+            return true;
+        }
     }
     return false;
 }
@@ -2166,8 +2340,17 @@ export function isPoweredRailActive(getBlockAt, x, y, z, maxHops = 8) {
         if (cur.dist >= maxHops) continue;
 
         const shape = getRailShape(getBlockAt(cur.x, cur.y, cur.z));
-        const isEW = shape === 'ew' || shape === 'asc_e' || shape === 'asc_w';
-        const axes = isEW ? [{ dx: 1, dz: 0 }, { dx: -1, dz: 0 }] : [{ dx: 0, dz: -1 }, { dx: 0, dz: 1 }];
+        const endpoints = RAIL_SHAPE_ENDPOINTS[shape];
+        let axes;
+        if (endpoints) {
+            axes = endpoints.map((ep) => {
+                const v = DIRECTION_VECTORS[ep];
+                return { dx: v.x, dz: v.z };
+            });
+        } else {
+            const isEW = shape === 'ew' || shape === 'asc_e' || shape === 'asc_w';
+            axes = isEW ? [{ dx: 1, dz: 0 }, { dx: -1, dz: 0 }] : [{ dx: 0, dz: -1 }, { dx: 0, dz: 1 }];
+        }
 
         for (const a of axes) {
             for (const dy of [-1, 0, 1]) {
@@ -2179,6 +2362,67 @@ export function isPoweredRailActive(getBlockAt, x, y, z, maxHops = 8) {
                 if (normalizeBlockType(getBlockAt(nx, ny, nz)) !== 'powered_rail') continue;
                 visited.add(key);
                 queue.push({ x: nx, y: ny, z: nz, dist: cur.dist + 1 });
+            }
+        }
+    }
+    return false;
+}
+
+export function computeLaserBeam(getBlockAt, lx, ly, lz, facing = 'e', maxRange = 20) {
+    const dir = DIRECTION_VECTORS[facing] || DIRECTION_VECTORS.e;
+    const cells = [];
+    let hitBlock = null;
+
+    for (let step = 1; step <= maxRange; step++) {
+        const cx = lx + dir.x * step;
+        const cy = ly + dir.y * step;
+        const cz = lz + dir.z * step;
+        const block = getBlockAt(cx, cy, cz);
+        if (isSolidBlock(block)) {
+            hitBlock = { x: cx, y: cy, z: cz, type: block };
+            break;
+        }
+        cells.push({ x: cx, y: cy, z: cz });
+    }
+
+    return {
+        origin: { x: lx, y: ly, z: lz },
+        dir,
+        facing,
+        length: cells.length,
+        cells,
+        hitBlock
+    };
+}
+
+export function isEntityInLaserBeam(px, py, pz, radius, height, beam) {
+    if (!beam || !Array.isArray(beam.cells) || beam.cells.length === 0) return false;
+    for (const c of beam.cells) {
+        if (entityOverlapsBlock(px, py, pz, radius, height, c.x, c.y, c.z)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export function isEntityTouchingSaw(getBlockAt, px, py, pz, radius, height) {
+    const minBX = Math.floor(px - radius + 0.5);
+    const maxBX = Math.ceil(px + radius - 0.5);
+    const minBY = Math.min(Math.floor(py + 0.5), Math.round(py - 0.55));
+    const maxBY = Math.ceil(py + height - 0.5);
+    const minBZ = Math.floor(pz - radius + 0.5);
+    const maxBZ = Math.ceil(pz + radius - 0.5);
+
+    for (let bx = minBX; bx <= maxBX; bx++) {
+        for (let by = minBY; by <= maxBY; by++) {
+            for (let bz = minBZ; bz <= maxBZ; bz++) {
+                if (normalizeBlockType(getBlockAt(bx, by, bz)) !== 'saw') continue;
+                const overlapX = (px + radius > bx - 0.5) && (px - radius < bx + 0.5);
+                const overlapZ = (pz + radius > bz - 0.5) && (pz - radius < bz + 0.5);
+                const overlapY = (py + height > by - 0.5) && (py <= by + 0.58);
+                if (overlapX && overlapY && overlapZ) {
+                    return true;
+                }
             }
         }
     }

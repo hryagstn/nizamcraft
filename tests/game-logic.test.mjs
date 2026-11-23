@@ -31,13 +31,20 @@ import {
     returnGridToInventory,
     populateGridForRecipe,
     isRailBlock,
+    computeInitialRailShape,
     computeRailShape,
     cycleRailShape,
     findRailAtCartPos,
     stepMinecartOnRail,
     computeRailLaunchVelocity,
+    isRedstoneWireActive,
     isMechanismPowered,
     isPoweredRailActive,
+    computeLaserBeam,
+    isEntityInLaserBeam,
+    isEntityTouchingSaw,
+    shouldBlockFall,
+    collectUnsupportedGravityBlocks,
     computePistonFacing,
     planPistonPush
 } from '../src/utils/gameData.js';
@@ -354,7 +361,7 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     assert.equal(storageMap.has('nizamcraft-player'), false);
 
     // 2. Surface is 100% flat grass at y = 6 with zero trees (no wood or leaf anywhere)
-    assert.equal(world.blockTypesList.length, 35);
+    assert.equal(world.blockTypesList.length, 38);
     for (let x = -world.width / 2; x < world.width / 2; x++) {
         for (let z = -world.depth / 2; z < world.depth / 2; z++) {
             assert.equal(world.getBlockAt(x, 0, z), 'obsidian');
@@ -416,7 +423,7 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     }
 
     // Verify flat mechanism blocks sit flush on the cell floor [-0.5, < 0] with opaque side materials
-    for (const thinType of ['rail', 'powered_rail', 'pressure_plate', 'button', 'lever']) {
+    for (const thinType of ['rail', 'powered_rail', 'redstone', 'pressure_plate', 'button', 'lever']) {
         const mesh = world.instancedMeshMap.get(thinType);
         mesh.geometry.computeBoundingBox();
         assert.ok(Math.abs(mesh.geometry.boundingBox.min.y - (-0.5)) < 1e-6, `${thinType} does not sit on cell floor`);
@@ -425,23 +432,51 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
         assert.ok(mats.every(m => m.opacity !== 0), `${thinType} still has invisible opacity=0 side material`);
     }
 
-    // Verify auxMeshMap instances for curved rail, sloped rail, active powered rail, extended piston+head, lever handle, and depressed plate
+    // Verify auxMeshMap instances for curved rail, sloped rail, active powered rail, curved powered rail, redstone_on, laser_on, saw_blade, extended piston+head, lever handle, and depressed plate
     assert.equal(world.addBlock(0, 10, 0, 'rail_ne', true), true);
     assert.equal(world.addBlock(2, 10, 0, 'rail_asc_n', true), true);
     assert.equal(world.addBlock(4, 10, 0, 'powered_rail_ns_on', true), true);
+    assert.equal(world.addBlock(5, 10, 0, 'powered_rail_ne_on', true), true);
     assert.equal(world.addBlock(6, 10, 0, 'piston_e_extended', true), true);
     assert.equal(world.addBlock(7, 10, 0, 'piston_head_e', true), true);
     assert.equal(world.addBlock(8, 10, 0, 'lever_n_on', true), true);
     assert.equal(world.addBlock(10, 10, 0, 'pressure_plate_pressed', true), true);
+    assert.equal(world.addBlock(12, 10, 0, 'redstone_on', true), true);
+    assert.equal(world.addBlock(14, 10, 0, 'laser_e_on', true), true);
+    assert.equal(world.addBlock(16, 10, 0, 'saw', true), true);
 
     assert.ok(world.auxMeshMap.get('rail_curve').count >= 1);
     assert.ok(world.auxMeshMap.get('rail_slope').count >= 1);
     assert.ok(world.auxMeshMap.get('powered_rail_on').count >= 1);
+    assert.ok(world.auxMeshMap.get('powered_rail_curve_on').count >= 1);
+    assert.ok(world.auxMeshMap.get('redstone_on').count >= 1);
+    assert.ok(world.auxMeshMap.get('laser_on').count >= 1);
+    assert.ok(world.auxMeshMap.get('saw_blade').count >= 1);
     assert.ok(world.auxMeshMap.get('piston_ext_base').count >= 1);
     assert.ok(world.auxMeshMap.get('piston_head_plate').count >= 1);
     assert.ok(world.auxMeshMap.get('piston_head_rod').count >= 1);
     assert.ok(world.auxMeshMap.get('lever_handle_on').count >= 1);
     assert.ok(world.auxMeshMap.get('pressure_plate_depressed').count >= 1);
+
+    const prevSawAngle = world.sawSpinAngle;
+    world.updateAnimatedBlocks(0.05);
+    assert.ok(world.sawSpinAngle > prevSawAngle);
+
+    // Verify FallingBlock entity falls from sky and lands onto flat grass at y = 7
+    const { FallingBlock } = await import('../src/entities/fallingBlock.js');
+    let topologyNotified = null;
+    const fb = new FallingBlock(-10, 12, 10, 'sand', scene, world, {
+        onTopologyChanged(x, y, z) {
+            topologyNotified = [x, y, z];
+        }
+    });
+    let active = true;
+    for (let i = 0; i < 60 && active; i++) {
+        active = fb.update(0.05);
+    }
+    assert.equal(active, false);
+    assert.equal(world.getBlockAt(-10, 7, 10), 'sand');
+    assert.deepEqual(topologyNotified, [-10, 7, 10]);
 });
 
 test('parseBlockState handles rail shapes, slopes, powered rails, 6-dir levers and pistons', () => {
@@ -673,4 +708,104 @@ test('minecart stays on open-end rails, launches from button trigger, and comple
     assert.equal(cycleRailShape(getBlockAt, 0, 7, 0, 'se', true), 'ew');
     assert.equal(cycleRailShape(getBlockAt, 0, 7, 0, 'ew', true), 'sw');
     assert.equal(cycleRailShape(getBlockAt, 0, 7, 0, 'sw', true), 'se');
+});
+
+test('gravity blocks detach when lower support is removed and cascade upward', () => {
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    blocks.set(key(0, 6, 0), 'grass');
+    blocks.set(key(0, 7, 0), 'sand');
+    blocks.set(key(0, 8, 0), 'sand');
+    blocks.set(key(0, 9, 0), 'stone');
+
+    assert.equal(shouldBlockFall(getBlockAt, 0, 7, 0), false);
+    assert.deepEqual(collectUnsupportedGravityBlocks(getBlockAt, 0, 6, 0, 1, 23), []);
+
+    // Remove grass block underneath sand stack
+    blocks.delete(key(0, 6, 0));
+    assert.equal(shouldBlockFall(getBlockAt, 0, 7, 0), true);
+    const falling = collectUnsupportedGravityBlocks(getBlockAt, 0, 6, 0, 1, 23);
+    assert.deepEqual(
+        falling.map(b => [b.x, b.y, b.z, b.type]),
+        [
+            [0, 7, 0, 'sand'],
+            [0, 8, 0, 'sand']
+        ]
+    );
+});
+
+test('rollercoaster rails align to look direction, curve powered rails, propagate power, and bank turns', () => {
+    assert.equal(computeInitialRailShape({ x: 0.9, y: 0, z: 0.2 }), 'ew');
+    assert.equal(computeInitialRailShape({ x: 0.1, y: 0, z: -0.9 }), 'ns');
+
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    // Curved powered rail loop with lever at start propagates around curves
+    blocks.set(key(0, 7, 0), 'powered_rail_se');
+    blocks.set(key(1, 7, 0), 'powered_rail_sw');
+    blocks.set(key(1, 7, 1), 'powered_rail_nw');
+    blocks.set(key(0, 7, 1), 'powered_rail_ne');
+    blocks.set(key(0, 7, -1), 'lever_up_on');
+    assert.equal(isPoweredRailActive(getBlockAt, 1, 7, 1), true);
+
+    // Powered curved rail boosts and banks the minecart cleanly
+    const boosted = stepMinecartOnRail({
+        x: 0.1, y: 6.56, z: 0.4, vx: 0, vz: -6.0, yaw: Math.PI,
+        rail: { x: 0, y: 7, z: 0, base: 'powered_rail', shape: 'se', active: true },
+        isPowered: true, getBlockAt, dt: 0.04
+    });
+    assert.ok(Math.hypot(boosted.vx, boosted.vz) > 6.5);
+    assert.notEqual(boosted.bank, 0);
+
+    // Unpowered curved powered rail applies braking
+    const braked = stepMinecartOnRail({
+        x: 0.1, y: 6.56, z: 0.4, vx: 0, vz: -6.0, yaw: Math.PI,
+        rail: { x: 0, y: 7, z: 0, base: 'powered_rail', shape: 'se', active: false },
+        isPowered: false, getBlockAt, dt: 0.05
+    });
+    assert.ok(Math.hypot(braked.vx, braked.vz) < 5.5);
+});
+
+test('redstone circuits power laser blocks across up to 15 hops and laser beams stop on solid blocks', () => {
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    blocks.set(key(0, 7, 0), 'lever_up_on');
+    for (let x = 1; x <= 6; x++) {
+        blocks.set(key(x, 7 + (x >= 4 ? 1 : 0), 0), 'redstone');
+    }
+    blocks.set(key(7, 8, 0), 'laser_e');
+
+    assert.equal(isRedstoneWireActive(getBlockAt, 6, 8, 0), true);
+    assert.equal(isMechanismPowered(getBlockAt, 7, 8, 0), true);
+
+    // Turning off lever shuts down wire and laser
+    blocks.set(key(0, 7, 0), 'lever_up');
+    assert.equal(isRedstoneWireActive(getBlockAt, 6, 8, 0), false);
+    assert.equal(isMechanismPowered(getBlockAt, 7, 8, 0), false);
+
+    // Laser beam extends through open air/passable blocks and stops at solid block
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'laser_e_on');
+    blocks.set(key(2, 7, 0), 'rail_ew');
+    blocks.set(key(4, 7, 0), 'stone');
+    const beam = computeLaserBeam(getBlockAt, 0, 7, 0, 'e', 20);
+    assert.equal(beam.length, 3);
+    assert.deepEqual(beam.hitBlock, { x: 4, y: 7, z: 0, type: 'stone' });
+    assert.equal(isEntityInLaserBeam(2, 6.6, 0, 0.3, 1.8, beam), true);
+    assert.equal(isEntityInLaserBeam(5, 6.6, 0, 0.3, 1.8, beam), false);
+});
+
+test('spinning saw detects entity contact on top and sides', () => {
+    const blocks = new Map([['3,7,3', 'saw']]);
+    const getBlockAt = (x, y, z) => blocks.get(`${x},${y},${z}`) || null;
+
+    assert.equal(isEntityTouchingSaw(getBlockAt, 3, 7.5, 3, 0.3, 1.8), true);
+    assert.equal(isEntityTouchingSaw(getBlockAt, 3.6, 7.0, 3, 0.3, 1.8), true);
+    assert.equal(isEntityTouchingSaw(getBlockAt, 5, 7.5, 3, 0.3, 1.8), false);
 });

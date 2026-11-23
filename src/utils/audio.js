@@ -289,6 +289,47 @@ class SoundManager {
         osc.stop(now + 0.17);
         this.playNoise(0.11, extending ? 620 : 420, 0.16);
     }
+
+    playLaserSound(turnOn = true) {
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(turnOn ? 320 : 720, now);
+        osc.frequency.exponentialRampToValueAtTime(turnOn ? 920 : 180, now + 0.16);
+
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.19);
+    }
+
+    playSawHitSound() {
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(480, now);
+        osc.frequency.linearRampToValueAtTime(210, now + 0.1);
+
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+        this.playNoise(0.08, 1200, 0.14);
+    }
 }
 
 export const sounds = new SoundManager();

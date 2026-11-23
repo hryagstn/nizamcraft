@@ -1933,6 +1933,7 @@ export class Minecart extends Mob {
         this.riderInput = null;
         this.cartYaw = 0;
         this.cartPitch = 0;
+        this.cartBank = 0;
     }
 
     initMesh() {
@@ -2001,8 +2002,8 @@ export class Minecart extends Mob {
         this.velocity.x += vx;
         this.velocity.z += vz;
         const horizSpeed = Math.hypot(this.velocity.x, this.velocity.z);
-        if (horizSpeed > 12.0) {
-            const scale = 12.0 / horizSpeed;
+        if (horizSpeed > 16.0) {
+            const scale = 16.0 / horizSpeed;
             this.velocity.x *= scale;
             this.velocity.z *= scale;
         }
@@ -2074,6 +2075,7 @@ export class Minecart extends Mob {
             this.velocity.set(step.vx, 0, step.vz);
             this.cartYaw = step.yaw;
             this.cartPitch = THREE.MathUtils.lerp(this.cartPitch, step.pitch || 0, 0.35);
+            this.cartBank = THREE.MathUtils.lerp(this.cartBank, step.bank || 0, 0.25);
             this.isGrounded = true;
             if (step.bounced) {
                 sounds.playClickSound();
@@ -2115,6 +2117,7 @@ export class Minecart extends Mob {
 
             this.position.copy(nextPos);
             this.cartPitch = THREE.MathUtils.lerp(this.cartPitch, 0, 0.25);
+            this.cartBank = THREE.MathUtils.lerp(this.cartBank, 0, 0.25);
         }
 
         this.riderInput = null;
@@ -2122,6 +2125,7 @@ export class Minecart extends Mob {
         this.mesh.rotation.y = this.cartYaw;
         if (this.bodyGroup) {
             this.bodyGroup.rotation.x = this.cartPitch;
+            this.bodyGroup.rotation.z = this.cartBank;
         }
         if (this.wheels && this.wheels.length > 0) {
             const horizSpeed = Math.hypot(this.velocity.x, this.velocity.z);

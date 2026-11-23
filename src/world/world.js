@@ -78,7 +78,10 @@ export const BLOCK_TYPES = {
     bookshelf: { id: 33, name: 'Bookshelf', color: 0x9c6b3b },
     lapis_ore: { id: 34, name: 'Lapis Ore', color: 0x2563eb },
     powered_rail: { id: 35, name: 'Powered Rail', color: 0xeab308 },
-    piston_head: { id: 36, name: 'Piston Head', color: 0xa06a42 }
+    piston_head: { id: 36, name: 'Piston Head', color: 0xa06a42 },
+    redstone: { id: 37, name: 'Redstone', color: 0xdc2626 },
+    laser: { id: 38, name: 'Laser', color: 0xef4444 },
+    saw: { id: 39, name: 'Saw', color: 0x94a3b8 }
 };
 
 const TRANSPARENT_BASE_TYPES = new Set([
@@ -86,6 +89,8 @@ const TRANSPARENT_BASE_TYPES = new Set([
     'leaf',
     'rail',
     'powered_rail',
+    'redstone',
+    'saw',
     'pressure_plate',
     'button',
     'lever',
@@ -116,12 +121,17 @@ export class World {
             'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz',
             'sand', 'farmland', 'lucky', 'magma', 'crop', 'coal_ore',
             'iron_ore', 'gold_ore', 'lapis_ore', 'bookshelf', 'chest', 'crafting',
-            'enchanting_table', 'piston', 'rail', 'powered_rail', 'pressure_plate',
-            'button', 'lever', 'dispenser'
+            'enchanting_table', 'piston', 'rail', 'powered_rail', 'redstone',
+            'laser', 'saw', 'pressure_plate', 'button', 'lever', 'dispenser'
         ];
 
         this.highlightBox = null;
         this.liquidTimer = 0;
+        this.sawPositions = [];
+        this.sawSpinAngle = 0;
+        this._sawQuat = new THREE.Quaternion();
+        this._sawPos = new THREE.Vector3();
+        this._sawMatrix = new THREE.Matrix4();
 
         // Shared particle geometries to prevent GPU geometry leaks
         this.particleGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
@@ -280,10 +290,70 @@ export class World {
 
         const dispenserFrontMat = new THREE.MeshLambertMaterial({ map: textures.dispenserFront });
 
+        const poweredRailCurveOffMat = new THREE.MeshLambertMaterial({
+            map: textures.poweredRailCurveOff,
+            transparent: true,
+            alphaTest: 0.15,
+            side: THREE.DoubleSide
+        });
+        const poweredRailCurveOnMat = new THREE.MeshLambertMaterial({
+            map: textures.poweredRailCurveOn,
+            transparent: true,
+            alphaTest: 0.15,
+            emissive: new THREE.Color(0x991b1b),
+            emissiveIntensity: 0.55,
+            side: THREE.DoubleSide
+        });
+
+        const redstoneSideMat = new THREE.MeshLambertMaterial({ color: 0x581111 });
+        const redstoneSideOnMat = new THREE.MeshLambertMaterial({
+            color: 0xdc2626,
+            emissive: new THREE.Color(0x991b1b),
+            emissiveIntensity: 0.6
+        });
+        const redstoneOffMat = new THREE.MeshLambertMaterial({
+            map: textures.redstoneOff,
+            transparent: true,
+            alphaTest: 0.15,
+            side: THREE.DoubleSide
+        });
+        const redstoneOnMat = new THREE.MeshLambertMaterial({
+            map: textures.redstoneOn,
+            transparent: true,
+            alphaTest: 0.15,
+            emissive: new THREE.Color(0xdc2626),
+            emissiveIntensity: 0.75,
+            side: THREE.DoubleSide
+        });
+
+        const laserSideMat = new THREE.MeshLambertMaterial({ map: textures.laserSide });
+        const laserFrontOffMat = new THREE.MeshLambertMaterial({ map: textures.laserFrontOff });
+        const laserFrontOnMat = new THREE.MeshLambertMaterial({
+            map: textures.laserFrontOn,
+            emissive: new THREE.Color(0xef4444),
+            emissiveIntensity: 0.9
+        });
+
+        const sawSideMat = new THREE.MeshLambertMaterial({ map: textures.sawSide });
+        const sawTopMat = new THREE.MeshLambertMaterial({ map: textures.sawTop });
+        const sawBladeEdgeMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+        const sawBladeMat = new THREE.MeshLambertMaterial({
+            map: textures.sawBlade,
+            transparent: true,
+            alphaTest: 0.15,
+            side: THREE.DoubleSide
+        });
+
         const geometry = new THREE.BoxGeometry(1, 1, 1);
         const railGeo = new THREE.BoxGeometry(1, 0.06, 1);
         railGeo.translate(0, -0.47, 0);
         const railSlopeGeo = new THREE.BoxGeometry(1, 0.06, Math.SQRT2);
+        const redstoneGeo = new THREE.BoxGeometry(0.92, 0.04, 0.92);
+        redstoneGeo.translate(0, -0.48, 0);
+        const sawBaseGeo = new THREE.BoxGeometry(1, 0.56, 1);
+        sawBaseGeo.translate(0, -0.22, 0);
+        const sawBladeGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.06, 16);
+        sawBladeGeo.rotateZ(Math.PI / 2);
         const plateGeo = new THREE.BoxGeometry(0.88, 0.08, 0.88);
         plateGeo.translate(0, -0.46, 0);
         const plateDepressedGeo = new THREE.BoxGeometry(0.88, 0.03, 0.88);
@@ -310,6 +380,8 @@ export class World {
         const geometryConfigs = {
             rail: railGeo,
             powered_rail: railGeo,
+            redstone: redstoneGeo,
+            saw: sawBaseGeo,
             pressure_plate: plateGeo,
             button: buttonGeo,
             lever: leverGeo
@@ -347,6 +419,9 @@ export class World {
             piston: 2000,
             rail: 5000,
             powered_rail: 2000,
+            redstone: 4000,
+            laser: 1000,
+            saw: 1000,
             pressure_plate: 2000,
             button: 2000,
             lever: 2000,
@@ -385,6 +460,9 @@ export class World {
             piston: [pistonSideMat, pistonSideMat, pistonTopMat, stoneMat, pistonSideMat, pistonSideMat],
             rail: [woodSideMat, woodSideMat, railTopMat, railTopMat, woodSideMat, woodSideMat],
             powered_rail: [woodSideMat, woodSideMat, poweredRailOffMat, poweredRailOffMat, woodSideMat, woodSideMat],
+            redstone: [redstoneSideMat, redstoneSideMat, redstoneOffMat, redstoneSideMat, redstoneSideMat, redstoneSideMat],
+            laser: [laserSideMat, laserSideMat, laserFrontOffMat, laserSideMat, laserSideMat, laserSideMat],
+            saw: [sawSideMat, sawSideMat, sawTopMat, stoneMat, sawSideMat, sawSideMat],
             pressure_plate: [woodSideMat, woodSideMat, pressurePlateTopMat, woodTopMat, woodSideMat, woodSideMat],
             button: [stoneMat, stoneMat, buttonTopMat, stoneMat, stoneMat, stoneMat],
             lever: [stoneMat, stoneMat, leverTopMat, stoneMat, stoneMat, stoneMat],
@@ -409,8 +487,13 @@ export class World {
             ['rail_curve', railGeo, [woodSideMat, woodSideMat, railCornerMat, railCornerMat, woodSideMat, woodSideMat], 2500],
             ['rail_slope', railSlopeGeo, [woodSideMat, woodSideMat, railTopMat, railTopMat, woodSideMat, woodSideMat], 2000],
             ['powered_rail_on', railGeo, [woodSideMat, woodSideMat, poweredRailOnMat, poweredRailOnMat, woodSideMat, woodSideMat], 2000],
+            ['powered_rail_curve_off', railGeo, [woodSideMat, woodSideMat, poweredRailCurveOffMat, poweredRailCurveOffMat, woodSideMat, woodSideMat], 1000],
+            ['powered_rail_curve_on', railGeo, [woodSideMat, woodSideMat, poweredRailCurveOnMat, poweredRailCurveOnMat, woodSideMat, woodSideMat], 1000],
             ['powered_rail_slope_off', railSlopeGeo, [woodSideMat, woodSideMat, poweredRailOffMat, poweredRailOffMat, woodSideMat, woodSideMat], 1000],
             ['powered_rail_slope_on', railSlopeGeo, [woodSideMat, woodSideMat, poweredRailOnMat, poweredRailOnMat, woodSideMat, woodSideMat], 1000],
+            ['redstone_on', redstoneGeo, [redstoneSideOnMat, redstoneSideOnMat, redstoneOnMat, redstoneSideOnMat, redstoneSideOnMat, redstoneSideOnMat], 4000],
+            ['laser_on', geometry, [laserSideMat, laserSideMat, laserFrontOnMat, laserSideMat, laserSideMat, laserSideMat], 1000],
+            ['saw_blade', sawBladeGeo, [sawBladeEdgeMat, sawBladeMat, sawBladeMat], 1000],
             ['piston_ext_base', pistonExtBaseGeo, [pistonSideMat, pistonSideMat, stoneMat, stoneMat, pistonSideMat, pistonSideMat], 2000],
             ['piston_head_plate', pistonHeadPlateGeo, [woodSideMat, woodSideMat, pistonExtTopMat, pistonTopMat, woodSideMat, woodSideMat], 2000],
             ['piston_head_rod', pistonHeadRodGeo, woodSideMat, 2000],
@@ -548,6 +631,8 @@ export class World {
         const matrix = new THREE.Matrix4();
         const posVec = new THREE.Vector3();
         const identityQuat = FACING_QUATS.up;
+        this.sawPositions.length = 0;
+        const sawQuat = this._sawQuat.setFromAxisAngle(AXIS_X, this.sawSpinAngle);
 
         const pushToMap = (meshMap, countMap, key, px, py, pz, quat = identityQuat) => {
             const mesh = meshMap.get(key);
@@ -584,11 +669,31 @@ export class World {
                                 if (parsed.shape.startsWith('asc_')) {
                                     const slopeKey = parsed.active ? 'powered_rail_slope_on' : 'powered_rail_slope_off';
                                     pushToMap(this.auxMeshMap, auxCounts, slopeKey, worldX, y, worldZ, RAIL_SLOPE_QUATS[parsed.shape] || RAIL_SLOPE_QUATS.asc_n);
+                                } else if (parsed.shape !== 'ns' && parsed.shape !== 'ew') {
+                                    const curveKey = parsed.active ? 'powered_rail_curve_on' : 'powered_rail_curve_off';
+                                    pushToMap(this.auxMeshMap, auxCounts, curveKey, worldX, y, worldZ, RAIL_Y_QUATS[parsed.shape] || identityQuat);
                                 } else if (parsed.active) {
                                     pushToMap(this.auxMeshMap, auxCounts, 'powered_rail_on', worldX, y, worldZ, RAIL_Y_QUATS[parsed.shape] || identityQuat);
                                 } else {
                                     pushToMap(this.instancedMeshMap, counts, 'powered_rail', worldX, y, worldZ, RAIL_Y_QUATS[parsed.shape] || identityQuat);
                                 }
+                            } else if (baseType === 'redstone') {
+                                if (parsed.active) {
+                                    pushToMap(this.auxMeshMap, auxCounts, 'redstone_on', worldX, y, worldZ, identityQuat);
+                                } else {
+                                    pushToMap(this.instancedMeshMap, counts, 'redstone', worldX, y, worldZ, identityQuat);
+                                }
+                            } else if (baseType === 'laser') {
+                                const q = FACING_QUATS[parsed.facing] || identityQuat;
+                                if (parsed.active) {
+                                    pushToMap(this.auxMeshMap, auxCounts, 'laser_on', worldX, y, worldZ, q);
+                                } else {
+                                    pushToMap(this.instancedMeshMap, counts, 'laser', worldX, y, worldZ, q);
+                                }
+                            } else if (baseType === 'saw') {
+                                pushToMap(this.instancedMeshMap, counts, 'saw', worldX, y, worldZ, identityQuat);
+                                this.sawPositions.push({ x: worldX, y, z: worldZ });
+                                pushToMap(this.auxMeshMap, auxCounts, 'saw_blade', worldX, y + 0.08, worldZ, sawQuat);
                             } else if (baseType === 'piston') {
                                 const q = FACING_QUATS[parsed.facing] || identityQuat;
                                 if (parsed.extended) {
@@ -636,6 +741,24 @@ export class World {
 
         finalizeMeshGroup(this.instancedMeshMap, counts);
         finalizeMeshGroup(this.auxMeshMap, auxCounts);
+    }
+
+    updateAnimatedBlocks(dt) {
+        if (this.sawPositions.length === 0) return;
+        const bladeMesh = this.auxMeshMap.get('saw_blade');
+        if (!bladeMesh) return;
+
+        this.sawSpinAngle = (this.sawSpinAngle + dt * 10.0) % (Math.PI * 2);
+        this._sawQuat.setFromAxisAngle(AXIS_X, this.sawSpinAngle);
+        const count = Math.min(this.sawPositions.length, bladeMesh.maxInstances);
+        for (let i = 0; i < count; i++) {
+            const s = this.sawPositions[i];
+            this._sawPos.set(s.x, s.y + 0.08, s.z);
+            this._sawMatrix.compose(this._sawPos, this._sawQuat, UNIT_SCALE);
+            bladeMesh.setMatrixAt(i, this._sawMatrix);
+        }
+        bladeMesh.count = count;
+        bladeMesh.instanceMatrix.needsUpdate = true;
     }
 
     /**

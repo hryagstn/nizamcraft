@@ -928,6 +928,50 @@ function drawPoweredRail(ctx, isActive) {
 textures.poweredRailOff = createPixelTexture((ctx) => drawPoweredRail(ctx, false));
 textures.poweredRailOn = createPixelTexture((ctx) => drawPoweredRail(ctx, true));
 
+function drawPoweredRailCurve(ctx, isActive) {
+    ctx.clearRect(0, 0, 16, 16);
+
+    // Diagonal wood sleepers
+    ctx.fillStyle = '#5c3d24';
+    ctx.fillRect(1, 2, 13, 2);
+    ctx.fillRect(3, 6, 12, 2);
+    ctx.fillRect(6, 10, 9, 2);
+    ctx.fillRect(10, 13, 5, 2);
+
+    // Center redstone strip along corner
+    ctx.fillStyle = isActive ? '#dc2626' : '#4c1d1d';
+    ctx.fillRect(7, 0, 2, 7);
+    ctx.fillRect(8, 7, 8, 2);
+    ctx.fillStyle = isActive ? '#fca5a5' : '#7f1d1d';
+    ctx.fillRect(7, 1, 1, 5);
+    ctx.fillRect(9, 7, 6, 1);
+
+    // Inner gold rail curve
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(12, 0, 4, 4);
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(13, 0, 3, 2);
+    ctx.clearRect(14, 0, 2, 2);
+
+    // Outer gold rail curve
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(2, 0, 2, 6);
+    ctx.fillRect(3, 5, 2, 4);
+    ctx.fillRect(4, 8, 3, 3);
+    ctx.fillRect(6, 10, 4, 3);
+    ctx.fillRect(9, 12, 7, 2);
+
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(3, 0, 1, 5);
+    ctx.fillRect(4, 5, 1, 3);
+    ctx.fillRect(5, 8, 2, 2);
+    ctx.fillRect(7, 10, 3, 2);
+    ctx.fillRect(10, 12, 6, 1);
+}
+
+textures.poweredRailCurveOff = createPixelTexture((ctx) => drawPoweredRailCurve(ctx, false));
+textures.poweredRailCurveOn = createPixelTexture((ctx) => drawPoweredRailCurve(ctx, true));
+
 // 36. Pressure Plate Top
 textures.pressurePlateTop = createPixelTexture((ctx) => {
     ctx.fillStyle = '#8c5b36'; // Oak wood plate
@@ -1140,6 +1184,105 @@ textures.lapisOre = createPixelTexture((ctx) => {
     });
 });
 
+// 45. Redstone Wire (Off & On)
+function drawRedstoneWire(ctx, isActive) {
+    ctx.clearRect(0, 0, 16, 16);
+    ctx.fillStyle = isActive ? '#dc2626' : '#581111';
+    ctx.fillRect(6, 0, 4, 16);
+    ctx.fillRect(0, 6, 16, 4);
+    ctx.fillRect(5, 5, 6, 6);
+    ctx.fillStyle = isActive ? '#f87171' : '#7f1d1d';
+    ctx.fillRect(7, 0, 2, 16);
+    ctx.fillRect(0, 7, 16, 2);
+    if (isActive) {
+        ctx.fillStyle = '#fecaca';
+        ctx.fillRect(7, 7, 2, 2);
+    }
+}
+
+textures.redstoneOff = createPixelTexture((ctx) => drawRedstoneWire(ctx, false));
+textures.redstoneOn = createPixelTexture((ctx) => drawRedstoneWire(ctx, true));
+
+// 46. Laser Emitter Textures (Side + Front Off/On)
+textures.laserSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#27272a';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#3f3f46';
+    ctx.strokeRect(1, 1, 14, 14);
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(2, 2, 12, 12);
+    ctx.fillStyle = '#991b1b';
+    ctx.fillRect(2, 7, 12, 2);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(6, 6, 4, 4);
+});
+
+function drawLaserFront(ctx, isActive) {
+    ctx.fillStyle = '#27272a';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#52525b';
+    ctx.strokeRect(1, 1, 14, 14);
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(3, 3, 10, 10);
+    ctx.fillStyle = isActive ? '#ef4444' : '#450a0a';
+    ctx.fillRect(4, 4, 8, 8);
+    ctx.fillStyle = isActive ? '#fca5a5' : '#7f1d1d';
+    ctx.fillRect(5, 5, 6, 6);
+    if (isActive) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(6, 6, 4, 4);
+    }
+}
+
+textures.laserFrontOff = createPixelTexture((ctx) => drawLaserFront(ctx, false));
+textures.laserFrontOn = createPixelTexture((ctx) => drawLaserFront(ctx, true));
+
+// 47. Spinning Saw Block Textures (Side, Top, Circular Blade)
+textures.sawSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#4b5563';
+    ctx.fillRect(0, 10, 16, 6);
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(0, 0, 16, 3);
+    ctx.fillStyle = '#374151';
+    ctx.fillRect(5, 4, 6, 6);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(7, 6, 2, 2);
+});
+
+textures.sawTop = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#6b7280';
+    ctx.strokeRect(1, 1, 14, 14);
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(7, 2, 2, 12);
+});
+
+textures.sawBlade = createPixelTexture((ctx) => {
+    ctx.clearRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const dx = x - 7.5;
+            const dy = y - 7.5;
+            const r = Math.hypot(dx, dy);
+            if (r > 7.4) continue;
+            const angle = Math.atan2(dy, dx);
+            const tooth = Math.sin(angle * 8) > 0.25;
+            if (r > 5.8 && !tooth) continue;
+            if (r <= 2.1) {
+                ctx.fillStyle = '#dc2626';
+            } else if (r > 5.6) {
+                ctx.fillStyle = '#f8fafc';
+            } else {
+                ctx.fillStyle = ((x + y) % 2 === 0) ? '#cbd5e1' : '#94a3b8';
+            }
+            ctx.fillRect(x, y, 1, 1);
+        }
+    }
+});
+
 const BLOCK_TEXTURE_KEY = {
     grass: 'grassSide',
     dirt: 'dirt',
@@ -1172,6 +1315,9 @@ const BLOCK_TEXTURE_KEY = {
     piston: 'pistonSide',
     rail: 'railTop',
     powered_rail: 'poweredRailOn',
+    redstone: 'redstoneOn',
+    laser: 'laserFrontOn',
+    saw: 'sawBlade',
     pressure_plate: 'pressurePlateTop',
     button: 'buttonTop',
     lever: 'leverTop',

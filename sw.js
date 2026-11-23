@@ -11,6 +11,7 @@ const LOCAL_ASSETS = [
     '/src/player/player.js',
     '/src/entities/mob.js',
     '/src/entities/tnt.js',
+    '/src/entities/fallingBlock.js',
     '/src/utils/audio.js',
     '/src/utils/noise.js',
     '/src/utils/textures.js',

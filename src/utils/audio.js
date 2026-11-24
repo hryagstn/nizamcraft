@@ -330,6 +330,30 @@ class SoundManager {
         osc.stop(now + 0.12);
         this.playNoise(0.08, 1200, 0.14);
     }
+
+    playMonsterRoarSound(variant = 'train') {
+        this.init();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const freqs = variant === 'sea' ? [72, 98] : [138, 185];
+        freqs.forEach((baseFreq) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = variant === 'sea' ? 'triangle' : 'sawtooth';
+            osc.frequency.setValueAtTime(baseFreq, now);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.72, now + 0.38);
+
+            gain.gain.setValueAtTime(0.16, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.42);
+        });
+        this.playNoise(0.22, variant === 'sea' ? 240 : 420, 0.14);
+    }
 }
 
 export const sounds = new SoundManager();

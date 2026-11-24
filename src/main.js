@@ -5,7 +5,8 @@ import { World } from './world/world.js';
 import { Player, isAnyOverlayOpen, flashScreen } from './player/player.js';
 import {
     Zombie, Creeper, Skeleton, Arrow, IronGolem, SnowGolem,
-    Chicken, Pig, Cow, BloodGolem, GiantIronGolem, WitherSkeleton, Minecart
+    Chicken, Pig, Cow, BloodGolem, GiantIronGolem, WitherSkeleton, Minecart,
+    TrainEater, SeaEater
 } from './entities/mob.js';
 import { PrimedTNT } from './entities/tnt.js';
 import { FallingBlock } from './entities/fallingBlock.js';
@@ -15,6 +16,9 @@ import {
     normalizeBlockType,
     parseBlockState,
     DIRECTION_VECTORS,
+    LASER_FACING_ORDER,
+    SEA_BEACH_START_Z,
+    SEA_START_Z,
     isSolidBlock,
     entityOverlapsBlock,
     collectUnsupportedGravityBlocks,
@@ -28,6 +32,7 @@ import {
     isRedstoneWireActive,
     isMechanismPowered,
     isPoweredRailActive,
+    computeLaserFacing,
     computeLaserBeam,
     isEntityInLaserBeam,
     isEntityTouchingSaw,
@@ -91,7 +96,12 @@ const game = {
     },
     onMobDefeated(mobType) {
         const lootingLevel = getMeleeStats(getActiveHeldItem()).lootingLevel || 0;
-        if (mobType === 'bloodgolem' || mobType === 'witherskeleton') {
+        if (
+            mobType === 'bloodgolem' ||
+            mobType === 'witherskeleton' ||
+            mobType === 'traineater' ||
+            mobType === 'seaeater'
+        ) {
             const bossPool = ['sharpness', 'protection', 'power', 'fire_aspect', 'fortune'];
             const pick = bossPool[Math.floor(Math.random() * bossPool.length)];
             const lvl = Math.min(ENCHANTMENTS[pick].maxLevel, 2);
@@ -99,11 +109,18 @@ const game = {
                 enchants: { [pick]: lvl },
                 enchant: { id: pick, level: lvl }
             });
-            addItemToInventory('diamond', 2 + lootingLevel);
-            grantPlayerXp(35);
+            const isApex = mobType === 'traineater' || mobType === 'seaeater';
+            addItemToInventory('diamond', (isApex ? 3 : 2) + lootingLevel);
+            if (mobType === 'traineater') {
+                addItemToInventory('iron_ingot', 4 + lootingLevel);
+            } else if (mobType === 'seaeater') {
+                addItemToInventory('emerald', 2 + lootingLevel);
+            }
+            const xpReward = mobType === 'seaeater' ? 50 : (mobType === 'traineater' ? 45 : 35);
+            grantPlayerXp(xpReward);
             sounds.playEnchantSound();
             this.showNotification(
-                `${mobType.toUpperCase()} tumbang. Dapat Buku Enchant (${ENCHANTMENTS[pick].name} ${ROMAN_NUMERALS[lvl]}), Berlian, dan +35 XP.`
+                `${mobType.toUpperCase()} tumbang. Dapat Buku Enchant (${ENCHANTMENTS[pick].name} ${ROMAN_NUMERALS[lvl]}), Berlian, dan +${xpReward} XP.`
             );
         } else if (mobType === 'zombie' || mobType === 'skeleton' || mobType === 'creeper') {
             grantPlayerXp(12);
@@ -912,7 +929,11 @@ function triggerLuckyEvent(x, y, z) {
             const dx = Math.floor((Math.random() - 0.5) * 4);
             const dz = Math.floor((Math.random() - 0.5) * 4);
             const dy = 2 + Math.floor(Math.random() * 3);
-            world.addBlock(x + dx, y + dy, z + dz, bTypes[Math.floor(Math.random() * bTypes.length)]);
+            const rx = x + dx;
+            const ry = y + dy;
+            const rz = z + dz;
+            world.addBlock(rx, ry, rz, bTypes[Math.floor(Math.random() * bTypes.length)]);
+            onWorldTopologyChanged(rx, ry, rz);
         }
     } else if (choice === 'heal') {
         player.health = player.maxHealth;
@@ -1014,6 +1035,7 @@ function handleBlockDig(targetPos) {
             const hz = tz + dir.z;
             if (normalizeBlockType(world.getBlockAt(hx, hy, hz)) === 'piston_head') {
                 world.removeBlock(hx, hy, hz, true);
+                onWorldTopologyChanged(hx, hy, hz);
             }
         }
     }
@@ -1116,6 +1138,20 @@ function handleGolemSpawn(type, x, y, z) {
         game.showNotification('Snow Golem dipanggil.');
         return true;
     }
+    if (type === 'spawn_traineater') {
+        game.mobs.push(new TrainEater(x, y + 0.5, z, scene, world, game));
+        sounds.playMonsterRoarSound('train');
+        world.spawnCropParticles(x, y + 0.5, z, 0xdc2626);
+        game.showNotification('Train Eater dipanggil!');
+        return true;
+    }
+    if (type === 'spawn_seaeater') {
+        game.mobs.push(new SeaEater(x, y + 0.5, z, scene, world, game));
+        sounds.playMonsterRoarSound('sea');
+        world.spawnCropParticles(x, y + 0.5, z, 0x22d3ee);
+        game.showNotification('Sea Eater dipanggil!');
+        return true;
+    }
     return false;
 }
 
@@ -1196,6 +1232,7 @@ function handleSecondaryAction() {
     if (targetedBase === 'tnt') {
         world.removeBlock(targetPos.x, targetPos.y, targetPos.z, true);
         game.tnts.push(new PrimedTNT(targetPos.x, targetPos.y, targetPos.z, scene, world, game));
+        onWorldTopologyChanged(targetPos.x, targetPos.y, targetPos.z);
         return;
     }
 
@@ -1214,9 +1251,8 @@ function handleSecondaryAction() {
         blockToPlace !== 'redstone'
     ) {
         const parsedLaser = parseBlockState(targetedBlockType);
-        const order = ['n', 'e', 's', 'w', 'up', 'down'];
-        const curIdx = order.indexOf(parsedLaser.facing || 'e');
-        const nextFacing = order[(curIdx + 1) % order.length];
+        const curIdx = LASER_FACING_ORDER.indexOf(parsedLaser.facing || 'e');
+        const nextFacing = LASER_FACING_ORDER[(curIdx + 1) % LASER_FACING_ORDER.length];
         const nextState = `laser_${nextFacing}${parsedLaser.active ? '_on' : ''}`;
         world.addBlock(targetPos.x, targetPos.y, targetPos.z, nextState, true);
         refreshRedstoneAround(targetPos.x, targetPos.y, targetPos.z);
@@ -1306,7 +1342,12 @@ function handleSecondaryAction() {
         return;
     }
 
-    if (blockToPlace === 'spawn_irongolem' || blockToPlace === 'spawn_snowgolem') {
+    if (
+        blockToPlace === 'spawn_irongolem' ||
+        blockToPlace === 'spawn_snowgolem' ||
+        blockToPlace === 'spawn_traineater' ||
+        blockToPlace === 'spawn_seaeater'
+    ) {
         handleGolemSpawn(blockToPlace, buildX, buildY, buildZ);
         return;
     }
@@ -1341,10 +1382,14 @@ function handleSecondaryAction() {
         }
         const attachFace = facingFromNormal(normal);
         finalBlockState = `${blockToPlace}_${attachFace}`;
-    } else if (blockToPlace === 'piston' || blockToPlace === 'laser') {
+    } else if (blockToPlace === 'piston') {
         player.camera.getWorldDirection(lookDirVec);
         const facing = computePistonFacing(lookDirVec);
-        finalBlockState = `${blockToPlace}_${facing}`;
+        finalBlockState = `piston_${facing}`;
+    } else if (blockToPlace === 'laser') {
+        player.camera.getWorldDirection(lookDirVec);
+        const facing = computeLaserFacing(lookDirVec);
+        finalBlockState = `laser_${facing}`;
     }
 
     world.addBlock(buildX, buildY, buildZ, finalBlockState);
@@ -1505,8 +1550,26 @@ mobileAuxBtn?.addEventListener('touchstart', (e) => {
 // ==========================================
 
 function spawnMob(type) {
-    const x = Math.floor((Math.random() - 0.5) * (world.width - 8));
-    const z = Math.floor((Math.random() - 0.5) * (world.depth - 8));
+    if (type === 'seaeater') {
+        const x = Math.floor((Math.random() - 0.5) * (world.width - 12));
+        const minSeaZ = SEA_START_Z + 3;
+        const maxSeaZ = Math.floor(world.depth / 2) - 5;
+        const z = minSeaZ + Math.floor(Math.random() * Math.max(1, maxSeaZ - minSeaZ + 1));
+        game.mobs.push(new SeaEater(x, 4.5, z, scene, world, game));
+        return;
+    }
+
+    const minLandZ = Math.ceil(-world.depth / 2) + 4;
+    const maxLandZ = SEA_BEACH_START_Z - 2;
+    let x = Math.floor((Math.random() - 0.5) * (world.width - 10));
+    let z = minLandZ + Math.floor(Math.random() * Math.max(1, maxLandZ - minLandZ + 1));
+
+    if (type === 'traineater') {
+        for (let attempt = 0; attempt < 10 && Math.hypot(x, z) < 16; attempt++) {
+            x = Math.floor((Math.random() - 0.5) * (world.width - 12));
+            z = minLandZ + Math.floor(Math.random() * Math.max(1, maxLandZ - minLandZ + 1));
+        }
+    }
 
     let y = world.height - 1;
     while (y > 0) {
@@ -1529,6 +1592,7 @@ function spawnMob(type) {
         else if (type === 'bloodgolem') mobInstance = new BloodGolem(x, sy, z, scene, world, game);
         else if (type === 'giantirongolem') mobInstance = new GiantIronGolem(x, sy, z, scene, world, game);
         else if (type === 'witherskeleton') mobInstance = new WitherSkeleton(x, sy, z, scene, world, game);
+        else if (type === 'traineater') mobInstance = new TrainEater(x, sy, z, scene, world, game);
 
         if (mobInstance) game.mobs.push(mobInstance);
     }
@@ -1543,18 +1607,24 @@ function spawnInitialMobs() {
     }
     spawnMob('giantirongolem');
     spawnMob('bloodgolem');
+    spawnMob('traineater');
+    spawnMob('seaeater');
 }
 
 function startMobSpawner() {
     if (mobSpawnIntervalId !== null) return;
     mobSpawnIntervalId = setInterval(() => {
-        if (hasGameStarted && document.body.classList.contains('in-game') && !isGameplayModalOpen() && game.mobs.length < 18) {
+        if (hasGameStarted && document.body.classList.contains('in-game') && !isGameplayModalOpen() && game.mobs.length < 22) {
+            const trainEaters = game.mobs.filter(m => m.type === 'traineater').length;
+            const seaEaters = game.mobs.filter(m => m.type === 'seaeater').length;
             const rand = Math.random();
             if (rand < 0.03) spawnMob('giantirongolem');
-            else if (rand < 0.07) spawnMob('bloodgolem');
-            else if (rand < 0.12) spawnMob('irongolem');
-            else if (rand < 0.17) spawnMob('snowgolem');
-            else if (rand < 0.45) {
+            else if (rand < 0.06 && trainEaters < 1) spawnMob('traineater');
+            else if (rand < 0.09 && seaEaters < 1) spawnMob('seaeater');
+            else if (rand < 0.13) spawnMob('bloodgolem');
+            else if (rand < 0.18) spawnMob('irongolem');
+            else if (rand < 0.23) spawnMob('snowgolem');
+            else if (rand < 0.5) {
                 const animals = ['chicken', 'pig', 'cow'];
                 spawnMob(animals[Math.floor(Math.random() * animals.length)]);
             } else {
@@ -2710,7 +2780,8 @@ function cleanUnsupportedAttachmentsAround(cx, cy, cz, radius = 2) {
                     base === 'redstone' ||
                     base === 'pressure_plate' ||
                     base === 'lever' ||
-                    base === 'button'
+                    base === 'button' ||
+                    base === 'crop'
                 ) {
                     const sup = getAttachedSupportPos(x, y, z, raw);
                     const supRaw = world.getBlockAt(sup.x, sup.y, sup.z);
@@ -2809,6 +2880,11 @@ const laserGlowMat = new THREE.MeshBasicMaterial({
 });
 let activeLaserBeams = [];
 
+const LASER_UP_AXIS = new THREE.Vector3(0, 1, 0);
+const LASER_X_AXIS = new THREE.Vector3(1, 0, 0);
+const laserDirVec = new THREE.Vector3();
+const laserBeamQuat = new THREE.Quaternion();
+
 function syncLaserBeams() {
     while (laserBeamGroup.children.length > 0) {
         const child = laserBeamGroup.children[0];
@@ -2831,27 +2907,28 @@ function syncLaserBeams() {
                 activeLaserBeams.push(beam);
 
                 if (beam.length > 0) {
-                    const len = beam.length;
+                    const len = beam.worldLength ?? beam.length;
+                    const uDir = beam.unitDir || beam.dir;
                     const midOffset = 0.5 + len * 0.5;
-                    const mx = worldX + beam.dir.x * midOffset;
-                    const my = y + beam.dir.y * midOffset;
-                    const mz = worldZ + beam.dir.z * midOffset;
-                    const isX = beam.dir.x !== 0;
-                    const isY = beam.dir.y !== 0;
-                    const coreGeo = new THREE.BoxGeometry(
-                        isX ? len : 0.1,
-                        isY ? len : 0.1,
-                        (!isX && !isY) ? len : 0.1
-                    );
-                    const glowGeo = new THREE.BoxGeometry(
-                        isX ? len : 0.28,
-                        isY ? len : 0.28,
-                        (!isX && !isY) ? len : 0.28
-                    );
+                    const mx = worldX + uDir.x * midOffset;
+                    const my = y + uDir.y * midOffset;
+                    const mz = worldZ + uDir.z * midOffset;
+
+                    if (uDir.y <= -0.999) {
+                        laserBeamQuat.setFromAxisAngle(LASER_X_AXIS, Math.PI);
+                    } else {
+                        laserDirVec.set(uDir.x, uDir.y, uDir.z).normalize();
+                        laserBeamQuat.setFromUnitVectors(LASER_UP_AXIS, laserDirVec);
+                    }
+
+                    const coreGeo = new THREE.BoxGeometry(0.1, len, 0.1);
+                    const glowGeo = new THREE.BoxGeometry(0.28, len, 0.28);
                     const coreMesh = new THREE.Mesh(coreGeo, laserCoreMat);
                     coreMesh.position.set(mx, my, mz);
+                    coreMesh.quaternion.copy(laserBeamQuat);
                     const glowMesh = new THREE.Mesh(glowGeo, laserGlowMat);
                     glowMesh.position.set(mx, my, mz);
+                    glowMesh.quaternion.copy(laserBeamQuat);
                     laserBeamGroup.add(coreMesh, glowMesh);
                 }
             }
@@ -2863,13 +2940,33 @@ function triggerGravityBlocksAround(cx, cy, cz, radius = 1) {
     const unsupported = collectUnsupportedGravityBlocks(world.boundGetBlockAt, cx, cy, cz, radius, world.height - 1);
     if (unsupported.length === 0) return false;
 
+    let detachedLaser = false;
     for (const b of unsupported) {
+        const parsed = parseBlockState(b.type);
+        const coordKey = `${b.x},${b.y},${b.z}`;
+        delete game.blockHits[coordKey];
+
+        let chestData = null;
+        if (parsed.base === 'chest' && game.chests[coordKey]) {
+            chestData = game.chests[coordKey];
+            delete game.chests[coordKey];
+        }
+
+        let fallType = b.type;
+        if (parsed.base === 'laser') {
+            fallType = `laser_${parsed.facing || 'e'}`;
+            if (parsed.active) detachedLaser = true;
+        }
+
         world.removeBlock(b.x, b.y, b.z, true, true);
-        game.fallingBlocks.push(new FallingBlock(b.x, b.y, b.z, b.type, scene, world, game));
+        game.fallingBlocks.push(new FallingBlock(b.x, b.y, b.z, fallType, scene, world, game, chestData));
     }
     world.updateMesh();
     for (const b of unsupported) {
         cleanUnsupportedAttachmentsAround(b.x, b.y, b.z, 1);
+    }
+    if (detachedLaser) {
+        syncLaserBeams();
     }
     return true;
 }
@@ -2975,7 +3072,7 @@ function refreshRedstoneAround(cx, cy, cz) {
                             pushEntitiesInBox(b.x, b.y, b.z, dir);
                             world.removeBlock(b.x, b.y, b.z, true, true);
                             world.addBlock(destX, destY, destZ, b.type, true, true);
-                            pushedCoords.push({ x: destX, y: destY, z: destZ });
+                            pushedCoords.push({ x: b.x, y: b.y, z: b.z }, { x: destX, y: destY, z: destZ });
                         }
                         pushEntitiesInBox(headX, headY, headZ, dir);
                         world.addBlock(headX, headY, headZ, `piston_head_${facing}`, true, true);
@@ -2990,7 +3087,7 @@ function refreshRedstoneAround(cx, cy, cz) {
                         world.removeBlock(headX, headY, headZ, true, true);
                     }
                     world.addBlock(x, y, z, `piston_${facing}`, true, true);
-                    pushedCoords.push({ x: headX, y: headY, z: headZ });
+                    pushedCoords.push({ x, y, z }, { x: headX, y: headY, z: headZ });
                     sounds.playPistonSound(false);
                     dirty = true;
                 }
@@ -3005,6 +3102,7 @@ function refreshRedstoneAround(cx, cy, cz) {
             } else if (base === 'tnt' && powered) {
                 world.removeBlock(x, y, z, true, true);
                 game.tnts.push(new PrimedTNT(x, y, z, scene, world, game));
+                pushedCoords.push({ x, y, z });
                 dirty = true;
             } else if (base === 'laser') {
                 const facing = parsed.facing || 'e';
@@ -3020,6 +3118,7 @@ function refreshRedstoneAround(cx, cy, cz) {
         if (dirty) {
             world.updateMesh();
             for (const pt of pushedCoords) {
+                cleanUnsupportedAttachmentsAround(pt.x, pt.y, pt.z, 1);
                 updateRailNetworkAround(pt.x, pt.y, pt.z, 1);
                 triggerGravityBlocksAround(pt.x, pt.y, pt.z, 1);
             }
@@ -3345,11 +3444,16 @@ function animate() {
         game.mobs[i].update(dt);
     }
 
-    for (let i = game.fallingBlocks.length - 1; i >= 0; i--) {
-        if (!game.fallingBlocks[i].update(dt)) {
-            game.fallingBlocks.splice(i, 1);
+    if (game.fallingBlocks.length > 1) {
+        game.fallingBlocks.sort((a, b) => a.y - b.y);
+    }
+    const remainingFallingBlocks = [];
+    for (const fb of game.fallingBlocks) {
+        if (fb.update(dt)) {
+            remainingFallingBlocks.push(fb);
         }
     }
+    game.fallingBlocks = remainingFallingBlocks;
 
     for (let i = game.tnts.length - 1; i >= 0; i--) {
         if (!game.tnts[i].update(dt)) {

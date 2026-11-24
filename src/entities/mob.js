@@ -3,6 +3,8 @@ import { sounds } from '../utils/audio.js';
 import { PrimedTNT } from './tnt.js';
 import {
     HOSTILE_MOBS,
+    SEA_BEACH_START_Z,
+    SEA_START_Z,
     isSolidBlock,
     findRailAtCartPos,
     stepMinecartOnRail,
@@ -330,7 +332,9 @@ export class Mob {
         } else {
             this.materialsToDispose.forEach(mat => {
                 // Restore base colors
-                if (mat.name === 'headFace') {
+                if (mat.userData?.baseHex !== undefined) {
+                    mat.color.setHex(mat.userData.baseHex);
+                } else if (mat.name === 'headFace') {
                     mat.color.setHex(0xffffff); // uses face texture maps
                 } else if (this.type === 'zombie') {
                     if (mat.name === 'skin') mat.color.setHex(0x147a45);
@@ -1728,7 +1732,7 @@ export class GiantIronGolem extends Mob {
         if (this.game.mobs) {
             for (let i = 0; i < this.game.mobs.length; i++) {
                 const mob = this.game.mobs[i];
-                if (mob !== this && (mob.type === 'zombie' || mob.type === 'skeleton' || mob.type === 'creeper' || mob.type === 'bloodgolem' || mob.type === 'witherskeleton')) {
+                if (mob !== this && HOSTILE_MOBS.has(mob.type)) {
                     const dist = this.position.distanceTo(mob.position);
                     if (dist < minDist) {
                         minDist = dist;
@@ -2159,4 +2163,464 @@ export class Minecart extends Mob {
         this.update(dt);
     }
 }
+
+// 11. TRAIN EATER (Locomotive predator boss on land)
+export class TrainEater extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('traineater', x, y, z, scene, world, game);
+        this.hp = 600;
+        this.maxHp = 600;
+        this.width = 1.5;
+        this.height = 2.3;
+        this.speed = 3.2;
+        this.attackCooldown = 0;
+        this.attackAnimTimer = 0;
+        this.movePhase = 0;
+    }
+
+    initMesh() {
+        const makeMat = (hex, extra = {}) => {
+            const mat = new THREE.MeshLambertMaterial({ color: hex, ...extra });
+            mat.userData.baseHex = hex;
+            this.materialsToDispose.push(mat);
+            return mat;
+        };
+
+        const bodyMat = makeMat(0x2b2d42);
+        const stripeMat = makeMat(0x9b111e);
+        const darkMat = makeMat(0x161a1d);
+        const eyeMat = makeMat(0xfacc15, { emissive: new THREE.Color(0xfacc15), emissiveIntensity: 0.85 });
+        const teethMat = makeMat(0xf8fafc);
+        const mawMat = makeMat(0x7f1d1d);
+        const windowMat = makeMat(0xef4444, { emissive: new THREE.Color(0xdc2626), emissiveIntensity: 0.7 });
+
+        // Main locomotive boiler body
+        const boiler = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.35, 1.8), bodyMat);
+        boiler.position.set(0, 1.15, 0);
+        boiler.castShadow = true;
+        this.mesh.add(boiler);
+
+        const cab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.7, 0.9), stripeMat);
+        cab.position.set(0, 1.3, -0.55);
+        cab.castShadow = true;
+        this.mesh.add(cab);
+
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.16, 1.05), darkMat);
+        roof.position.set(0, 2.2, -0.55);
+        this.mesh.add(roof);
+
+        // Smokestack funnel
+        const stack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.55, 0.36), darkMat);
+        stack.position.set(0, 2.05, 0.48);
+        stack.castShadow = true;
+        this.mesh.add(stack);
+
+        // Side crimson boiler stripes
+        for (const xSign of [-1, 1]) {
+            const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 1.75), stripeMat);
+            stripe.position.set(xSign * 0.68, 1.25, 0.05);
+            this.mesh.add(stripe);
+        }
+
+        // Predator headlight eyes
+        for (const xSign of [-1, 1]) {
+            const eye = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.12), eyeMat);
+            eye.position.set(xSign * 0.36, 1.52, 0.91);
+            this.mesh.add(eye);
+        }
+
+        // Upper teeth & hinged lower maw jaw
+        const mawBack = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.55, 0.25), mawMat);
+        mawBack.position.set(0, 0.92, 0.84);
+        this.mesh.add(mawBack);
+
+        for (let tx = -0.36; tx <= 0.36; tx += 0.24) {
+            const upperTooth = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.2, 0.1), teethMat);
+            upperTooth.position.set(tx, 1.15, 0.96);
+            this.mesh.add(upperTooth);
+        }
+
+        this.jawGroup = new THREE.Group();
+        this.jawGroup.position.set(0, 0.68, 0.85);
+        const lowerJaw = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.22, 0.45), darkMat);
+        lowerJaw.position.set(0, -0.05, 0.14);
+        this.jawGroup.add(lowerJaw);
+        for (let tx = -0.38; tx <= 0.38; tx += 0.25) {
+            const lowerTooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.1), teethMat);
+            lowerTooth.position.set(tx, 0.12, 0.28);
+            this.jawGroup.add(lowerTooth);
+        }
+        this.mesh.add(this.jawGroup);
+
+        // Wheels
+        this.wheels = [];
+        const wheelGeo = new THREE.BoxGeometry(0.16, 0.45, 0.45);
+        for (const xSign of [-1, 1]) {
+            for (const zOff of [-0.55, 0.1, 0.65]) {
+                const wheel = new THREE.Mesh(wheelGeo, darkMat);
+                wheel.position.set(xSign * 0.72, 0.25, zOff);
+                wheel.castShadow = true;
+                this.mesh.add(wheel);
+                this.wheels.push(wheel);
+            }
+        }
+
+        // 2 articulated trailing train carriage segments
+        this.tailSegments = [];
+        for (let i = 0; i < 2; i++) {
+            const seg = new THREE.Group();
+            seg.position.set(0, 0.95, -1.65 - i * 1.2);
+            const car = new THREE.Mesh(new THREE.BoxGeometry(1.05 - i * 0.15, 1.0 - i * 0.1, 1.0), bodyMat);
+            car.castShadow = true;
+            seg.add(car);
+            const win = new THREE.Mesh(new THREE.BoxGeometry(1.08 - i * 0.15, 0.28, 0.55), windowMat);
+            win.position.set(0, 0.12, 0);
+            seg.add(win);
+            this.mesh.add(seg);
+            this.tailSegments.push(seg);
+        }
+    }
+
+    updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        const speedMag = Math.hypot(this.velocity.x, this.velocity.z);
+        this.movePhase += dt * (2.5 + speedMag * 1.8);
+
+        if (this.attackAnimTimer > 0) {
+            this.attackAnimTimer -= dt;
+            const chomp = Math.sin((this.attackAnimTimer / 0.5) * Math.PI);
+            if (this.jawGroup) this.jawGroup.rotation.x = chomp * 0.7;
+        } else if (this.jawGroup) {
+            this.jawGroup.rotation.x = Math.max(0, Math.sin(this.movePhase * 0.5) * 0.14);
+        }
+
+        if (this.wheels) {
+            for (const wheel of this.wheels) {
+                wheel.rotation.x += speedMag * dt * 2.2;
+            }
+        }
+        if (this.tailSegments) {
+            for (let i = 0; i < this.tailSegments.length; i++) {
+                this.tailSegments[i].position.x = Math.sin(this.movePhase - i * 0.9) * 0.16;
+                this.tailSegments[i].rotation.y = Math.cos(this.movePhase - i * 0.9) * 0.12;
+            }
+        }
+
+        let target = null;
+        let minDist = 24.0;
+        const player = this.game?.player;
+        if (player) {
+            const distToPlayer = this.position.distanceTo(player.position);
+            if (distToPlayer < minDist) {
+                minDist = distToPlayer;
+                target = { type: 'player', position: player.position.clone() };
+            }
+        }
+
+        if (this.game?.mobs) {
+            for (let i = 0; i < this.game.mobs.length; i++) {
+                const mob = this.game.mobs[i];
+                if (
+                    mob !== this &&
+                    (mob.type === 'minecart' ||
+                        mob.type === 'irongolem' ||
+                        mob.type === 'giantirongolem' ||
+                        mob.type === 'pig' ||
+                        mob.type === 'cow' ||
+                        mob.type === 'chicken')
+                ) {
+                    const dist = this.position.distanceTo(mob.position);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        target = { type: 'mob', mob, position: mob.position.clone() };
+                    }
+                }
+            }
+        }
+
+        if (target && target.position.z < SEA_START_Z) {
+            const tPos = target.position;
+            const angle = Math.atan2(tPos.x - this.position.x, tPos.z - this.position.z);
+            this.mesh.rotation.y = angle;
+            const currentSpeed = isLiquid ? this.speed * 0.45 : this.speed;
+            this.velocity.x = Math.sin(angle) * currentSpeed;
+            this.velocity.z = Math.cos(angle) * currentSpeed;
+
+            const dist = this.position.distanceTo(tPos);
+            if (dist < 2.6 && this.attackCooldown <= 0) {
+                this.attackCooldown = 1.1;
+                this.attackAnimTimer = 0.5;
+                sounds.playMonsterRoarSound('train');
+                if (target.type === 'player' && player) {
+                    player.takeDamage(32, 'mob', this);
+                } else if (target.type === 'mob' && target.mob) {
+                    if (target.mob.type === 'minecart') {
+                        const pushDir = tPos.clone().sub(this.position).setY(0).normalize();
+                        target.mob.pushImpulse?.(pushDir.x * 14, pushDir.z * 14);
+                        sounds.playSawHitSound?.();
+                    } else {
+                        target.mob.takeDamage(45);
+                        target.mob.velocity.y = 7.5;
+                        const pushDir = tPos.clone().sub(this.position).setY(0).normalize();
+                        target.mob.velocity.addScaledVector(pushDir, 5.0);
+                    }
+                }
+            }
+        } else {
+            this.wanderTimer -= dt;
+            if (this.position.z >= SEA_START_Z - 1) {
+                // Keep Train Eater on land away from deep ocean
+                this.wanderAngle = Math.PI + (Math.random() - 0.5) * 0.8;
+                this.wanderTimer = 1.8;
+            } else if (this.wanderTimer <= 0) {
+                this.wanderTimer = 2.0 + Math.random() * 3.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (this.speed * 0.5);
+            this.velocity.z = Math.cos(this.wanderAngle) * (this.speed * 0.5);
+            this.mesh.rotation.y = this.wanderAngle;
+        }
+
+        if (isLiquid && Math.random() < 0.08) {
+            this.velocity.y = 4.0;
+        }
+    }
+}
+
+// 12. SEA EATER (Aquatic abyssal leviathan boss in ocean zone)
+export class SeaEater extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('seaeater', x, y, z, scene, world, game);
+        this.hp = 650;
+        this.maxHp = 650;
+        this.width = 1.6;
+        this.height = 1.8;
+        this.speed = 3.6;
+        this.attackCooldown = 0;
+        this.attackAnimTimer = 0;
+        this.swimPhase = Math.random() * Math.PI * 2;
+    }
+
+    initMesh() {
+        const makeMat = (hex, extra = {}) => {
+            const mat = new THREE.MeshLambertMaterial({ color: hex, ...extra });
+            mat.userData.baseHex = hex;
+            this.materialsToDispose.push(mat);
+            return mat;
+        };
+
+        const scaleMat = makeMat(0x0b3954);
+        const tealMat = makeMat(0x087e8b);
+        const bellyMat = makeMat(0x94d2bd);
+        const eyeMat = makeMat(0x22d3ee, { emissive: new THREE.Color(0x06b6d4), emissiveIntensity: 0.9 });
+        const teethMat = makeMat(0xf8fafc);
+        const mawMat = makeMat(0x4c0519);
+
+        // Armored leviathan head & upper torso
+        const head = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.6), scaleMat);
+        head.position.set(0, 1.0, 0.2);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        const belly = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 1.5), bellyMat);
+        belly.position.set(0, 0.5, 0.15);
+        this.mesh.add(belly);
+
+        // Dorsal crest
+        const dorsal = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.6, 1.1), tealMat);
+        dorsal.position.set(0, 1.65, -0.1);
+        this.mesh.add(dorsal);
+
+        // Bioluminescent eyes
+        for (const xSign of [-1, 1]) {
+            const eye = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.2), eyeMat);
+            eye.position.set(xSign * 0.56, 1.18, 0.88);
+            this.mesh.add(eye);
+        }
+
+        // Pectoral fins
+        for (const xSign of [-1, 1]) {
+            const fin = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.12, 0.6), tealMat);
+            fin.position.set(xSign * 1.0, 0.72, 0.1);
+            fin.rotation.z = -xSign * 0.28;
+            this.mesh.add(fin);
+        }
+
+        // Tooth-lined maw & snapping lower jaw
+        const maw = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.45, 0.25), mawMat);
+        maw.position.set(0, 0.8, 0.92);
+        this.mesh.add(maw);
+
+        for (let tx = -0.38; tx <= 0.38; tx += 0.25) {
+            const upperTooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.1), teethMat);
+            upperTooth.position.set(tx, 0.98, 1.0);
+            this.mesh.add(upperTooth);
+        }
+
+        this.jawGroup = new THREE.Group();
+        this.jawGroup.position.set(0, 0.62, 0.82);
+        const lowerJaw = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.2, 0.52), scaleMat);
+        lowerJaw.position.set(0, -0.04, 0.18);
+        this.jawGroup.add(lowerJaw);
+        for (let tx = -0.38; tx <= 0.38; tx += 0.25) {
+            const lowerTooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.1), teethMat);
+            lowerTooth.position.set(tx, 0.11, 0.34);
+            this.jawGroup.add(lowerTooth);
+        }
+        this.mesh.add(this.jawGroup);
+
+        // 3 articulated undulating sea-serpent tail segments + tail fluke
+        this.tailSegments = [];
+        for (let i = 0; i < 3; i++) {
+            const seg = new THREE.Group();
+            seg.position.set(0, 0.92, -1.0 - i * 0.95);
+            const scaleFactor = 1 - i * 0.22;
+            const segBody = new THREE.Mesh(
+                new THREE.BoxGeometry(1.0 * scaleFactor, 0.75 * scaleFactor, 0.95),
+                i % 2 === 0 ? tealMat : scaleMat
+            );
+            segBody.castShadow = true;
+            seg.add(segBody);
+            if (i === 2) {
+                const fluke = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.6), tealMat);
+                fluke.position.set(0, 0, -0.55);
+                seg.add(fluke);
+            }
+            this.mesh.add(seg);
+            this.tailSegments.push(seg);
+        }
+    }
+
+    update(dt) {
+        const feetBlock = this.world.getBlockAt(this.position.x, this.position.y, this.position.z);
+        const centerBlock = this.world.getBlockAt(this.position.x, this.position.y + 0.5, this.position.z);
+        const inWater = Boolean(
+            (feetBlock && feetBlock.startsWith('water')) ||
+            (centerBlock && centerBlock.startsWith('water'))
+        );
+        this.gravity = inWater ? 0 : -25.0;
+        super.update(dt);
+    }
+
+    updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        this.swimPhase += dt * (isLiquid ? 5.2 : 2.2);
+
+        if (this.attackAnimTimer > 0) {
+            this.attackAnimTimer -= dt;
+            const snap = Math.sin((this.attackAnimTimer / 0.5) * Math.PI);
+            if (this.jawGroup) this.jawGroup.rotation.x = snap * 0.75;
+        } else if (this.jawGroup) {
+            this.jawGroup.rotation.x = Math.max(0, Math.sin(this.swimPhase * 0.6) * 0.16);
+        }
+
+        if (this.tailSegments) {
+            for (let i = 0; i < this.tailSegments.length; i++) {
+                this.tailSegments[i].position.x = Math.sin(this.swimPhase - i * 0.85) * 0.28;
+                this.tailSegments[i].rotation.y = Math.cos(this.swimPhase - i * 0.85) * 0.24;
+            }
+        }
+
+        let target = null;
+        let minDist = 28.0;
+        const player = this.game?.player;
+        if (player) {
+            const pBlock = this.world.getBlockAt(player.position.x, player.position.y, player.position.z);
+            const playerNearSea = player.position.z >= SEA_BEACH_START_Z - 1 || (pBlock && pBlock.startsWith('water'));
+            const distToPlayer = this.position.distanceTo(player.position);
+            if (playerNearSea && distToPlayer < minDist) {
+                minDist = distToPlayer;
+                target = { type: 'player', position: player.position.clone() };
+            }
+        }
+
+        if (this.game?.mobs) {
+            for (let i = 0; i < this.game.mobs.length; i++) {
+                const mob = this.game.mobs[i];
+                if (
+                    mob !== this &&
+                    (mob.type === 'irongolem' ||
+                        mob.type === 'giantirongolem' ||
+                        mob.type === 'pig' ||
+                        mob.type === 'cow' ||
+                        mob.type === 'chicken')
+                ) {
+                    const mBlock = this.world.getBlockAt(mob.position.x, mob.position.y, mob.position.z);
+                    const mobNearSea = mob.position.z >= SEA_BEACH_START_Z - 1 || (mBlock && mBlock.startsWith('water'));
+                    const dist = this.position.distanceTo(mob.position);
+                    if (mobNearSea && dist < minDist) {
+                        minDist = dist;
+                        target = { type: 'mob', mob, position: mob.position.clone() };
+                    }
+                }
+            }
+        }
+
+        const activeSpeed = isLiquid ? this.speed : this.speed * 0.45;
+        if (target) {
+            const tPos = target.position;
+            const angle = Math.atan2(tPos.x - this.position.x, tPos.z - this.position.z);
+            this.mesh.rotation.y = angle;
+            this.velocity.x = Math.sin(angle) * activeSpeed;
+            this.velocity.z = Math.cos(angle) * activeSpeed;
+
+            if (isLiquid) {
+                const clampedTargetY = Math.max(3.2, Math.min(6.2, tPos.y + 0.2));
+                this.velocity.y = THREE.MathUtils.clamp((clampedTargetY - this.position.y) * 2.5, -3.5, 3.5);
+                if (this.position.y > 5.4 && Math.random() < 0.18 && this.game?.particles) {
+                    const mat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+                    const pMesh = new THREE.Mesh(SHARED_MOB_PARTICLE_GEO, mat);
+                    pMesh.position.set(
+                        this.position.x + (Math.random() - 0.5),
+                        this.position.y + 0.8,
+                        this.position.z + (Math.random() - 0.5)
+                    );
+                    this.scene.add(pMesh);
+                    this.game.particles.push({
+                        mesh: pMesh,
+                        velocity: new THREE.Vector3((Math.random() - 0.5) * 2, 2.5, (Math.random() - 0.5) * 2),
+                        life: 0.4,
+                        elapsed: 0,
+                        material: mat,
+                        sharedGeo: true
+                    });
+                }
+            }
+
+            const dist = this.position.distanceTo(tPos);
+            if (dist < 2.8 && this.attackCooldown <= 0) {
+                this.attackCooldown = 1.05;
+                this.attackAnimTimer = 0.5;
+                sounds.playMonsterRoarSound('sea');
+                if (target.type === 'player' && player) {
+                    player.takeDamage(34, 'mob', this);
+                } else if (target.type === 'mob' && target.mob) {
+                    target.mob.takeDamage(50);
+                    target.mob.velocity.y = 7.0;
+                    const pushDir = tPos.clone().sub(this.position).setY(0).normalize();
+                    target.mob.velocity.addScaledVector(pushDir, 4.5);
+                }
+            }
+        } else {
+            this.wanderTimer -= dt;
+            if (this.position.z < SEA_START_Z + 1) {
+                // Keep Sea Eater inside the ocean zone (+Z)
+                this.wanderAngle = (Math.random() - 0.5) * 0.9;
+                this.wanderTimer = 1.6;
+            } else if (this.wanderTimer <= 0) {
+                this.wanderTimer = 2.2 + Math.random() * 3.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (activeSpeed * 0.6);
+            this.velocity.z = Math.cos(this.wanderAngle) * (activeSpeed * 0.6);
+            this.mesh.rotation.y = this.wanderAngle;
+
+            if (isLiquid) {
+                const patrolY = 4.2 + Math.sin(this.swimPhase * 0.35) * 0.8;
+                this.velocity.y = THREE.MathUtils.clamp((patrolY - this.position.y) * 2.0, -2.5, 2.5);
+            }
+        }
+    }
+}
+
 

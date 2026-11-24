@@ -819,19 +819,26 @@ export class Player {
             this.heldItem.position.set(-0.02, 0.04, -0.06);
             this.heldItem.rotation.set(0.2, 0.4, 0.1);
             this.handContainer.add(this.heldItem);
-        } else if (type === 'spawn_irongolem' || type === 'spawn_snowgolem') {
+        } else if (
+            type === 'spawn_irongolem' ||
+            type === 'spawn_snowgolem' ||
+            type === 'spawn_traineater' ||
+            type === 'spawn_seaeater'
+        ) {
+            const eggColors = {
+                spawn_irongolem: { shell: 0xdcdcdc, spot: 0x990000 },
+                spawn_snowgolem: { shell: 0xe0e2db, spot: 0xff7a00 },
+                spawn_traineater: { shell: 0x2b2d42, spot: 0xdc2626 },
+                spawn_seaeater: { shell: 0x0b3954, spot: 0x22d3ee }
+            }[type];
             const eggGroup = new THREE.Group();
             const eggGeo = new THREE.BoxGeometry(0.05, 0.07, 0.05);
-            const eggMat = new THREE.MeshLambertMaterial({
-                color: type === 'spawn_irongolem' ? 0xdcdcdc : 0xe0e2db
-            });
+            const eggMat = new THREE.MeshLambertMaterial({ color: eggColors.shell });
             const eggMesh = new THREE.Mesh(eggGeo, eggMat);
             eggGroup.add(eggMesh);
 
             const spotGeo = new THREE.BoxGeometry(0.015, 0.015, 0.015);
-            const spotMat = new THREE.MeshBasicMaterial({
-                color: type === 'spawn_irongolem' ? 0x990000 : 0xff7a00
-            });
+            const spotMat = new THREE.MeshBasicMaterial({ color: eggColors.spot });
 
             const spot1 = new THREE.Mesh(spotGeo, spotMat.clone());
             spot1.position.set(0.015, 0.02, 0.015);

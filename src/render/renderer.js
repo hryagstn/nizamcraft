@@ -17,7 +17,7 @@ export class GameRenderer {
         this.scene.background = new THREE.Color(0x87CEEB); // Sky Blue
         
         // Add beautiful atmosphere fog
-        this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.02);
+        this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.013);
 
         // 2. Create Camera
         this.camera = new THREE.PerspectiveCamera(
@@ -64,9 +64,9 @@ export class GameRenderer {
             dirLight.shadow.mapSize.width = 1024;
             dirLight.shadow.mapSize.height = 1024;
             dirLight.shadow.camera.near = 0.5;
-            dirLight.shadow.camera.far = 100;
+            dirLight.shadow.camera.far = 140;
             
-            const d = 30; // Orthographic coverage
+            const d = 48; // Orthographic coverage
             dirLight.shadow.camera.left = -d;
             dirLight.shadow.camera.right = d;
             dirLight.shadow.camera.top = d;

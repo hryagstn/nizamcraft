@@ -5,7 +5,10 @@ import {
     normalizeBlockType,
     parseBlockState,
     checkGridAABB,
-    rollUndergroundBlock
+    rollUndergroundBlock,
+    LASER_DIRECTION_VECTORS,
+    SEA_BEACH_START_Z,
+    SEA_START_Z
 } from '../utils/gameData.js';
 
 const AXIS_X = new THREE.Vector3(1, 0, 0);
@@ -21,6 +24,16 @@ const FACING_QUATS = {
     e: new THREE.Quaternion().setFromAxisAngle(AXIS_Z, -Math.PI / 2),
     w: new THREE.Quaternion().setFromAxisAngle(AXIS_Z, Math.PI / 2)
 };
+
+const LASER_FACING_QUATS = {};
+for (const [dirKey, vec] of Object.entries(LASER_DIRECTION_VECTORS)) {
+    if (dirKey === 'down') {
+        LASER_FACING_QUATS[dirKey] = FACING_QUATS.down.clone();
+    } else {
+        const target = new THREE.Vector3(vec.x, vec.y, vec.z).normalize();
+        LASER_FACING_QUATS[dirKey] = new THREE.Quaternion().setFromUnitVectors(AXIS_Y, target);
+    }
+}
 
 const RAIL_Y_QUATS = {
     ns: new THREE.Quaternion(),
@@ -39,7 +52,7 @@ const RAIL_SLOPE_QUATS = {
     asc_e: new THREE.Quaternion().setFromAxisAngle(AXIS_Y, -Math.PI / 2).multiply(SLOPE_TILT_QUAT)
 };
 
-export const WORLD_SAVE_VERSION = 2;
+export const WORLD_SAVE_VERSION = 3;
 
 // Block Types Configuration
 export const BLOCK_TYPES = {
@@ -103,10 +116,10 @@ export class World {
     constructor(scene) {
         this.scene = scene;
 
-        // World Dimensions (64x24x64)
-        this.width = 64;
+        // World Dimensions (96x24x96)
+        this.width = 96;
         this.height = 24;
-        this.depth = 64;
+        this.depth = 96;
 
         // Offset to center the world at (0, 0)
         this.xOffset = -this.width / 2;
@@ -390,8 +403,8 @@ export class World {
         const maxCounts = {
             stone: 45000,
             dirt: 25000,
-            grass: 10000,
-            obsidian: 5000,
+            grass: 14000,
+            obsidian: 14000,
             wood: 5000,
             planks: 10000,
             leaf: 10000,
@@ -400,10 +413,10 @@ export class World {
             diamond: 2000,
             ender: 2000,
             tnt: 2000,
-            water: 15000,
+            water: 22000,
             lava: 15000,
             quartz: 5000,
-            sand: 10000,
+            sand: 14000,
             farmland: 5000,
             lucky: 2000,
             magma: 5000,
@@ -533,10 +546,21 @@ export class World {
 
         for (let x = 0; x < this.width; x++) {
             for (let z = 0; z < this.depth; z++) {
+                const worldZ = z + this.zOffset;
                 for (let y = 0; y <= flatY; y++) {
                     const idx = x * (this.height * this.depth) + y * this.depth + z;
                     if (y === 0) {
                         this.grid[idx] = 'obsidian';
+                    } else if (worldZ >= SEA_START_Z) {
+                        if (y === 1) {
+                            this.grid[idx] = 'stone';
+                        } else if (y === 2) {
+                            this.grid[idx] = 'sand';
+                        } else {
+                            this.grid[idx] = 'water_source';
+                        }
+                    } else if (worldZ >= SEA_BEACH_START_Z) {
+                        this.grid[idx] = y >= flatY - 1 ? 'sand' : 'stone';
                     } else if (y === flatY) {
                         this.grid[idx] = 'grass';
                     } else if (y >= flatY - 2) {
@@ -548,10 +572,11 @@ export class World {
             }
         }
 
-        // Spawn underground lava pools strictly deep below the flat surface
+        // Spawn underground lava pools strictly deep below the land surface
+        const maxLandLz = Math.max(4, SEA_BEACH_START_Z - 4 - this.zOffset);
         for (let i = 0; i < 4; i++) {
             const lx = Math.floor(Math.random() * (this.width - 6)) + 3;
-            const lz = Math.floor(Math.random() * (this.depth - 6)) + 3;
+            const lz = Math.floor(Math.random() * Math.max(1, maxLandLz - 3)) + 3;
             const ly = 1;
 
             for (let dx = -1; dx <= 1; dx++) {
@@ -684,7 +709,7 @@ export class World {
                                     pushToMap(this.instancedMeshMap, counts, 'redstone', worldX, y, worldZ, identityQuat);
                                 }
                             } else if (baseType === 'laser') {
-                                const q = FACING_QUATS[parsed.facing] || identityQuat;
+                                const q = LASER_FACING_QUATS[parsed.facing] || identityQuat;
                                 if (parsed.active) {
                                     pushToMap(this.auxMeshMap, auxCounts, 'laser_on', worldX, y, worldZ, q);
                                 } else {
@@ -1137,9 +1162,9 @@ export class World {
                 return false;
             }
 
-            this.width = data.width || 64;
+            this.width = data.width || 96;
             this.height = data.height || 24;
-            this.depth = data.depth || 64;
+            this.depth = data.depth || 96;
             this.xOffset = -this.width / 2;
             this.zOffset = -this.depth / 2;
 

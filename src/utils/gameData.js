@@ -1,6 +1,6 @@
 // Shared pure game data, physics AABB helpers, Minecraft crafting grid engine, and enchantment/anvil rules
 
-const STATE_SUFFIX_RE = /(?:_(?:source|[1-4]|asc_[nsew]|ns|ew|ne|nw|se|sw|up|down|[nsew]|on|pressed|extended))+$/;
+const STATE_SUFFIX_RE = /(?:_(?:source|[1-4]|asc_[nsew]|up_[nsew]|down_[nsew]|ns|ew|ne|nw|se|sw|up|down|[nsew]|on|pressed|extended))+$/;
 
 export function normalizeBlockType(type) {
     if (!type || typeof type !== 'string') return '';
@@ -18,13 +18,20 @@ export function parseBlockState(type) {
     const pressed = /(?:^|_)pressed(?:_|$)/.test(suffix);
 
     let shape = 'ns';
-    const shapeMatch = suffix.match(/(?:^|_)(asc_[nsew]|ns|ew|ne|nw|se|sw)(?:_|$)/);
+    const diagSlopeMatch = suffix.match(/(?:^|_)(up_[nsew]|down_[nsew])(?:_|$)/);
+    const shapeMatch = !diagSlopeMatch
+        ? suffix.match(/(?:^|_)(asc_[nsew]|ns|ew|ne|nw|se|sw)(?:_|$)/)
+        : null;
     if (shapeMatch) {
         shape = shapeMatch[1];
     }
 
     let facing = 'up';
-    if (!shapeMatch) {
+    if (diagSlopeMatch) {
+        facing = diagSlopeMatch[1];
+    } else if (base === 'laser' && shapeMatch && (shape === 'ne' || shape === 'nw' || shape === 'se' || shape === 'sw')) {
+        facing = shape;
+    } else if (!shapeMatch) {
         const facingMatch = suffix.match(/(?:^|_)(up|down|[nsew])(?:_|$)/);
         if (facingMatch) {
             facing = facingMatch[1];
@@ -46,15 +53,18 @@ export const PASSABLE_BLOCKS = new Set([
     'lever'
 ]);
 
-export const GRAVITY_BLOCKS = new Set(['sand']);
+export const NON_GRAVITY_SOLID_BLOCKS = new Set(['piston_head']);
 
 export function isGravityBlock(type) {
-    if (!type) return false;
-    return GRAVITY_BLOCKS.has(normalizeBlockType(type));
+    if (!type || !isSolidBlock(type)) return false;
+    const parsed = parseBlockState(type);
+    if (NON_GRAVITY_SOLID_BLOCKS.has(parsed.base)) return false;
+    if (parsed.base === 'piston' && parsed.extended) return false;
+    return true;
 }
 
 export function shouldBlockFall(getBlockAt, x, y, z) {
-    if (y <= 1) return false;
+    if (y <= 0) return false;
     const raw = getBlockAt(x, y, z);
     if (!isGravityBlock(raw)) return false;
     return !isSolidBlock(getBlockAt(x, y - 1, z));
@@ -91,12 +101,17 @@ export function isSolidBlock(type) {
     return !PASSABLE_BLOCKS.has(normalizeBlockType(type));
 }
 
+export const SEA_BEACH_START_Z = 22;
+export const SEA_START_Z = 25;
+
 export const HOSTILE_MOBS = new Set([
     'zombie',
     'skeleton',
     'creeper',
     'bloodgolem',
-    'witherskeleton'
+    'witherskeleton',
+    'traineater',
+    'seaeater'
 ]);
 
 /**
@@ -934,6 +949,8 @@ export const HOTBAR_ITEMS = [
     { type: 'crop', label: 'Crop', key: 'P', category: 'nature', nameId: 'Gandum' },
     { type: 'spawn_irongolem', label: 'G. Iron', key: 'G', category: 'special', nameId: 'Telur Iron Golem' },
     { type: 'spawn_snowgolem', label: 'G. Snow', key: "'", category: 'special', nameId: 'Telur Snow Golem' },
+    { type: 'spawn_traineater', label: 'T. Eater', key: '(', category: 'special', nameId: 'Telur Train Eater' },
+    { type: 'spawn_seaeater', label: 'S. Eater', key: ')', category: 'special', nameId: 'Telur Sea Eater' },
     { type: 'coal_ore', label: 'Coal Ore', key: 'K', category: 'mineral', nameId: 'Bijih Batu Bara' },
     { type: 'iron_ore', label: 'Iron Ore', key: 'J', category: 'mineral', nameId: 'Bijih Besi' },
     { type: 'gold_ore', label: 'Gold Ore', key: 'N', category: 'mineral', nameId: 'Bijih Emas' },
@@ -2236,7 +2253,8 @@ export function getAttachedSupportPos(x, y, z, type) {
         parsed.base === 'pressure_plate' ||
         parsed.base === 'rail' ||
         parsed.base === 'powered_rail' ||
-        parsed.base === 'redstone'
+        parsed.base === 'redstone' ||
+        parsed.base === 'crop'
     ) {
         return { x, y: y - 1, z };
     }
@@ -2368,15 +2386,91 @@ export function isPoweredRailActive(getBlockAt, x, y, z, maxHops = 8) {
     return false;
 }
 
+export const LASER_DIRECTION_VECTORS = {
+    n: { x: 0, y: 0, z: -1 },
+    s: { x: 0, y: 0, z: 1 },
+    e: { x: 1, y: 0, z: 0 },
+    w: { x: -1, y: 0, z: 0 },
+    up: { x: 0, y: 1, z: 0 },
+    down: { x: 0, y: -1, z: 0 },
+    ne: { x: 1, y: 0, z: -1 },
+    nw: { x: -1, y: 0, z: -1 },
+    se: { x: 1, y: 0, z: 1 },
+    sw: { x: -1, y: 0, z: 1 },
+    up_n: { x: 0, y: 1, z: -1 },
+    up_e: { x: 1, y: 1, z: 0 },
+    up_s: { x: 0, y: 1, z: 1 },
+    up_w: { x: -1, y: 1, z: 0 },
+    down_n: { x: 0, y: -1, z: -1 },
+    down_e: { x: 1, y: -1, z: 0 },
+    down_s: { x: 0, y: -1, z: 1 },
+    down_w: { x: -1, y: -1, z: 0 }
+};
+
+export const LASER_FACING_ORDER = [
+    'n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw',
+    'up', 'up_n', 'up_e', 'up_s', 'up_w',
+    'down', 'down_n', 'down_e', 'down_s', 'down_w'
+];
+
+export function computeLaserFacing(lookDir) {
+    if (!lookDir) return 'e';
+    const ax = -(lookDir.x || 0);
+    const ay = -(lookDir.y || 0);
+    const az = -(lookDir.z || 0);
+    const len = Math.hypot(ax, ay, az);
+    if (len < 1e-6) return 'e';
+    const nx = ax / len;
+    const ny = ay / len;
+    const nz = az / len;
+
+    let bestFacing = 'e';
+    let bestDot = -Infinity;
+    for (const facing of LASER_FACING_ORDER) {
+        const v = LASER_DIRECTION_VECTORS[facing];
+        const vLen = Math.hypot(v.x, v.y, v.z);
+        const dot = (nx * v.x + ny * v.y + nz * v.z) / vLen;
+        if (dot > bestDot) {
+            bestDot = dot;
+            bestFacing = facing;
+        }
+    }
+    return bestFacing;
+}
+
 export function computeLaserBeam(getBlockAt, lx, ly, lz, facing = 'e', maxRange = 20) {
-    const dir = DIRECTION_VECTORS[facing] || DIRECTION_VECTORS.e;
+    const dir = LASER_DIRECTION_VECTORS[facing] || DIRECTION_VECTORS.e;
+    const stepLen = Math.hypot(dir.x, dir.y, dir.z) || 1;
+    const unitDir = { x: dir.x / stepLen, y: dir.y / stepLen, z: dir.z / stepLen };
+    const nonZeroAxes = ['x', 'y', 'z'].filter(axis => dir[axis] !== 0);
+    const isDiagonal = nonZeroAxes.length === 2;
     const cells = [];
     let hitBlock = null;
 
     for (let step = 1; step <= maxRange; step++) {
+        const prevX = lx + dir.x * (step - 1);
+        const prevY = ly + dir.y * (step - 1);
+        const prevZ = lz + dir.z * (step - 1);
         const cx = lx + dir.x * step;
         const cy = ly + dir.y * step;
         const cz = lz + dir.z * step;
+
+        if (isDiagonal) {
+            const [a0, a1] = nonZeroAxes;
+            const c1x = prevX + (a0 === 'x' ? dir.x : 0);
+            const c1y = prevY + (a0 === 'y' ? dir.y : 0);
+            const c1z = prevZ + (a0 === 'z' ? dir.z : 0);
+            const c2x = prevX + (a1 === 'x' ? dir.x : 0);
+            const c2y = prevY + (a1 === 'y' ? dir.y : 0);
+            const c2z = prevZ + (a1 === 'z' ? dir.z : 0);
+            const b1 = getBlockAt(c1x, c1y, c1z);
+            const b2 = getBlockAt(c2x, c2y, c2z);
+            if (isSolidBlock(b1) && isSolidBlock(b2)) {
+                hitBlock = { x: c1x, y: c1y, z: c1z, type: b1 };
+                break;
+            }
+        }
+
         const block = getBlockAt(cx, cy, cz);
         if (isSolidBlock(block)) {
             hitBlock = { x: cx, y: cy, z: cz, type: block };
@@ -2388,8 +2482,10 @@ export function computeLaserBeam(getBlockAt, lx, ly, lz, facing = 'e', maxRange 
     return {
         origin: { x: lx, y: ly, z: lz },
         dir,
+        unitDir,
         facing,
         length: cells.length,
+        worldLength: cells.length * stepLen,
         cells,
         hitBlock
     };

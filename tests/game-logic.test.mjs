@@ -40,9 +40,14 @@ import {
     isRedstoneWireActive,
     isMechanismPowered,
     isPoweredRailActive,
+    computeLaserFacing,
     computeLaserBeam,
     isEntityInLaserBeam,
     isEntityTouchingSaw,
+    HOSTILE_MOBS,
+    SEA_BEACH_START_Z,
+    SEA_START_Z,
+    isGravityBlock,
     shouldBlockFall,
     collectUnsupportedGravityBlocks,
     computePistonFacing,
@@ -351,22 +356,35 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     };
 
     const THREE = await import('three');
-    const { World } = await import('../src/world/world.js');
+    const { World, WORLD_SAVE_VERSION } = await import('../src/world/world.js');
 
     const scene = new THREE.Scene();
     const world = new World(scene);
 
-    // 1. Legacy v1 save was automatically invalidated and cleared
+    // 1. Legacy v1/v2 save was automatically invalidated and cleared
+    assert.equal(WORLD_SAVE_VERSION, 3);
+    assert.equal(world.width, 96);
+    assert.equal(world.depth, 96);
     assert.equal(world.loadedFromSave, false);
     assert.equal(storageMap.has('nizamcraft-player'), false);
 
-    // 2. Surface is 100% flat grass at y = 6 with zero trees (no wood or leaf anywhere)
+    // 2. Surface is flat grass land (z < 22), sandy beach (22..24), and deep sea (z >= 25) with zero trees
     assert.equal(world.blockTypesList.length, 38);
     for (let x = -world.width / 2; x < world.width / 2; x++) {
         for (let z = -world.depth / 2; z < world.depth / 2; z++) {
             assert.equal(world.getBlockAt(x, 0, z), 'obsidian');
-            assert.equal(world.getBlockAt(x, 5, z), 'dirt');
-            assert.equal(world.getBlockAt(x, 6, z), 'grass');
+            if (z < SEA_BEACH_START_Z) {
+                assert.equal(world.getBlockAt(x, 5, z), 'dirt');
+                assert.equal(world.getBlockAt(x, 6, z), 'grass');
+            } else if (z < SEA_START_Z) {
+                assert.equal(world.getBlockAt(x, 5, z), 'sand');
+                assert.equal(world.getBlockAt(x, 6, z), 'sand');
+            } else {
+                assert.equal(world.getBlockAt(x, 2, z), 'sand');
+                for (let y = 3; y <= 6; y++) {
+                    assert.equal(world.getBlockAt(x, y, z), 'water_source');
+                }
+            }
             for (let y = 7; y < world.height; y++) {
                 assert.equal(world.getBlockAt(x, y, z), null);
             }
@@ -375,7 +393,7 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     assert.equal(world.grid.includes('wood'), false);
     assert.equal(world.grid.includes('leaf'), false);
 
-    // 3. Saving writes v2 format which reloads cleanly on next boot
+    // 3. Saving writes v3 format which reloads cleanly on next boot
     assert.equal(world.save(), true);
     const reloadedScene = new THREE.Scene();
     const reloadedWorld = new World(reloadedScene);
@@ -443,14 +461,18 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     assert.equal(world.addBlock(10, 10, 0, 'pressure_plate_pressed', true), true);
     assert.equal(world.addBlock(12, 10, 0, 'redstone_on', true), true);
     assert.equal(world.addBlock(14, 10, 0, 'laser_e_on', true), true);
-    assert.equal(world.addBlock(16, 10, 0, 'saw', true), true);
+    assert.equal(world.addBlock(15, 10, 0, 'laser_up_on', true), true);
+    assert.equal(world.addBlock(16, 10, 0, 'laser_down_on', true), true);
+    assert.equal(world.addBlock(17, 10, 0, 'laser_ne_on', true), true);
+    assert.equal(world.addBlock(18, 10, 0, 'laser_up_e_on', true), true);
+    assert.equal(world.addBlock(20, 10, 0, 'saw', true), true);
 
     assert.ok(world.auxMeshMap.get('rail_curve').count >= 1);
     assert.ok(world.auxMeshMap.get('rail_slope').count >= 1);
     assert.ok(world.auxMeshMap.get('powered_rail_on').count >= 1);
     assert.ok(world.auxMeshMap.get('powered_rail_curve_on').count >= 1);
     assert.ok(world.auxMeshMap.get('redstone_on').count >= 1);
-    assert.ok(world.auxMeshMap.get('laser_on').count >= 1);
+    assert.ok(world.auxMeshMap.get('laser_on').count >= 5);
     assert.ok(world.auxMeshMap.get('saw_blade').count >= 1);
     assert.ok(world.auxMeshMap.get('piston_ext_base').count >= 1);
     assert.ok(world.auxMeshMap.get('piston_head_plate').count >= 1);
@@ -462,21 +484,44 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     world.updateAnimatedBlocks(0.05);
     assert.ok(world.sawSpinAngle > prevSawAngle);
 
-    // Verify FallingBlock entity falls from sky and lands onto flat grass at y = 7
+    // Verify FallingBlock entity falls smoothly without early snapping, stacks cleanly, and migrates chest items
     const { FallingBlock } = await import('../src/entities/fallingBlock.js');
-    let topologyNotified = null;
-    const fb = new FallingBlock(-10, 12, 10, 'sand', scene, world, {
+    const notified = [];
+    const mockGame = {
+        chests: { '-10,12,10': [{ type: 'diamond', count: 3 }] },
         onTopologyChanged(x, y, z) {
-            topologyNotified = [x, y, z];
+            notified.push([x, y, z]);
         }
-    });
-    let active = true;
-    for (let i = 0; i < 60 && active; i++) {
-        active = fb.update(0.05);
+    };
+
+    // Single block at y = 7.4 above grass at y = 6 must keep falling (not snap early)
+    const smoothCheck = new FallingBlock(-11, 7.45, 10, 'stone', scene, world, mockGame);
+    assert.equal(smoothCheck.update(0.01), true);
+    assert.ok(smoothCheck.y > 7.0 && smoothCheck.y < 7.45);
+    smoothCheck.cleanup();
+
+    // 3-block vertical stack (dirt, stone, chest with items) falls onto flat grass (y = 6) at y = 7, 8, 9
+    let stack = [
+        new FallingBlock(-10, 10, 10, 'dirt', scene, world, mockGame),
+        new FallingBlock(-10, 11, 10, 'stone', scene, world, mockGame),
+        new FallingBlock(-10, 12, 10, 'chest', scene, world, mockGame, mockGame.chests['-10,12,10'])
+    ];
+    delete mockGame.chests['-10,12,10'];
+
+    for (let i = 0; i < 120 && stack.length > 0; i++) {
+        stack.sort((a, b) => a.y - b.y);
+        stack = stack.filter(fb => fb.update(0.05));
     }
-    assert.equal(active, false);
-    assert.equal(world.getBlockAt(-10, 7, 10), 'sand');
-    assert.deepEqual(topologyNotified, [-10, 7, 10]);
+    assert.equal(stack.length, 0);
+    assert.equal(world.getBlockAt(-10, 7, 10), 'dirt');
+    assert.equal(world.getBlockAt(-10, 8, 10), 'stone');
+    assert.equal(world.getBlockAt(-10, 9, 10), 'chest');
+    assert.deepEqual(mockGame.chests['-10,9,10'], [{ type: 'diamond', count: 3 }]);
+    assert.deepEqual(notified, [
+        [-10, 7, 10],
+        [-10, 8, 10],
+        [-10, 9, 10]
+    ]);
 });
 
 test('parseBlockState handles rail shapes, slopes, powered rails, 6-dir levers and pistons', () => {
@@ -710,28 +755,51 @@ test('minecart stays on open-end rails, launches from button trigger, and comple
     assert.equal(cycleRailShape(getBlockAt, 0, 7, 0, 'sw', true), 'se');
 });
 
-test('gravity blocks detach when lower support is removed and cascade upward', () => {
+test('gravity blocks detach when lower support is removed for all relevant solid blocks and exclude attachments/extended pistons', () => {
+    for (const solidType of [
+        'grass', 'dirt', 'stone', 'wood', 'planks', 'obsidian', 'sand',
+        'tnt', 'chest', 'laser_e', 'saw', 'piston_e'
+    ]) {
+        assert.equal(isGravityBlock(solidType), true, `Expected ${solidType} to be gravity-enabled`);
+    }
+    for (const nonGravity of [
+        'water_source', 'lava_source', 'rail_ns', 'powered_rail_ew',
+        'redstone_on', 'lever_up', 'crop', 'piston_head_e', 'piston_e_extended'
+    ]) {
+        assert.equal(isGravityBlock(nonGravity), false, `Expected ${nonGravity} not to fall as a solid block`);
+    }
+
     const blocks = new Map();
     const key = (x, y, z) => `${x},${y},${z}`;
     const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
 
+    blocks.set(key(0, 0, 0), 'obsidian');
+    for (let y = 1; y <= 3; y++) blocks.set(key(0, y, 0), 'stone');
+    blocks.set(key(0, 4, 0), 'dirt');
+    blocks.set(key(0, 5, 0), 'dirt');
     blocks.set(key(0, 6, 0), 'grass');
-    blocks.set(key(0, 7, 0), 'sand');
-    blocks.set(key(0, 8, 0), 'sand');
-    blocks.set(key(0, 9, 0), 'stone');
+    blocks.set(key(0, 7, 0), 'dirt');
+    blocks.set(key(0, 8, 0), 'stone');
+    blocks.set(key(0, 9, 0), 'wood');
+    blocks.set(key(0, 10, 0), 'chest');
+    blocks.set(key(0, 11, 0), 'laser_n');
 
+    assert.equal(shouldBlockFall(getBlockAt, 0, 0, 0), false);
     assert.equal(shouldBlockFall(getBlockAt, 0, 7, 0), false);
     assert.deepEqual(collectUnsupportedGravityBlocks(getBlockAt, 0, 6, 0, 1, 23), []);
 
-    // Remove grass block underneath sand stack
+    // Remove grass support block underneath mixed column
     blocks.delete(key(0, 6, 0));
     assert.equal(shouldBlockFall(getBlockAt, 0, 7, 0), true);
     const falling = collectUnsupportedGravityBlocks(getBlockAt, 0, 6, 0, 1, 23);
     assert.deepEqual(
         falling.map(b => [b.x, b.y, b.z, b.type]),
         [
-            [0, 7, 0, 'sand'],
-            [0, 8, 0, 'sand']
+            [0, 7, 0, 'dirt'],
+            [0, 8, 0, 'stone'],
+            [0, 9, 0, 'wood'],
+            [0, 10, 0, 'chest'],
+            [0, 11, 0, 'laser_n']
         ]
     );
 });
@@ -808,4 +876,84 @@ test('spinning saw detects entity contact on top and sides', () => {
     assert.equal(isEntityTouchingSaw(getBlockAt, 3, 7.5, 3, 0.3, 1.8), true);
     assert.equal(isEntityTouchingSaw(getBlockAt, 3.6, 7.0, 3, 0.3, 1.8), true);
     assert.equal(isEntityTouchingSaw(getBlockAt, 5, 7.5, 3, 0.3, 1.8), false);
+});
+
+test('omnidirectional lasers aim up, down, and diagonally and block on airtight diagonal corners', () => {
+    assert.equal(computeLaserFacing({ x: 0, y: -0.95, z: 0 }), 'up');
+    assert.equal(computeLaserFacing({ x: 0, y: 0.95, z: 0 }), 'down');
+    assert.equal(computeLaserFacing({ x: -0.7, y: 0, z: 0.7 }), 'ne');
+    assert.equal(computeLaserFacing({ x: -0.7, y: -0.7, z: 0 }), 'up_e');
+    assert.equal(computeLaserFacing({ x: 0, y: 0.7, z: -0.7 }), 'down_s');
+
+    assert.equal(parseBlockState('laser_up_e_on').facing, 'up_e');
+    assert.equal(parseBlockState('laser_down_n').facing, 'down_n');
+    assert.equal(parseBlockState('laser_ne_on').facing, 'ne');
+
+    const blocks = new Map();
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const getBlockAt = (x, y, z) => blocks.get(key(x, y, z)) || null;
+
+    // Vertical up & down beams
+    blocks.set(key(0, 7, 0), 'laser_up_on');
+    blocks.set(key(0, 11, 0), 'stone');
+    const upBeam = computeLaserBeam(getBlockAt, 0, 7, 0, 'up', 20);
+    assert.equal(upBeam.length, 3);
+    assert.deepEqual(upBeam.hitBlock, { x: 0, y: 11, z: 0, type: 'stone' });
+
+    blocks.set(key(2, 10, 0), 'laser_down_on');
+    blocks.set(key(2, 6, 0), 'grass');
+    const downBeam = computeLaserBeam(getBlockAt, 2, 10, 0, 'down', 20);
+    assert.equal(downBeam.length, 3);
+    assert.deepEqual(downBeam.hitBlock, { x: 2, y: 6, z: 0, type: 'grass' });
+
+    // Upward diagonal beam (up_e) hits diagonal entity & stops on solid block
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'laser_up_e_on');
+    blocks.set(key(3, 10, 0), 'stone');
+    const diagBeam = computeLaserBeam(getBlockAt, 0, 7, 0, 'up_e', 20);
+    assert.equal(diagBeam.length, 2);
+    assert.ok(Math.abs(diagBeam.worldLength - 2 * Math.SQRT2) < 1e-6);
+    assert.equal(isEntityInLaserBeam(2, 8.6, 0, 0.3, 1.8, diagBeam), true);
+    assert.equal(isEntityInLaserBeam(2, 6.5, 0, 0.3, 1.8, diagBeam), false);
+    assert.equal(isEntityInLaserBeam(4, 10.6, 0, 0.3, 1.8, diagBeam), false);
+
+    // Horizontal diagonal (ne) cannot pass through airtight corner walls
+    blocks.clear();
+    blocks.set(key(0, 7, 0), 'laser_ne_on');
+    blocks.set(key(1, 7, 0), 'stone');
+    blocks.set(key(0, 7, -1), 'stone');
+    const blockedCorner = computeLaserBeam(getBlockAt, 0, 7, 0, 'ne', 20);
+    assert.equal(blockedCorner.length, 0);
+    assert.ok(blockedCorner.hitBlock);
+});
+
+test('TrainEater and SeaEater bosses are hostile, instantiate cleanly, and update in land and sea zones', async () => {
+    assert.equal(HOSTILE_MOBS.has('traineater'), true);
+    assert.equal(HOSTILE_MOBS.has('seaeater'), true);
+
+    const THREE = await import('three');
+    const { World } = await import('../src/world/world.js');
+    const { TrainEater, SeaEater } = await import('../src/entities/mob.js');
+
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+    const mockGame = { player: null, mobs: [], particles: [] };
+
+    const trainEater = new TrainEater(0, 7, -10, scene, world, mockGame);
+    const seaEater = new SeaEater(0, 4.5, 32, scene, world, mockGame);
+    mockGame.mobs.push(trainEater, seaEater);
+
+    for (let i = 0; i < 10; i++) {
+        trainEater.update(0.05);
+        seaEater.update(0.05);
+    }
+
+    assert.equal(trainEater.hp, 600);
+    assert.equal(seaEater.hp, 650);
+    assert.ok(trainEater.tailSegments.length === 2);
+    assert.ok(seaEater.tailSegments.length === 3);
+    assert.equal(seaEater.gravity, 0);
+
+    trainEater.cleanupMesh();
+    seaEater.cleanupMesh();
 });

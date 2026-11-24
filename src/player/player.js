@@ -14,7 +14,8 @@ const MODAL_IDS = [
     'inventory-modal',
     'crafting-modal',
     'enchant-modal',
-    'block-picker-modal'
+    'block-picker-modal',
+    'characters-modal'
 ];
 
 export function isAnyOverlayOpen() {
@@ -832,7 +833,12 @@ export class Player {
                 spawn_mikey: { shell: 0x22c55e, spot: 0xeab308 },
                 spawn_redsun: { shell: 0xff2a6d, spot: 0xffffff },
                 spawn_lunarmoon: { shell: 0xa8a29e, spot: 0xef4444 },
-                spawn_cursedthomas: { shell: 0x0ea5e9, spot: 0xef4444 }
+                spawn_cursedthomas: { shell: 0x0ea5e9, spot: 0xef4444 },
+                spawn_bananakid: { shell: 0xfacc15, spot: 0x6b3a12 },
+                spawn_carrie: { shell: 0xf8fafc, spot: 0xb91c1c },
+                spawn_buu: { shell: 0x14b8a6, spot: 0x52478c },
+                spawn_cookie: { shell: 0x635042, spot: 0x8b5cf6 },
+                spawn_penduduk: { shell: 0x6d4c3d, spot: 0x16a34a }
             };
             const eggColors = SPAWN_EGG_COLORS[type] || { shell: 0xdcdcdc, spot: 0x990000 };
             const eggGroup = new THREE.Group();

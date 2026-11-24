@@ -1717,6 +1717,146 @@ textures.cursedThomasFace = createPixelTexture((ctx) => {
     ctx.fillRect(12, 10, 1, 1);
 });
 
+// 61. BananaKid Bright Yellow Peel & Knee-Spot Leg
+textures.bananaBody = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#f0e11c';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#dfd012';
+    ctx.fillRect(0, 0, 2, 16);
+    ctx.fillRect(14, 0, 2, 16);
+    ctx.fillStyle = '#f8ec52';
+    ctx.fillRect(4, 2, 2, 12);
+    ctx.fillRect(10, 3, 2, 10);
+});
+
+textures.bananaLegFront = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#f0e11c';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#dfd012';
+    ctx.fillRect(0, 0, 2, 14);
+    ctx.fillRect(14, 0, 2, 14);
+    ctx.fillStyle = '#f8ec52';
+    ctx.fillRect(4, 1, 8, 3);
+    // Dark brown square knee spot
+    ctx.fillStyle = '#5c3310';
+    ctx.fillRect(4, 6, 8, 5);
+    ctx.fillStyle = '#3f2209';
+    ctx.fillRect(5, 7, 6, 3);
+    // Dark brown sole band
+    ctx.fillStyle = '#5c3310';
+    ctx.fillRect(0, 14, 16, 2);
+});
+
+// 62. Carrie Crimson Scarf Knit
+textures.carrieScarf = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#991b1b';
+    ctx.fillRect(0, 0, 16, 2);
+    ctx.fillRect(0, 13, 16, 3);
+    ctx.fillRect(3, 5, 3, 2);
+    ctx.fillRect(10, 8, 4, 2);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(1, 3, 4, 2);
+    ctx.fillRect(8, 3, 5, 2);
+    ctx.fillRect(5, 10, 4, 2);
+});
+
+// 63. Buu Stepped Hair Side & Cyan Shirt with Belt
+textures.buuHairSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#c69c82';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#543c26';
+    ctx.fillRect(0, 0, 16, 5);
+    ctx.fillRect(0, 5, 6, 5);
+    ctx.fillRect(0, 10, 3, 2);
+    ctx.fillStyle = '#3f2b1a';
+    ctx.fillRect(2, 2, 4, 2);
+    ctx.fillRect(10, 1, 3, 2);
+});
+
+textures.buuTorsoFront = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#26b5a5';
+    ctx.fillRect(0, 0, 16, 11);
+    ctx.fillStyle = '#1f9e90';
+    ctx.fillRect(0, 0, 2, 11);
+    ctx.fillRect(14, 0, 2, 11);
+    ctx.fillStyle = '#38cfc0';
+    ctx.fillRect(5, 2, 6, 2);
+    // Dark belt with golden center buckle
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(0, 11, 16, 2);
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(6, 11, 4, 2);
+    // Indigo-purple pants waistband
+    ctx.fillStyle = '#52478c';
+    ctx.fillRect(0, 13, 16, 3);
+});
+
+// 64. Cookie Gingerbread Torso & Icing Limbs
+textures.cookieTorsoFront = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#635042';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#7a6454';
+    ctx.fillRect(1, 2, 2, 2);
+    ctx.fillRect(12, 3, 2, 2);
+    ctx.fillRect(3, 8, 2, 2);
+    ctx.fillRect(11, 9, 2, 2);
+    // Two stacked purple square buttons
+    ctx.fillStyle = '#8b5cf6';
+    ctx.fillRect(6, 2, 4, 4);
+    ctx.fillRect(6, 7, 4, 4);
+    ctx.fillStyle = '#a78bfa';
+    ctx.fillRect(6, 2, 4, 1);
+    ctx.fillRect(6, 7, 4, 1);
+    // Cream-white zigzag icing stripe along waist
+    ctx.fillStyle = '#d6cec6';
+    for (let x = 0; x < 16; x += 2) {
+        const y = (x / 2) % 2 === 0 ? 12 : 13;
+        ctx.fillRect(x, y, 2, 2);
+    }
+});
+
+textures.cookieLimb = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#635042';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#7a6454';
+    ctx.fillRect(2, 2, 2, 2);
+    ctx.fillRect(10, 5, 2, 2);
+    ctx.fillRect(4, 8, 2, 2);
+    // Cream-white zigzag icing cuff
+    ctx.fillStyle = '#d6cec6';
+    for (let x = 0; x < 16; x += 2) {
+        const y = (x / 2) % 2 === 0 ? 11 : 12;
+        ctx.fillRect(x, y, 2, 2);
+    }
+});
+
+// 65. Penduduk (Villager) Tan Skin & Brown Robe
+textures.villagerSkin = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#a67758';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#956749';
+    ctx.fillRect(1, 2, 3, 2);
+    ctx.fillRect(10, 4, 3, 2);
+    ctx.fillRect(4, 11, 4, 2);
+    ctx.fillStyle = '#b48464';
+    ctx.fillRect(6, 1, 3, 2);
+    ctx.fillRect(11, 9, 3, 2);
+});
+
+textures.villagerRobe = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#4a3529';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#5e4536';
+    ctx.fillRect(0, 0, 16, 2);
+    ctx.fillRect(2, 4, 3, 4);
+    ctx.fillRect(11, 4, 3, 4);
+    ctx.fillStyle = '#33231a';
+    ctx.fillRect(6, 0, 4, 16);
+    ctx.fillRect(0, 14, 16, 2);
+});
+
 const BLOCK_TEXTURE_KEY = {
     grass: 'grassSide',
     dirt: 'dirt',

@@ -23,6 +23,12 @@ import {
     computeThornsDamage,
     DEFAULT_HOTBAR_LOADOUT,
     HOTBAR_ITEMS,
+    CHARACTER_ROSTER,
+    createDefaultCharacterSettings,
+    normalizeCharacterSettings,
+    setAllCharactersEnabled,
+    countEnabledCharacters,
+    getEligibleSpawnTypes,
     selectOrAssignHotbarSlot,
     CRAFTING_RECIPES,
     canCraftRecipeFromSlots,
@@ -1092,4 +1098,153 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
     for (const mob of roster) {
         mob.cleanupMesh();
     }
+});
+
+test('BananaKid, Carrie, Buu, Cookie, and Penduduk register as peaceful friendly characters and update cleanly', async () => {
+    const peacefulIds = ['bananakid', 'carrie', 'buu', 'cookie', 'penduduk'];
+    for (const id of peacefulIds) {
+        assert.equal(HOSTILE_MOBS.has(id), false, `Expected ${id} NOT to be in HOSTILE_MOBS`);
+    }
+
+    const expectedEggs = [
+        'spawn_bananakid',
+        'spawn_carrie',
+        'spawn_buu',
+        'spawn_cookie',
+        'spawn_penduduk'
+    ];
+    const { ITEM_CATALOG } = await import('../src/utils/icons.js');
+    const { textures } = await import('../src/utils/textures.js');
+    const hotbarByType = new Map(HOTBAR_ITEMS.map(item => [item.type, item]));
+    for (const eggType of expectedEggs) {
+        assert.ok(hotbarByType.has(eggType), `Expected ${eggType} in HOTBAR_ITEMS`);
+        assert.ok(ITEM_CATALOG[eggType], `Expected ${eggType} in ITEM_CATALOG`);
+    }
+
+    for (const texKey of [
+        'bananaBody',
+        'bananaLegFront',
+        'carrieScarf',
+        'buuHairSide',
+        'buuTorsoFront',
+        'cookieTorsoFront',
+        'cookieLimb',
+        'villagerSkin',
+        'villagerRobe'
+    ]) {
+        assert.ok(textures[texKey], `Expected textures.${texKey} to exist`);
+    }
+
+    const keys = HOTBAR_ITEMS.map(item => item.key.toLowerCase());
+    assert.equal(new Set(keys).size, keys.length, 'Expected unique hotbar shortcut keys');
+    for (const eggType of expectedEggs) {
+        const item = hotbarByType.get(eggType);
+        assert.equal(/[<>&]/.test(item.key), false, `Expected HTML-safe key for ${item.type}`);
+    }
+
+    const THREE = await import('three');
+    const { World } = await import('../src/world/world.js');
+    const {
+        BananaKid, Carrie, Buu, Cookie, Penduduk, Charles, Arrow
+    } = await import('../src/entities/mob.js');
+
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+    let playerHitCount = 0;
+    const mockGame = {
+        player: {
+            position: new THREE.Vector3(0, 7, 0),
+            velocity: new THREE.Vector3(),
+            width: 0.6,
+            height: 1.8,
+            takeDamage() { playerHitCount++; }
+        },
+        mobs: [],
+        particles: [],
+        arrows: []
+    };
+
+    const bananakid = new BananaKid(2, 7, 2, scene, world, mockGame);
+    const carrie = new Carrie(-2, 7, 2, scene, world, mockGame);
+    const buu = new Buu(3, 7, -2, scene, world, mockGame);
+    const cookie = new Cookie(-3, 7, -2, scene, world, mockGame);
+    const penduduk = new Penduduk(4, 7, 0, scene, world, mockGame);
+    const nearbyEnemy = new Charles(2.6, 7, 2.2, scene, world, mockGame);
+    const prevEnemyHp = nearbyEnemy.hp;
+
+    const friends = [bananakid, carrie, buu, cookie, penduduk];
+    mockGame.mobs.push(...friends, nearbyEnemy);
+
+    assert.ok(buu.flowerGroup, 'Expected Buu to hold a red poppy flower');
+    assert.ok(penduduk.foldedArms, 'Expected Penduduk to have folded crossed arms');
+    assert.equal(penduduk.followPlayer, false, 'Expected Penduduk to wander calmly rather than follow player');
+
+    for (const friend of friends) {
+        assert.equal(friend.isFriendly, true, `Expected ${friend.type} to have isFriendly = true`);
+    }
+
+    for (let i = 0; i < 12; i++) {
+        for (const friend of friends) {
+            friend.update(0.08);
+        }
+    }
+
+    assert.equal(nearbyEnemy.hp, prevEnemyHp, 'Expected new friendly characters never to damage other mobs');
+    assert.equal(playerHitCount, 0, 'Expected new friendly characters never to damage player');
+
+    for (const friend of friends) {
+        const prevHp = friend.hp;
+        const arrow = new Arrow(
+            new THREE.Vector3(friend.position.x, friend.position.y + 0.9, friend.position.z - 0.5),
+            new THREE.Vector3(friend.position.x, friend.position.y + 0.9, friend.position.z + 1.5),
+            scene, world, mockGame, 'player', { damage: 25 }
+        );
+        for (let i = 0; i < 6; i++) {
+            arrow.update(0.05);
+        }
+        arrow.destroy();
+        assert.equal(friend.hp, prevHp, `Expected player arrow not to hurt ${friend.type}`);
+    }
+
+    nearbyEnemy.cleanupMesh();
+    for (const friend of friends) {
+        friend.cleanupMesh();
+    }
+});
+
+test('Character roster switch helpers default all 26 characters to OFF and filter spawns safely', () => {
+    assert.equal(CHARACTER_ROSTER.length, 26);
+    const rosterTypes = CHARACTER_ROSTER.map(c => c.type);
+    assert.equal(new Set(rosterTypes).size, 26, 'Expected 26 unique character types in CHARACTER_ROSTER');
+
+    for (const id of ['bananakid', 'carrie', 'buu', 'cookie', 'penduduk']) {
+        assert.ok(rosterTypes.includes(id), `Expected ${id} in CHARACTER_ROSTER`);
+    }
+
+    const defaults = createDefaultCharacterSettings();
+    assert.equal(countEnabledCharacters(defaults), 0, 'Expected all characters OFF by default');
+    for (const id of rosterTypes) {
+        assert.equal(defaults[id], false);
+    }
+    assert.deepEqual(getEligibleSpawnTypes(defaults, []), []);
+
+    const normalized = normalizeCharacterSettings({
+        bananakid: true,
+        penduduk: 1,
+        unknown_mob: true
+    });
+    assert.equal(normalized.bananakid, true);
+    assert.equal(normalized.penduduk, true);
+    assert.equal(normalized.jj, false);
+    assert.equal('unknown_mob' in normalized, false);
+    assert.equal(countEnabledCharacters(normalized), 2);
+
+    const eligibleBefore = getEligibleSpawnTypes(normalized, ['bananakid']);
+    assert.equal(eligibleBefore.includes('bananakid'), false, 'Unique enabled character already alive should not respawn');
+    assert.equal(eligibleBefore.includes('penduduk'), true, 'Non-unique enabled character can still spawn');
+
+    const allOn = setAllCharactersEnabled(defaults, true);
+    assert.equal(countEnabledCharacters(allOn), 26);
+    const allOff = setAllCharactersEnabled(allOn, false);
+    assert.equal(countEnabledCharacters(allOff), 0);
 });

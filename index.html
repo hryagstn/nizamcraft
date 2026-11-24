@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>NizamCraft - Dunia Voxel 3D</title>
+    <title>NizamCraft x Maizen World - Dunia Voxel 3D</title>
     <meta name="description" content="Jelajahi, tambang bijih, rakit perlengkapan, dan tempa Buku Enchant di dunia voxel 3D langsung dari browser.">
     <link rel="stylesheet" href="src/index.css">
 
@@ -45,7 +45,7 @@
                 </svg>
             </div>
             <h2>Putar Perangkat ke Landscape</h2>
-            <p>NizamCraft dirancang untuk layar mendatar agar kontrol jalan, bidikan, dan pemilih blok nyaman dijangkau.</p>
+            <p>NizamCraft x Maizen World dirancang untuk layar mendatar agar kontrol jalan, bidikan, dan pemilih blok nyaman dijangkau.</p>
         </div>
     </div>
 
@@ -60,9 +60,16 @@
     <div id="play-overlay">
         <div id="overlay-container">
             <div class="overlay-left">
-                <h1>NIZAMCRAFT</h1>
+                <h1>NizamCraft x Maizen World</h1>
                 <p id="overlay-subtitle" class="overlay-subtitle">Tambang bijih, rakit persenjataan, dan tempa Buku Enchant di dunia voxel 3D.</p>
-                <button id="play-button" type="button">Mulai Permainan</button>
+                <div class="overlay-cta-row">
+                    <button id="play-button" type="button">Mulai Permainan</button>
+                    <button id="overlay-characters-btn" type="button" class="overlay-btn characters-trigger-btn">
+                        <span data-icon="users"></span>
+                        <span>Karakter</span>
+                        <span id="overlay-characters-count" class="char-count-pill">0/26</span>
+                    </button>
+                </div>
             </div>
 
             <div class="overlay-right">
@@ -248,7 +255,7 @@
                 <button type="button" class="filter-tab" data-cat="nature">Alam</button>
                 <button type="button" class="filter-tab" data-cat="mineral">Tambang &amp; Mulia</button>
                 <button type="button" class="filter-tab" data-cat="redstone">Mekanis &amp; Meja</button>
-                <button type="button" class="filter-tab" data-cat="special">Golem</button>
+                <button type="button" class="filter-tab" data-cat="special">Karakter</button>
             </div>
             <div id="block-picker-grid" class="picker-grid"></div>
         </div>
@@ -474,6 +481,43 @@
                         <span id="apply-anvil-btn-text">Pilih Dua Item di Paron</span>
                     </button>
                 </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Character Spawn On/Off Switch Modal -->
+    <div id="characters-modal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="characters-title">
+        <div class="modal-card characters-card">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="header-icon" data-icon="users"></span>
+                    <h2 id="characters-title">Switch Karakter</h2>
+                    <span id="characters-active-badge" class="station-badge">0 / 26 Aktif</span>
+                </div>
+                <button id="close-characters-btn" type="button" class="close-btn" aria-label="Tutup Pengaturan Karakter">
+                    <span data-icon="x"></span>
+                </button>
+            </div>
+
+            <div class="characters-toolbar">
+                <div id="characters-category-tabs" class="filter-tabs" role="tablist">
+                    <button type="button" class="filter-tab active" data-char-group="all">Semua</button>
+                    <button type="button" class="filter-tab" data-char-group="maizen">Maizen</button>
+                    <button type="button" class="filter-tab" data-char-group="golem">Golem</button>
+                    <button type="button" class="filter-tab" data-char-group="animal">Hewan</button>
+                    <button type="button" class="filter-tab" data-char-group="monster">Monster</button>
+                    <button type="button" class="filter-tab" data-char-group="boss">Boss</button>
+                </div>
+                <div class="characters-bulk-actions">
+                    <button id="characters-all-on-btn" type="button" class="ghost-mini-btn">Nyalakan Semua</button>
+                    <button id="characters-all-off-btn" type="button" class="ghost-mini-btn">Matikan Semua</button>
+                </div>
+            </div>
+
+            <div id="characters-toggle-grid" class="characters-toggle-grid"></div>
+
+            <div class="modal-footer">
+                <span class="info-tip">Semua karakter bawaan OFF. Nyalakan karakter yang ingin dimunculkan di dunia.</span>
             </div>
         </div>
     </div>

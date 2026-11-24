@@ -1,4 +1,4 @@
-// NizamCraft - Main Entry Point
+// NizamCraft x Maizen World - Main Entry Point
 import * as THREE from 'three';
 import { GameRenderer } from './render/renderer.js';
 import { World } from './world/world.js';
@@ -7,7 +7,8 @@ import {
     Zombie, Creeper, Skeleton, Arrow, IronGolem, SnowGolem,
     Chicken, Pig, Cow, BloodGolem, GiantIronGolem, WitherSkeleton, Minecart,
     TrainEater, SeaEater, Charles, InfectedOcean, InfectedSky,
-    JJ, Mikey, RedSun, LunarMoon, CursedThomas
+    JJ, Mikey, BananaKid, Carrie, Buu, Cookie, Penduduk,
+    RedSun, LunarMoon, CursedThomas
 } from './entities/mob.js';
 import { PrimedTNT } from './entities/tnt.js';
 import { FallingBlock } from './entities/fallingBlock.js';
@@ -60,6 +61,12 @@ import {
     DEFAULT_HOTBAR_LOADOUT,
     selectOrAssignHotbarSlot,
     HOTBAR_ITEMS,
+    CHARACTER_ROSTER,
+    createDefaultCharacterSettings,
+    normalizeCharacterSettings,
+    setAllCharactersEnabled,
+    countEnabledCharacters,
+    getEligibleSpawnTypes,
     CRAFTING_RECIPES,
     countInventoryMaterials,
     canCraftRecipeFromSlots,
@@ -77,6 +84,8 @@ document.querySelectorAll('[data-icon]').forEach(el => {
 });
 
 const HOTBAR_BY_TYPE = new Map(HOTBAR_ITEMS.map(item => [item.type, item]));
+const CHARACTER_BY_TYPE = new Map(CHARACTER_ROSTER.map(char => [char.type, char]));
+const CHARACTER_SETTINGS_KEY = 'nizamcraft-characters';
 
 const game = {
     player: null,
@@ -220,7 +229,8 @@ const GAMEPLAY_MODAL_IDS = [
     'inventory-modal',
     'crafting-modal',
     'enchant-modal',
-    'block-picker-modal'
+    'block-picker-modal',
+    'characters-modal'
 ];
 
 function isGameplayModalOpen() {
@@ -305,6 +315,7 @@ function startGameSessionIfNeeded() {
 }
 
 function enterGame() {
+    closeAllGameplayModals(false);
     document.body.classList.add('in-game');
     startGameSessionIfNeeded();
 
@@ -680,6 +691,179 @@ document.querySelectorAll('#picker-category-tabs .filter-tab').forEach(tab => {
     });
 });
 
+// ==========================================
+// CHARACTER ON/OFF SWITCH SETTINGS (DEFAULT ALL OFF)
+// ==========================================
+
+let activeCharacterGroup = 'all';
+
+function loadCharacterSettings() {
+    try {
+        const raw = localStorage.getItem(CHARACTER_SETTINGS_KEY);
+        if (!raw) return createDefaultCharacterSettings();
+        return normalizeCharacterSettings(JSON.parse(raw));
+    } catch {
+        return createDefaultCharacterSettings();
+    }
+}
+
+let characterSettings = loadCharacterSettings();
+
+function saveCharacterSettings() {
+    try {
+        localStorage.setItem(CHARACTER_SETTINGS_KEY, JSON.stringify(characterSettings));
+    } catch (err) {
+        console.error('Failed to save character settings:', err);
+    }
+}
+
+function isCharacterEnabled(type) {
+    return Boolean(characterSettings[type]);
+}
+
+function despawnCharacterType(type) {
+    for (let i = game.mobs.length - 1; i >= 0; i--) {
+        const mob = game.mobs[i];
+        if (mob && mob.type === type) {
+            mob.cleanupMesh?.();
+            game.mobs.splice(i, 1);
+        }
+    }
+}
+
+function renderCharacterToggleUI() {
+    const activeCount = countEnabledCharacters(characterSettings);
+    const totalCount = CHARACTER_ROSTER.length;
+
+    const countPill = document.getElementById('overlay-characters-count');
+    if (countPill) {
+        countPill.textContent = `${activeCount}/${totalCount}`;
+        countPill.classList.toggle('has-active', activeCount > 0);
+    }
+
+    const activeBadge = document.getElementById('characters-active-badge');
+    if (activeBadge) {
+        activeBadge.textContent = `${activeCount} / ${totalCount} Aktif`;
+        activeBadge.classList.toggle('emerald', activeCount > 0);
+    }
+
+    const grid = document.getElementById('characters-toggle-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    CHARACTER_ROSTER.forEach(entry => {
+        if (activeCharacterGroup !== 'all' && entry.group !== activeCharacterGroup) return;
+        const enabled = isCharacterEnabled(entry.type);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'character-toggle-card' + (enabled ? ' is-on' : '');
+        btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        btn.innerHTML = `
+            <span class="char-card-left">
+                <span class="char-swatch" style="background:${entry.color};"></span>
+                <span class="char-meta">
+                    <span class="char-name">${entry.name}</span>
+                    <span class="char-role">${entry.role}</span>
+                </span>
+            </span>
+            <span class="toggle-pill">${enabled ? 'ON' : 'OFF'}</span>
+        `;
+        btn.addEventListener('click', () => {
+            sounds.playClickSound();
+            setCharacterEnabled(entry.type, !isCharacterEnabled(entry.type));
+        });
+        grid.appendChild(btn);
+    });
+}
+
+function setCharacterEnabled(type, enabled) {
+    const nextEnabled = Boolean(enabled);
+    characterSettings[type] = nextEnabled;
+    saveCharacterSettings();
+
+    if (hasGameStarted) {
+        if (nextEnabled) {
+            const exists = game.mobs.some(m => m.type === type);
+            if (!exists) {
+                spawnMob(type);
+            }
+        } else {
+            despawnCharacterType(type);
+        }
+        if (!document.body.classList.contains('in-game')) {
+            gameRenderer.render();
+        }
+    }
+
+    renderCharacterToggleUI();
+}
+
+function applyBulkCharacterToggle(enabled) {
+    const nextEnabled = Boolean(enabled);
+    characterSettings = setAllCharactersEnabled(characterSettings, nextEnabled);
+    saveCharacterSettings();
+
+    if (hasGameStarted) {
+        if (!nextEnabled) {
+            for (let i = game.mobs.length - 1; i >= 0; i--) {
+                const mob = game.mobs[i];
+                if (mob && mob.type !== 'minecart') {
+                    mob.cleanupMesh?.();
+                    game.mobs.splice(i, 1);
+                }
+            }
+        } else {
+            spawnInitialMobs();
+        }
+        if (!document.body.classList.contains('in-game')) {
+            gameRenderer.render();
+        }
+    }
+
+    renderCharacterToggleUI();
+    game.showNotification(nextEnabled ? 'Semua karakter diaktifkan.' : 'Semua karakter dimatikan.');
+}
+
+function openCharactersModal() {
+    const modal = document.getElementById('characters-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    renderCharacterToggleUI();
+}
+
+function closeCharactersModal() {
+    const modal = document.getElementById('characters-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+document.getElementById('overlay-characters-btn')?.addEventListener('click', () => {
+    sounds.playClickSound();
+    openCharactersModal();
+});
+document.getElementById('close-characters-btn')?.addEventListener('click', closeCharactersModal);
+document.getElementById('characters-modal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+        closeCharactersModal();
+    }
+});
+document.querySelectorAll('#characters-category-tabs .filter-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('#characters-category-tabs .filter-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        activeCharacterGroup = tab.getAttribute('data-char-group') || 'all';
+        renderCharacterToggleUI();
+    });
+});
+document.getElementById('characters-all-on-btn')?.addEventListener('click', () => {
+    sounds.playClickSound();
+    applyBulkCharacterToggle(true);
+});
+document.getElementById('characters-all-off-btn')?.addEventListener('click', () => {
+    sounds.playClickSound();
+    applyBulkCharacterToggle(false);
+});
+renderCharacterToggleUI();
+
 if (world.loadedFromSave) {
     restorePlayerAndChests();
 }
@@ -729,7 +913,7 @@ const INTERACTIVE_PROMPT_LABELS = {
 function syncContextualHUD(target) {
     // 1. Primary Mobile Arc Button: Swords on attackable Mob, Pickaxe otherwise
     const targetMobType = target?.type === 'mob' ? target.mob.type : null;
-    const isFriend = targetMobType === 'jj' || targetMobType === 'mikey';
+    const isFriend = Boolean(target?.type === 'mob' && target.mob.isFriendly);
     const isMob = target?.type === 'mob' && targetMobType !== 'minecart' && !isFriend;
     const nextPrimaryIcon = isMob ? 'swords' : 'pickaxe';
     if (nextPrimaryIcon !== lastPrimaryIconName && mobilePrimaryIcon) {
@@ -743,7 +927,8 @@ function syncContextualHUD(target) {
     let isInteractive = false;
 
     if (isFriend) {
-        promptText = targetMobType === 'jj' ? 'JJ (Teman)' : 'Mikey (Teman)';
+        const meta = CHARACTER_BY_TYPE.get(targetMobType);
+        promptText = meta ? `${meta.name} (${meta.role})` : 'Teman';
     } else if (target?.type === 'mob' && targetMobType === 'minecart') {
         promptText = '[Klik Kanan / .] Naiki Minecart';
         isInteractive = true;
@@ -879,9 +1064,11 @@ function addItemToInventory(type, count = 1, extra = {}) {
 function performAttack(mob) {
     if (!mob) return;
 
-    if (mob.type === 'jj' || mob.type === 'mikey') {
+    if (mob.isFriendly) {
         sounds.playClickSound();
-        game.showNotification(mob.type === 'jj' ? 'JJ adalah temanmu!' : 'Mikey adalah temanmu!');
+        const meta = CHARACTER_BY_TYPE.get(mob.type);
+        const displayName = meta ? meta.name : mob.type;
+        game.showNotification(mob.type === 'penduduk' ? `${displayName} adalah warga ramah!` : `${displayName} adalah temanmu!`);
         return;
     }
 
@@ -933,7 +1120,9 @@ function shootPlayerArrow() {
 }
 
 function triggerLuckyEvent(x, y, z) {
-    const events = ['wealth', 'heal', 'golem', 'tnt', 'mobs', 'enchant'];
+    const events = ['wealth', 'heal', 'tnt', 'enchant'];
+    if (isCharacterEnabled('irongolem')) events.push('golem');
+    if (isCharacterEnabled('zombie') || isCharacterEnabled('skeleton')) events.push('mobs');
     const choice = events[Math.floor(Math.random() * events.length)];
     sounds.playClickSound();
 
@@ -975,11 +1164,13 @@ function triggerLuckyEvent(x, y, z) {
         sounds.playEnchantSound();
         game.showNotification(`Lucky Block: Buku Enchant ${ENCHANTMENTS[pick].name} ${ROMAN_NUMERALS[lvl]} dan 6 Lapis Lazuli.`);
     } else {
-        game.mobs.push(
-            new Zombie(x - 1, y + 1.2, z, scene, world, game),
-            new Skeleton(x + 1, y + 1.2, z, scene, world, game)
-        );
-        game.showNotification('Lucky Block: Penyergapan monster.');
+        const ambush = [];
+        if (isCharacterEnabled('zombie')) ambush.push(new Zombie(x - 1, y + 1.2, z, scene, world, game));
+        if (isCharacterEnabled('skeleton')) ambush.push(new Skeleton(x + 1, y + 1.2, z, scene, world, game));
+        if (ambush.length > 0) {
+            game.mobs.push(...ambush);
+            game.showNotification('Lucky Block: Penyergapan monster.');
+        }
     }
 }
 
@@ -1139,23 +1330,33 @@ function handleBlockDig(targetPos) {
 }
 
 const SPAWN_EGG_DEFS = {
-    spawn_irongolem: { cls: IronGolem, yOffset: 0.5, roar: null, color: 0xcccccc, message: 'Iron Golem dipanggil.' },
-    spawn_snowgolem: { cls: SnowGolem, yOffset: 0.5, roar: null, color: 0xffffff, message: 'Snow Golem dipanggil.' },
-    spawn_traineater: { cls: TrainEater, yOffset: 0.5, roar: 'train', color: 0xdc2626, message: 'Train Eater dipanggil!' },
-    spawn_seaeater: { cls: SeaEater, yOffset: 0.5, roar: 'sea', color: 0x22d3ee, message: 'Sea Eater dipanggil!' },
-    spawn_charles: { cls: Charles, yOffset: 0.5, roar: 'train', color: 0xb91c1c, message: 'Charles dipanggil!' },
-    spawn_infectedocean: { cls: InfectedOcean, yOffset: 0.5, roar: 'sea', color: 0x991b1b, message: 'Infected Ocean dipanggil!' },
-    spawn_infectedsky: { cls: InfectedSky, skyMinY: 12.0, roar: 'sky', color: 0xe11d48, message: 'Infected Sky dipanggil di langit!' },
-    spawn_jj: { cls: JJ, yOffset: 0.5, roar: null, color: 0xef4444, message: 'JJ (Teman) dipanggil!' },
-    spawn_mikey: { cls: Mikey, yOffset: 0.5, roar: null, color: 0x22c55e, message: 'Mikey (Teman) dipanggil!' },
-    spawn_redsun: { cls: RedSun, skyMinY: 12.0, roar: 'celestial', color: 0xff2a6d, message: 'Red Sun muncul di langit!' },
-    spawn_lunarmoon: { cls: LunarMoon, skyMinY: 12.0, roar: 'celestial', color: 0xef4444, message: 'Lunar Moon muncul di langit!' },
-    spawn_cursedthomas: { cls: CursedThomas, yOffset: 0.5, roar: 'train', color: 0x0ea5e9, message: 'Cursed Thomas dipanggil!' }
+    spawn_irongolem: { mobType: 'irongolem', cls: IronGolem, yOffset: 0.5, roar: null, color: 0xcccccc, message: 'Iron Golem dipanggil.' },
+    spawn_snowgolem: { mobType: 'snowgolem', cls: SnowGolem, yOffset: 0.5, roar: null, color: 0xffffff, message: 'Snow Golem dipanggil.' },
+    spawn_traineater: { mobType: 'traineater', cls: TrainEater, yOffset: 0.5, roar: 'train', color: 0xdc2626, message: 'Train Eater dipanggil!' },
+    spawn_seaeater: { mobType: 'seaeater', cls: SeaEater, yOffset: 0.5, roar: 'sea', color: 0x22d3ee, message: 'Sea Eater dipanggil!' },
+    spawn_charles: { mobType: 'charles', cls: Charles, yOffset: 0.5, roar: 'train', color: 0xb91c1c, message: 'Charles dipanggil!' },
+    spawn_infectedocean: { mobType: 'infectedocean', cls: InfectedOcean, yOffset: 0.5, roar: 'sea', color: 0x991b1b, message: 'Infected Ocean dipanggil!' },
+    spawn_infectedsky: { mobType: 'infectedsky', cls: InfectedSky, skyMinY: 12.0, roar: 'sky', color: 0xe11d48, message: 'Infected Sky dipanggil di langit!' },
+    spawn_jj: { mobType: 'jj', cls: JJ, yOffset: 0.5, roar: null, color: 0xef4444, message: 'JJ (Teman) dipanggil!' },
+    spawn_mikey: { mobType: 'mikey', cls: Mikey, yOffset: 0.5, roar: null, color: 0x22c55e, message: 'Mikey (Teman) dipanggil!' },
+    spawn_bananakid: { mobType: 'bananakid', cls: BananaKid, yOffset: 0.5, roar: null, color: 0xfacc15, message: 'BananaKid (Teman) dipanggil!' },
+    spawn_carrie: { mobType: 'carrie', cls: Carrie, yOffset: 0.5, roar: null, color: 0xf8fafc, message: 'Carrie (Teman) dipanggil!' },
+    spawn_buu: { mobType: 'buu', cls: Buu, yOffset: 0.5, roar: null, color: 0x14b8a6, message: 'Buu (Teman) dipanggil!' },
+    spawn_cookie: { mobType: 'cookie', cls: Cookie, yOffset: 0.5, roar: null, color: 0x8b5cf6, message: 'Cookie (Teman) dipanggil!' },
+    spawn_penduduk: { mobType: 'penduduk', cls: Penduduk, yOffset: 0.5, roar: null, color: 0xa67758, message: 'Penduduk (Warga) dipanggil!' },
+    spawn_redsun: { mobType: 'redsun', cls: RedSun, skyMinY: 12.0, roar: 'celestial', color: 0xff2a6d, message: 'Red Sun muncul di langit!' },
+    spawn_lunarmoon: { mobType: 'lunarmoon', cls: LunarMoon, skyMinY: 12.0, roar: 'celestial', color: 0xef4444, message: 'Lunar Moon muncul di langit!' },
+    spawn_cursedthomas: { mobType: 'cursedthomas', cls: CursedThomas, yOffset: 0.5, roar: 'train', color: 0x0ea5e9, message: 'Cursed Thomas dipanggil!' }
 };
 
 function handleGolemSpawn(type, x, y, z) {
     const def = SPAWN_EGG_DEFS[type];
     if (!def) return false;
+    if (def.mobType && !isCharacterEnabled(def.mobType)) {
+        characterSettings[def.mobType] = true;
+        saveCharacterSettings();
+        renderCharacterToggleUI();
+    }
     const spawnY = def.skyMinY ? Math.max(y + 5.0, def.skyMinY) : y + def.yOffset;
     game.mobs.push(new def.cls(x, spawnY, z, scene, world, game));
     if (def.roar) {
@@ -1446,6 +1647,13 @@ function toggleWorkbenchModal() {
 }
 
 window.addEventListener('keydown', (e) => {
+    const charsModal = document.getElementById('characters-modal');
+    if (e.key === 'Escape' && charsModal && charsModal.style.display !== 'none') {
+        e.preventDefault();
+        closeCharactersModal();
+        return;
+    }
+
     if (!document.body.classList.contains('in-game')) return;
 
     if (e.key === 'Escape' && isGameplayModalOpen()) {
@@ -1556,6 +1764,34 @@ mobileAuxBtn?.addEventListener('touchstart', (e) => {
 // MOB SPAWNING (DEFERRED UNTIL START)
 // ==========================================
 
+const LAND_MOB_CLASSES = {
+    zombie: Zombie,
+    creeper: Creeper,
+    skeleton: Skeleton,
+    irongolem: IronGolem,
+    snowgolem: SnowGolem,
+    chicken: Chicken,
+    pig: Pig,
+    cow: Cow,
+    bloodgolem: BloodGolem,
+    giantirongolem: GiantIronGolem,
+    witherskeleton: WitherSkeleton,
+    traineater: TrainEater,
+    charles: Charles,
+    cursedthomas: CursedThomas,
+    jj: JJ,
+    mikey: Mikey,
+    bananakid: BananaKid,
+    carrie: Carrie,
+    buu: Buu,
+    cookie: Cookie,
+    penduduk: Penduduk
+};
+
+const NEAR_SPAWN_FRIENDLIES = new Set([
+    'jj', 'mikey', 'bananakid', 'carrie', 'buu', 'cookie', 'penduduk'
+]);
+
 function spawnMob(type) {
     if (type === 'seaeater' || type === 'infectedocean') {
         const x = Math.floor((Math.random() - 0.5) * (world.width - 16));
@@ -1585,7 +1821,7 @@ function spawnMob(type) {
     let x = Math.floor((Math.random() - 0.5) * (world.width - 10));
     let z = minLandZ + Math.floor(Math.random() * Math.max(1, maxLandZ - minLandZ + 1));
 
-    if (type === 'jj' || type === 'mikey') {
+    if (NEAR_SPAWN_FRIENDLIES.has(type)) {
         for (let attempt = 0; attempt < 10; attempt++) {
             x = Math.floor((Math.random() - 0.5) * 20);
             z = Math.floor((Math.random() - 0.5) * 20);
@@ -1609,83 +1845,43 @@ function spawnMob(type) {
 
     if (y > 0 && y < world.height - 3) {
         const sy = y + 0.5;
-        let mobInstance = null;
-        if (type === 'zombie') mobInstance = new Zombie(x, sy, z, scene, world, game);
-        else if (type === 'creeper') mobInstance = new Creeper(x, sy, z, scene, world, game);
-        else if (type === 'skeleton') mobInstance = new Skeleton(x, sy, z, scene, world, game);
-        else if (type === 'irongolem') mobInstance = new IronGolem(x, sy, z, scene, world, game);
-        else if (type === 'snowgolem') mobInstance = new SnowGolem(x, sy, z, scene, world, game);
-        else if (type === 'chicken') mobInstance = new Chicken(x, sy, z, scene, world, game);
-        else if (type === 'pig') mobInstance = new Pig(x, sy, z, scene, world, game);
-        else if (type === 'cow') mobInstance = new Cow(x, sy, z, scene, world, game);
-        else if (type === 'bloodgolem') mobInstance = new BloodGolem(x, sy, z, scene, world, game);
-        else if (type === 'giantirongolem') mobInstance = new GiantIronGolem(x, sy, z, scene, world, game);
-        else if (type === 'witherskeleton') mobInstance = new WitherSkeleton(x, sy, z, scene, world, game);
-        else if (type === 'traineater') mobInstance = new TrainEater(x, sy, z, scene, world, game);
-        else if (type === 'charles') mobInstance = new Charles(x, sy, z, scene, world, game);
-        else if (type === 'cursedthomas') mobInstance = new CursedThomas(x, sy, z, scene, world, game);
-        else if (type === 'jj') mobInstance = new JJ(x, sy, z, scene, world, game);
-        else if (type === 'mikey') mobInstance = new Mikey(x, sy, z, scene, world, game);
-
-        if (mobInstance) game.mobs.push(mobInstance);
+        const MobCls = LAND_MOB_CLASSES[type];
+        if (MobCls) {
+            game.mobs.push(new MobCls(x, sy, z, scene, world, game));
+        }
     }
 }
 
 function spawnInitialMobs() {
-    for (let i = 0; i < 4; i++) {
-        spawnMob(['zombie', 'creeper', 'skeleton', 'witherskeleton'][i]);
+    const initialCounts = new Map([
+        ['chicken', 2],
+        ['pig', 2],
+        ['cow', 2],
+        ['penduduk', 2]
+    ]);
+    const activeTypes = new Set(game.mobs.map(m => m.type));
+
+    for (const entry of CHARACTER_ROSTER) {
+        if (!isCharacterEnabled(entry.type)) continue;
+        if (entry.isUnique && activeTypes.has(entry.type)) continue;
+        const targetCount = entry.isUnique ? 1 : (initialCounts.get(entry.type) || 1);
+        const existingCount = game.mobs.filter(m => m.type === entry.type).length;
+        const needed = Math.max(0, targetCount - existingCount);
+        for (let i = 0; i < needed; i++) {
+            spawnMob(entry.type);
+        }
+        activeTypes.add(entry.type);
     }
-    for (let i = 0; i < 6; i++) {
-        spawnMob(['chicken', 'pig', 'cow'][i % 3]);
-    }
-    spawnMob('giantirongolem');
-    spawnMob('bloodgolem');
-    spawnMob('traineater');
-    spawnMob('seaeater');
-    spawnMob('jj');
-    spawnMob('mikey');
-    spawnMob('charles');
-    spawnMob('infectedocean');
-    spawnMob('infectedsky');
-    spawnMob('redsun');
-    spawnMob('lunarmoon');
-    spawnMob('cursedthomas');
 }
 
 function startMobSpawner() {
     if (mobSpawnIntervalId !== null) return;
-    const uniqueTypes = [
-        'traineater', 'seaeater', 'charles', 'infectedocean',
-        'infectedsky', 'jj', 'mikey', 'redsun', 'lunarmoon', 'cursedthomas'
-    ];
     mobSpawnIntervalId = setInterval(() => {
         if (hasGameStarted && document.body.classList.contains('in-game') && !isGameplayModalOpen() && game.mobs.length < 30) {
-            const counts = {};
-            for (const t of uniqueTypes) {
-                counts[t] = game.mobs.filter(m => m.type === t).length;
-            }
-            const rand = Math.random();
-            if (rand < 0.03) spawnMob('giantirongolem');
-            else if (rand < 0.05 && counts.traineater < 1) spawnMob('traineater');
-            else if (rand < 0.07 && counts.seaeater < 1) spawnMob('seaeater');
-            else if (rand < 0.09 && counts.charles < 1) spawnMob('charles');
-            else if (rand < 0.11 && counts.infectedocean < 1) spawnMob('infectedocean');
-            else if (rand < 0.13 && counts.infectedsky < 1) spawnMob('infectedsky');
-            else if (rand < 0.15 && counts.redsun < 1) spawnMob('redsun');
-            else if (rand < 0.17 && counts.lunarmoon < 1) spawnMob('lunarmoon');
-            else if (rand < 0.19 && counts.cursedthomas < 1) spawnMob('cursedthomas');
-            else if (rand < 0.21 && counts.jj < 1) spawnMob('jj');
-            else if (rand < 0.23 && counts.mikey < 1) spawnMob('mikey');
-            else if (rand < 0.27) spawnMob('bloodgolem');
-            else if (rand < 0.31) spawnMob('irongolem');
-            else if (rand < 0.35) spawnMob('snowgolem');
-            else if (rand < 0.58) {
-                const animals = ['chicken', 'pig', 'cow'];
-                spawnMob(animals[Math.floor(Math.random() * animals.length)]);
-            } else {
-                const hostiles = ['zombie', 'creeper', 'skeleton', 'witherskeleton'];
-                spawnMob(hostiles[Math.floor(Math.random() * hostiles.length)]);
-            }
+            const eligible = getEligibleSpawnTypes(characterSettings, game.mobs.map(m => m.type));
+            if (eligible.length === 0) return;
+            const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+            spawnMob(chosen);
         }
     }, 8000);
 }

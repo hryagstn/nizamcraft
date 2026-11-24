@@ -46,7 +46,8 @@ const LUCIDE_INNER = {
     arrowRight: '<path d="M5 12h14m-7-7l7 7l-7 7"/>',
     slash: '<path d="M22 2L2 22"/>',
     zap: '<path d="M15.914 4a1.5 1.5 0 0 0-2.474-1.561l-9 9A1.5 1.5 0 0 0 5.5 14h4.002a.5.5 0 0 1 .471.666L8.086 20a1.5 1.5 0 0 0 2.475 1.56l9-9A1.5 1.5 0 0 0 18.5 10h-3.997a.5.5 0 0 1-.472-.667z"/>',
-    library: '<path d="m16 6l4 14M12 6v14M8 8v12M4 4v16"/>'
+    library: '<path d="m16 6l4 14M12 6v14M8 8v12M4 4v16"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3.128a4 4 0 0 1 0 7.744M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>'
 };
 
 export function svgIcon(name, size = 18, color = 'currentColor') {
@@ -105,6 +106,11 @@ export const ITEM_CATALOG = {
     spawn_redsun: { name: 'Telur Red Sun', icon: 'egg', color: '#ff2a6d' },
     spawn_lunarmoon: { name: 'Telur Lunar Moon', icon: 'egg', color: '#a8a29e' },
     spawn_cursedthomas: { name: 'Telur Cursed Thomas', icon: 'egg', color: '#0ea5e9' },
+    spawn_bananakid: { name: 'Telur BananaKid', icon: 'egg', color: '#facc15' },
+    spawn_carrie: { name: 'Telur Carrie', icon: 'egg', color: '#f8fafc' },
+    spawn_buu: { name: 'Telur Buu', icon: 'egg', color: '#14b8a6' },
+    spawn_cookie: { name: 'Telur Cookie', icon: 'egg', color: '#8b5cf6' },
+    spawn_penduduk: { name: 'Telur Penduduk', icon: 'egg', color: '#a67758' },
     stick: { name: 'Tongkat Kayu', icon: 'slash', color: '#d97706' },
     lapis: { name: 'Lapis Lazuli', icon: 'gem', color: '#3b82f6' },
     coal: { name: 'Batu Bara', icon: 'layers', color: '#94a3b8' },

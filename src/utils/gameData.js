@@ -965,6 +965,11 @@ export const HOTBAR_ITEMS = [
     { type: 'spawn_redsun', label: 'Red Sun', key: '^', category: 'special', nameId: 'Telur Red Sun' },
     { type: 'spawn_lunarmoon', label: 'Lunar Moon', key: '&', category: 'special', nameId: 'Telur Lunar Moon' },
     { type: 'spawn_cursedthomas', label: 'C. Thomas', key: '*', category: 'special', nameId: 'Telur Cursed Thomas' },
+    { type: 'spawn_bananakid', label: 'BananaKid', key: '~', category: 'special', nameId: 'Telur BananaKid' },
+    { type: 'spawn_carrie', label: 'Carrie', key: '_', category: 'special', nameId: 'Telur Carrie' },
+    { type: 'spawn_buu', label: 'Buu', key: '|', category: 'special', nameId: 'Telur Buu' },
+    { type: 'spawn_cookie', label: 'Cookie', key: '?', category: 'special', nameId: 'Telur Cookie' },
+    { type: 'spawn_penduduk', label: 'Penduduk', key: '"', category: 'special', nameId: 'Telur Penduduk' },
     { type: 'coal_ore', label: 'Coal Ore', key: 'K', category: 'mineral', nameId: 'Bijih Batu Bara' },
     { type: 'iron_ore', label: 'Iron Ore', key: 'J', category: 'mineral', nameId: 'Bijih Besi' },
     { type: 'gold_ore', label: 'Gold Ore', key: 'N', category: 'mineral', nameId: 'Bijih Emas' },
@@ -2597,4 +2602,95 @@ export function planPistonPush(getBlockAt, px, py, pz, facing = 'up', maxPush = 
     }
 
     return { canPush: false, reason: 'limit', blocks: [], crushPos: null };
+}
+
+// ==========================================
+// CHARACTER ROSTER & ON/OFF SWITCH HELPERS
+// ==========================================
+
+export const CHARACTER_ROSTER = [
+    // Maizen World & Teman
+    { type: 'jj', name: 'JJ', group: 'maizen', role: 'Teman', color: '#ef4444', isUnique: true, isFriendly: true },
+    { type: 'mikey', name: 'Mikey', group: 'maizen', role: 'Teman', color: '#22c55e', isUnique: true, isFriendly: true },
+    { type: 'bananakid', name: 'BananaKid', group: 'maizen', role: 'Teman', color: '#facc15', isUnique: true, isFriendly: true },
+    { type: 'carrie', name: 'Carrie', group: 'maizen', role: 'Teman', color: '#f8fafc', isUnique: true, isFriendly: true },
+    { type: 'buu', name: 'Buu', group: 'maizen', role: 'Teman', color: '#14b8a6', isUnique: true, isFriendly: true },
+    { type: 'cookie', name: 'Cookie', group: 'maizen', role: 'Teman', color: '#8b5cf6', isUnique: true, isFriendly: true },
+    { type: 'penduduk', name: 'Penduduk', group: 'maizen', role: 'Warga', color: '#a67758', isUnique: false, isFriendly: true },
+
+    // Penjaga / Golem
+    { type: 'irongolem', name: 'Iron Golem', group: 'golem', role: 'Penjaga', color: '#e2e8f0', isUnique: false, isFriendly: false },
+    { type: 'snowgolem', name: 'Snow Golem', group: 'golem', role: 'Penjaga', color: '#fb923c', isUnique: false, isFriendly: false },
+    { type: 'giantirongolem', name: 'Giant Iron Golem', group: 'golem', role: 'Penjaga', color: '#cbd5e1', isUnique: true, isFriendly: false },
+
+    // Hewan
+    { type: 'chicken', name: 'Ayam', group: 'animal', role: 'Hewan', color: '#fef08a', isUnique: false, isFriendly: false },
+    { type: 'pig', name: 'Babi', group: 'animal', role: 'Hewan', color: '#f472b6', isUnique: false, isFriendly: false },
+    { type: 'cow', name: 'Sapi', group: 'animal', role: 'Hewan', color: '#78716c', isUnique: false, isFriendly: false },
+
+    // Monster
+    { type: 'zombie', name: 'Zombie', group: 'monster', role: 'Monster', color: '#16a34a', isUnique: false, isFriendly: false },
+    { type: 'creeper', name: 'Creeper', group: 'monster', role: 'Monster', color: '#4ade80', isUnique: false, isFriendly: false },
+    { type: 'skeleton', name: 'Skeleton', group: 'monster', role: 'Monster', color: '#d4d4d8', isUnique: false, isFriendly: false },
+    { type: 'witherskeleton', name: 'Wither Skeleton', group: 'monster', role: 'Monster', color: '#3f3f46', isUnique: false, isFriendly: false },
+    { type: 'bloodgolem', name: 'Blood Golem', group: 'monster', role: 'Monster', color: '#991b1b', isUnique: false, isFriendly: false },
+
+    // Boss
+    { type: 'traineater', name: 'Train Eater', group: 'boss', role: 'Boss', color: '#dc2626', isUnique: true, isFriendly: false },
+    { type: 'seaeater', name: 'Sea Eater', group: 'boss', role: 'Boss', color: '#22d3ee', isUnique: true, isFriendly: false },
+    { type: 'charles', name: 'Charles', group: 'boss', role: 'Boss', color: '#b91c1c', isUnique: true, isFriendly: false },
+    { type: 'infectedocean', name: 'Infected Ocean', group: 'boss', role: 'Boss', color: '#7f1d1d', isUnique: true, isFriendly: false },
+    { type: 'infectedsky', name: 'Infected Sky', group: 'boss', role: 'Boss', color: '#e11d48', isUnique: true, isFriendly: false },
+    { type: 'redsun', name: 'Red Sun', group: 'boss', role: 'Boss', color: '#ff2a6d', isUnique: true, isFriendly: false },
+    { type: 'lunarmoon', name: 'Lunar Moon', group: 'boss', role: 'Boss', color: '#a8a29e', isUnique: true, isFriendly: false },
+    { type: 'cursedthomas', name: 'Cursed Thomas', group: 'boss', role: 'Boss', color: '#0ea5e9', isUnique: true, isFriendly: false }
+];
+
+export function createDefaultCharacterSettings() {
+    const settings = {};
+    for (const entry of CHARACTER_ROSTER) {
+        settings[entry.type] = false;
+    }
+    return settings;
+}
+
+export function normalizeCharacterSettings(saved) {
+    const normalized = createDefaultCharacterSettings();
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) {
+        return normalized;
+    }
+    for (const entry of CHARACTER_ROSTER) {
+        if (Object.prototype.hasOwnProperty.call(saved, entry.type)) {
+            normalized[entry.type] = Boolean(saved[entry.type]);
+        }
+    }
+    return normalized;
+}
+
+export function setAllCharactersEnabled(settings, enabled) {
+    const next = {};
+    const flag = Boolean(enabled);
+    for (const entry of CHARACTER_ROSTER) {
+        next[entry.type] = flag;
+    }
+    return next;
+}
+
+export function countEnabledCharacters(settings) {
+    let count = 0;
+    for (const entry of CHARACTER_ROSTER) {
+        if (Boolean(settings?.[entry.type])) count++;
+    }
+    return count;
+}
+
+export function getEligibleSpawnTypes(settings, activeMobTypes = []) {
+    const activeSet = new Set(activeMobTypes);
+    const eligible = [];
+    for (const entry of CHARACTER_ROSTER) {
+        if (!Boolean(settings?.[entry.type])) continue;
+        if (entry.isUnique && activeSet.has(entry.type)) continue;
+        eligible.push(entry.type);
+    }
+    return eligible;
 }

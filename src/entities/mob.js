@@ -152,6 +152,93 @@ function createMobFaceTexture(type) {
         // Slight warm smile
         ctx.fillStyle = '#b47b5c';
         ctx.fillRect(3, 6, 2, 1);
+    } else if (type === 'bananakid') {
+        ctx.fillStyle = '#ebe01c'; // Banana yellow face
+        ctx.fillRect(0, 0, 8, 8);
+        ctx.fillStyle = '#d9ca14'; // Subtle peel shading
+        ctx.fillRect(0, 0, 8, 1);
+        ctx.fillRect(0, 7, 8, 1);
+        // Wide-set black eyes at outer corners
+        ctx.fillStyle = '#09090b';
+        ctx.fillRect(0, 4, 1, 1);
+        ctx.fillRect(7, 4, 1, 1);
+        // Open happy mouth with bright red tongue
+        ctx.fillRect(2, 5, 4, 1);
+        ctx.fillRect(3, 6, 1, 1);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(4, 6, 2, 1);
+    } else if (type === 'carrie') {
+        ctx.fillStyle = '#f4f4f5'; // Crisp white fur
+        ctx.fillRect(0, 0, 8, 8);
+        ctx.fillStyle = '#d4d4d8'; // Subtle top ear corners
+        ctx.fillRect(0, 0, 1, 1);
+        ctx.fillRect(7, 0, 1, 1);
+        ctx.fillStyle = '#e4e4e7'; // Soft cheeks
+        ctx.fillRect(1, 4, 1, 1);
+        ctx.fillRect(6, 4, 1, 1);
+        // Vertical 1x2 black eyes & small black nose/mouth
+        ctx.fillStyle = '#09090b';
+        ctx.fillRect(2, 3, 1, 2);
+        ctx.fillRect(5, 3, 1, 2);
+        ctx.fillRect(3, 5, 2, 1);
+    } else if (type === 'buu') {
+        ctx.fillStyle = '#c69c82'; // Peach skin
+        ctx.fillRect(0, 0, 8, 8);
+        // Brown hair bangs across top
+        ctx.fillStyle = '#543c26';
+        ctx.fillRect(0, 0, 8, 2);
+        ctx.fillStyle = '#3f2b1a';
+        ctx.fillRect(2, 0, 3, 1);
+        // Derpy outward-looking eyes (black pupils outside, white sclera inside)
+        ctx.fillStyle = '#09090b';
+        ctx.fillRect(0, 2, 1, 1);
+        ctx.fillRect(7, 2, 1, 1);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(1, 2, 1, 1);
+        ctx.fillRect(6, 2, 1, 1);
+        // High open derpy mouth with red tongue
+        ctx.fillStyle = '#09090b';
+        ctx.fillRect(2, 3, 4, 1);
+        ctx.fillRect(3, 4, 1, 2);
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(4, 4, 2, 2);
+    } else if (type === 'cookie') {
+        ctx.fillStyle = '#635042'; // Gingerbread brown
+        ctx.fillRect(0, 0, 8, 8);
+        ctx.fillStyle = '#7a6454';
+        ctx.fillRect(0, 3, 1, 1);
+        ctx.fillRect(7, 4, 1, 1);
+        ctx.fillRect(3, 0, 2, 1);
+        // Goofy 2x2 eyes with cream-white outer highlights
+        ctx.fillStyle = '#d6cec6';
+        ctx.fillRect(1, 1, 2, 2);
+        ctx.fillRect(5, 1, 2, 2);
+        ctx.fillStyle = '#27272a';
+        ctx.fillRect(2, 2, 1, 1);
+        ctx.fillRect(5, 2, 1, 1);
+        // Wide red smiling mouth
+        ctx.fillStyle = '#b91c1c';
+        ctx.fillRect(2, 4, 4, 2);
+        ctx.fillRect(3, 6, 2, 1);
+    } else if (type === 'penduduk') {
+        ctx.fillStyle = '#a67758'; // Classic villager tan skin
+        ctx.fillRect(0, 0, 8, 8);
+        ctx.fillStyle = '#956749';
+        ctx.fillRect(1, 1, 2, 1);
+        ctx.fillRect(5, 0, 2, 1);
+        // Thick dark-brown unibrow
+        ctx.fillStyle = '#3d2517';
+        ctx.fillRect(1, 3, 6, 1);
+        // White sclera & emerald-green eyes
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(1, 4, 1, 1);
+        ctx.fillRect(6, 4, 1, 1);
+        ctx.fillStyle = '#16a34a';
+        ctx.fillRect(2, 4, 1, 1);
+        ctx.fillRect(5, 4, 1, 1);
+        // Subtle lower mouth shadow
+        ctx.fillStyle = '#7c4e35';
+        ctx.fillRect(3, 6, 2, 1);
     }
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -843,7 +930,7 @@ export class Arrow {
             if (this.game.mobs) {
                 for (let i = this.game.mobs.length - 1; i >= 0; i--) {
                     const mob = this.game.mobs[i];
-                    if (!mob || mob.type === 'minecart' || mob.type === 'jj' || mob.type === 'mikey') continue;
+                    if (!mob || mob.type === 'minecart' || mob.isFriendly) continue;
                     const mobPos = mob.position;
                     const mRadius = Math.max(0.4, (mob.width || 0.8) / 2);
                     const mHeight = mob.height || 1.8;
@@ -3536,18 +3623,46 @@ export class InfectedSky extends Mob {
     }
 }
 
-// 16 & 17. JJ AND Mikey (Peaceful Friendly Companions wielding Diamond Swords)
+// 16 - 22. JJ, Mikey, BananaKid, Carrie, Buu, Cookie & Penduduk (Peaceful Friendly Characters)
 class AllyHero extends Mob {
     constructor(type, x, y, z, scene, world, game) {
         super(type, x, y, z, scene, world, game);
         this.isFriendly = true;
+        this.followPlayer = type !== 'penduduk';
         this.hp = 260;
         this.maxHp = 260;
         this.width = 0.6;
         this.height = 1.8;
-        this.speed = type === 'jj' ? 2.6 : 2.5;
+        this.speed = type === 'jj' ? 2.6 : (type === 'penduduk' ? 1.55 : 2.5);
         this.walkPhase = 0;
         this.targetMob = null;
+    }
+
+    buildTwoToneLimb(w, h, d, topMat, topRatio, bottomMat) {
+        const grp = new THREE.Group();
+        const topH = h * topRatio;
+        const botH = h * (1 - topRatio);
+
+        const upper = new THREE.Mesh(new THREE.BoxGeometry(w, topH, d), topMat);
+        upper.position.set(0, -topH / 2, 0);
+        upper.castShadow = true;
+        grp.add(upper);
+
+        const lower = new THREE.Mesh(new THREE.BoxGeometry(w, botH, d), bottomMat);
+        lower.position.set(0, -topH - botH / 2, 0);
+        lower.castShadow = true;
+        grp.add(lower);
+
+        return grp;
+    }
+
+    buildSolidLimb(w, h, d, mat) {
+        const grp = new THREE.Group();
+        const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        part.position.set(0, -h / 2, 0);
+        part.castShadow = true;
+        grp.add(part);
+        return grp;
     }
 
     attachDiamondSword(handY = -0.58) {
@@ -3587,7 +3702,7 @@ class AllyHero extends Mob {
         const player = this.game?.player;
         const distToPlayer = player ? this.position.distanceTo(player.position) : 0;
 
-        if (player && distToPlayer > 6.5 && distToPlayer < 22.0) {
+        if (this.followPlayer && player && distToPlayer > 6.5 && distToPlayer < 22.0) {
             const angle = Math.atan2(player.position.x - this.position.x, player.position.z - this.position.z);
             this.mesh.rotation.y = angle;
             this.velocity.x = Math.sin(angle) * (currentSpeed * 0.78);
@@ -3771,6 +3886,282 @@ export class Mikey extends AllyHero {
 
         this.rLeg = makeLimb(0.24, 0.6, 0.24, darkGreenMat);
         this.rLeg.position.set(0.14, 0.6, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+export class BananaKid extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('bananakid', x, y, z, scene, world, game);
+    }
+
+    initMesh() {
+        const yellowMat = createTrackedColorMat(this, 0xf0e11c);
+        const bodyMat = createTrackedTexMat(this, textures.bananaBody);
+        const legFrontMat = createTrackedTexMat(this, textures.bananaLegFront);
+        const stemMat = createTrackedColorMat(this, 0x5c3310);
+        const faceMat = createTrackedTexMat(this, createMobFaceTexture('bananakid'));
+
+        // Head + dark brown banana stem cap on crown
+        const headMats = [yellowMat, yellowMat, yellowMat, yellowMat, faceMat, yellowMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.54), headMats);
+        head.position.set(0, 1.56, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        const stem = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.36), stemMat);
+        stem.position.set(0, 1.86, 0);
+        stem.castShadow = true;
+        this.mesh.add(stem);
+
+        // Bright yellow banana torso
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.32), bodyMat);
+        torso.position.set(0, 0.94, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        // Yellow arms
+        this.lArm = this.buildSolidLimb(0.22, 0.68, 0.22, yellowMat);
+        this.lArm.position.set(-0.38, 1.28, 0);
+        this.mesh.add(this.lArm);
+
+        this.rArm = this.buildSolidLimb(0.22, 0.68, 0.22, yellowMat);
+        this.rArm.position.set(0.38, 1.28, 0);
+        this.mesh.add(this.rArm);
+
+        // Yellow legs with dark brown square knee patches & sole rim
+        const legMats = [yellowMat, yellowMat, yellowMat, stemMat, legFrontMat, yellowMat];
+        this.lLeg = this.buildSolidLimb(0.24, 0.6, 0.24, legMats);
+        this.lLeg.position.set(-0.14, 0.6, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = this.buildSolidLimb(0.24, 0.6, 0.24, legMats);
+        this.rLeg.position.set(0.14, 0.6, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+export class Carrie extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('carrie', x, y, z, scene, world, game);
+    }
+
+    initMesh() {
+        const whiteMat = createTrackedColorMat(this, 0xf4f4f5);
+        const earMat = createTrackedColorMat(this, 0xd4d4d8);
+        const scarfMat = createTrackedTexMat(this, textures.carrieScarf);
+        const faceMat = createTrackedTexMat(this, createMobFaceTexture('carrie'));
+
+        // White head with two small corner ears
+        const headMats = [whiteMat, whiteMat, whiteMat, whiteMat, faceMat, whiteMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.54), headMats);
+        head.position.set(0, 1.56, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        for (const side of [-1, 1]) {
+            const ear = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.14), earMat);
+            ear.position.set(side * 0.21, 1.85, 0.04);
+            ear.castShadow = true;
+            this.mesh.add(ear);
+        }
+
+        // White torso + thick crimson scarf/shawl over chest & shoulders
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.32), whiteMat);
+        torso.position.set(0, 0.94, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        const scarfMantle = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.28, 0.38), scarfMat);
+        scarfMantle.position.set(0, 1.18, 0);
+        scarfMantle.castShadow = true;
+        this.mesh.add(scarfMantle);
+
+        // Two-tone arms: top crimson scarf sleeves, bottom white paws
+        this.lArm = this.buildTwoToneLimb(0.22, 0.68, 0.22, scarfMat, 0.38, whiteMat);
+        this.lArm.position.set(-0.38, 1.28, 0);
+        this.mesh.add(this.lArm);
+
+        this.rArm = this.buildTwoToneLimb(0.22, 0.68, 0.22, scarfMat, 0.38, whiteMat);
+        this.rArm.position.set(0.38, 1.28, 0);
+        this.mesh.add(this.rArm);
+
+        // White legs
+        this.lLeg = this.buildSolidLimb(0.24, 0.6, 0.24, whiteMat);
+        this.lLeg.position.set(-0.14, 0.6, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = this.buildSolidLimb(0.24, 0.6, 0.24, whiteMat);
+        this.rLeg.position.set(0.14, 0.6, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+export class Buu extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('buu', x, y, z, scene, world, game);
+    }
+
+    initMesh() {
+        const hairMat = createTrackedColorMat(this, 0x543c26);
+        const skinMat = createTrackedColorMat(this, 0xc69c82);
+        const shirtMat = createTrackedColorMat(this, 0x26b5a5);
+        const pantsMat = createTrackedColorMat(this, 0x52478c);
+        const shoeMat = createTrackedColorMat(this, 0x71717a);
+        const stemMat = createTrackedColorMat(this, 0x22c55e);
+        const petalMat = createTrackedColorMat(this, 0xdc2626);
+
+        const hairSideMat = createTrackedTexMat(this, textures.buuHairSide);
+        const torsoFrontMat = createTrackedTexMat(this, textures.buuTorsoFront);
+        const faceMat = createTrackedTexMat(this, createMobFaceTexture('buu'));
+
+        // Head with brown hair top/back, stepped sideburns, and derpy face
+        const headMats = [hairSideMat, hairSideMat, hairMat, skinMat, faceMat, hairMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.54), headMats);
+        head.position.set(0, 1.56, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        // Cyan shirt torso with belt & purple waistband on front
+        const torsoMats = [shirtMat, shirtMat, shirtMat, pantsMat, torsoFrontMat, shirtMat];
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.32), torsoMats);
+        torso.position.set(0, 0.94, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        // Short cyan sleeves over peach forearms
+        this.lArm = this.buildTwoToneLimb(0.22, 0.68, 0.22, shirtMat, 0.42, skinMat);
+        this.lArm.position.set(-0.38, 1.28, 0);
+        this.mesh.add(this.lArm);
+
+        this.rArm = this.buildTwoToneLimb(0.22, 0.68, 0.22, shirtMat, 0.42, skinMat);
+        this.rArm.position.set(0.38, 1.28, 0);
+        this.mesh.add(this.rArm);
+
+        // Tiny red poppy flower held in right hand
+        const flower = new THREE.Group();
+        flower.position.set(0, -0.62, 0.14);
+        flower.rotation.x = Math.PI / 2.8;
+        const stem = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.04), stemMat);
+        stem.position.set(0, 0.1, 0);
+        flower.add(stem);
+        const bloom = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.06), petalMat);
+        bloom.position.set(0, 0.22, 0);
+        flower.add(bloom);
+        this.rArm.add(flower);
+        this.flowerGroup = flower;
+
+        // Purple pants with grey shoes
+        this.lLeg = this.buildTwoToneLimb(0.24, 0.6, 0.24, pantsMat, 0.85, shoeMat);
+        this.lLeg.position.set(-0.14, 0.6, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = this.buildTwoToneLimb(0.24, 0.6, 0.24, pantsMat, 0.85, shoeMat);
+        this.rLeg.position.set(0.14, 0.6, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+export class Cookie extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('cookie', x, y, z, scene, world, game);
+    }
+
+    initMesh() {
+        const doughMat = createTrackedColorMat(this, 0x635042);
+        const torsoFrontMat = createTrackedTexMat(this, textures.cookieTorsoFront);
+        const limbMat = createTrackedTexMat(this, textures.cookieLimb);
+        const faceMat = createTrackedTexMat(this, createMobFaceTexture('cookie'));
+
+        // Gingerbread head with goofy eyes and red smile
+        const headMats = [doughMat, doughMat, doughMat, doughMat, faceMat, doughMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.54), headMats);
+        head.position.set(0, 1.56, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        // Torso with purple buttons and zigzag cream icing waist
+        const torsoMats = [doughMat, doughMat, doughMat, doughMat, torsoFrontMat, torsoFrontMat];
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.32), torsoMats);
+        torso.position.set(0, 0.94, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        // Arms & legs with cream-white zigzag icing cuffs
+        const limbMats = [limbMat, limbMat, doughMat, doughMat, limbMat, limbMat];
+        this.lArm = this.buildSolidLimb(0.22, 0.68, 0.22, limbMats);
+        this.lArm.position.set(-0.38, 1.28, 0);
+        this.mesh.add(this.lArm);
+
+        this.rArm = this.buildSolidLimb(0.22, 0.68, 0.22, limbMats);
+        this.rArm.position.set(0.38, 1.28, 0);
+        this.mesh.add(this.rArm);
+
+        this.lLeg = this.buildSolidLimb(0.24, 0.6, 0.24, limbMats);
+        this.lLeg.position.set(-0.14, 0.6, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = this.buildSolidLimb(0.24, 0.6, 0.24, limbMats);
+        this.rLeg.position.set(0.14, 0.6, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+export class Penduduk extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('penduduk', x, y, z, scene, world, game);
+    }
+
+    initMesh() {
+        const skinMat = createTrackedTexMat(this, textures.villagerSkin);
+        const noseMat = createTrackedColorMat(this, 0x8a5d41);
+        const robeMat = createTrackedTexMat(this, textures.villagerRobe);
+        const bootMat = createTrackedColorMat(this, 0x3f3f46);
+        const faceMat = createTrackedTexMat(this, createMobFaceTexture('penduduk'));
+
+        // Tall Minecraft Villager head + iconic 3D protruding nose
+        const headMats = [skinMat, skinMat, skinMat, skinMat, faceMat, skinMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.64, 0.5), headMats);
+        head.position.set(0, 1.64, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        const nose = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.26, 0.16), noseMat);
+        nose.position.set(0, 1.48, 0.31);
+        nose.castShadow = true;
+        this.mesh.add(nose);
+
+        // Long brown villager robe torso
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.86, 0.36), robeMat);
+        torso.position.set(0, 0.88, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        // Stationary folded arms crossed over chest
+        const foldedArms = new THREE.Group();
+        for (const side of [-1, 1]) {
+            const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.42, 0.22), robeMat);
+            sleeve.position.set(side * 0.35, 1.08, 0.08);
+            sleeve.rotation.x = -0.68;
+            sleeve.castShadow = true;
+            foldedArms.add(sleeve);
+        }
+        const forearmBar = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.22, 0.22), robeMat);
+        forearmBar.position.set(0, 0.9, 0.26);
+        forearmBar.castShadow = true;
+        foldedArms.add(forearmBar);
+        this.mesh.add(foldedArms);
+        this.foldedArms = foldedArms;
+        this.lArm = null;
+        this.rArm = null;
+
+        // Brown legs with dark grey boots
+        this.lLeg = this.buildTwoToneLimb(0.24, 0.56, 0.24, robeMat, 0.8, bootMat);
+        this.lLeg.position.set(-0.14, 0.56, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = this.buildTwoToneLimb(0.24, 0.56, 0.24, robeMat, 0.8, bootMat);
+        this.rLeg.position.set(0.14, 0.56, 0);
         this.mesh.add(this.rLeg);
     }
 }

@@ -1283,6 +1283,70 @@ textures.sawBlade = createPixelTexture((ctx) => {
     }
 });
 
+// 48. Train Eater Fleshy Crimson Meat Texture
+textures.trainEaterFlesh = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#8b1a1a';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const r = Math.random();
+            if (r < 0.25) {
+                ctx.fillStyle = '#5e0e0e';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.5) {
+                ctx.fillStyle = '#b22222';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.65) {
+                ctx.fillStyle = '#d46a6a';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    // Pale sinew / vein streaks
+    ctx.fillStyle = '#d98a8a';
+    ctx.fillRect(2, 3, 4, 1);
+    ctx.fillRect(9, 10, 5, 1);
+    ctx.fillRect(4, 13, 3, 1);
+});
+
+// 49. Sea Eater Weathered Grey-Green Skin & Pitch-Black Maw
+textures.seaEaterSkin = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#4f6363';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const r = Math.random();
+            if (r < 0.28) {
+                ctx.fillStyle = '#3d5050';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.48) {
+                ctx.fillStyle = '#607673';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.6) {
+                ctx.fillStyle = '#2c3a3a';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+});
+
+textures.seaEaterMaw = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#050809';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const r = Math.random();
+            if (r < 0.25) {
+                ctx.fillStyle = '#0c1316';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.36) {
+                ctx.fillStyle = '#162024';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+});
+
 const BLOCK_TEXTURE_KEY = {
     grass: 'grassSide',
     dirt: 'dirt',

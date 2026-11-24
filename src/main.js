@@ -1551,11 +1551,11 @@ mobileAuxBtn?.addEventListener('touchstart', (e) => {
 
 function spawnMob(type) {
     if (type === 'seaeater') {
-        const x = Math.floor((Math.random() - 0.5) * (world.width - 12));
-        const minSeaZ = SEA_START_Z + 3;
-        const maxSeaZ = Math.floor(world.depth / 2) - 5;
+        const x = Math.floor((Math.random() - 0.5) * (world.width - 16));
+        const minSeaZ = SEA_START_Z + 8;
+        const maxSeaZ = Math.floor(world.depth / 2) - 8;
         const z = minSeaZ + Math.floor(Math.random() * Math.max(1, maxSeaZ - minSeaZ + 1));
-        game.mobs.push(new SeaEater(x, 4.5, z, scene, world, game));
+        game.mobs.push(new SeaEater(x, 2.6, z, scene, world, game));
         return;
     }
 

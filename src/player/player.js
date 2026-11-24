@@ -828,8 +828,8 @@ export class Player {
             const eggColors = {
                 spawn_irongolem: { shell: 0xdcdcdc, spot: 0x990000 },
                 spawn_snowgolem: { shell: 0xe0e2db, spot: 0xff7a00 },
-                spawn_traineater: { shell: 0x2b2d42, spot: 0xdc2626 },
-                spawn_seaeater: { shell: 0x0b3954, spot: 0x22d3ee }
+                spawn_traineater: { shell: 0x9b1c1c, spot: 0xf5e9a6 },
+                spawn_seaeater: { shell: 0x4f6363, spot: 0x0b1012 }
             }[type];
             const eggGroup = new THREE.Group();
             const eggGeo = new THREE.BoxGeometry(0.05, 0.07, 0.05);

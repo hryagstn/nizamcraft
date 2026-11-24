@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { sounds } from '../utils/audio.js';
+import { textures } from '../utils/textures.js';
 import { PrimedTNT } from './tnt.js';
 import {
     HOSTILE_MOBS,
@@ -2164,14 +2165,14 @@ export class Minecart extends Mob {
     }
 }
 
-// 11. TRAIN EATER (Locomotive predator boss on land)
+// 11. TRAIN EATER (Giant fleshy crimson worm-tube boss with eyeball mounds & throat lure)
 export class TrainEater extends Mob {
     constructor(x, y, z, scene, world, game) {
         super('traineater', x, y, z, scene, world, game);
         this.hp = 600;
         this.maxHp = 600;
-        this.width = 1.5;
-        this.height = 2.3;
+        this.width = 2.2;
+        this.height = 2.8;
         this.speed = 3.2;
         this.attackCooldown = 0;
         this.attackAnimTimer = 0;
@@ -2179,6 +2180,12 @@ export class TrainEater extends Mob {
     }
 
     initMesh() {
+        const makeTexMat = (map, extra = {}) => {
+            const mat = new THREE.MeshLambertMaterial({ map, ...extra });
+            mat.userData.baseHex = 0xffffff;
+            this.materialsToDispose.push(mat);
+            return mat;
+        };
         const makeMat = (hex, extra = {}) => {
             const mat = new THREE.MeshLambertMaterial({ color: hex, ...extra });
             mat.userData.baseHex = hex;
@@ -2186,96 +2193,156 @@ export class TrainEater extends Mob {
             return mat;
         };
 
-        const bodyMat = makeMat(0x2b2d42);
-        const stripeMat = makeMat(0x9b111e);
-        const darkMat = makeMat(0x161a1d);
-        const eyeMat = makeMat(0xfacc15, { emissive: new THREE.Color(0xfacc15), emissiveIntensity: 0.85 });
-        const teethMat = makeMat(0xf8fafc);
-        const mawMat = makeMat(0x7f1d1d);
-        const windowMat = makeMat(0xef4444, { emissive: new THREE.Color(0xdc2626), emissiveIntensity: 0.7 });
+        const fleshMat = makeTexMat(textures.trainEaterFlesh);
+        const throatMat = makeMat(0x4a0505);
+        const scleraMat = makeMat(0xf5e9a6);
+        const irisMat = makeMat(0x7f1d1d);
+        const pupilMat = makeMat(0x140404);
+        const teethMat = makeMat(0xf8f5e6);
+        const lureMat = makeMat(0xd96b6b);
 
-        // Main locomotive boiler body
-        const boiler = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.35, 1.8), bodyMat);
-        boiler.position.set(0, 1.15, 0);
-        boiler.castShadow = true;
-        this.mesh.add(boiler);
+        const addEyeball = (parent, x, y, z, scale = 1, sideSign = 1) => {
+            const eyeGroup = new THREE.Group();
+            eyeGroup.position.set(x, y, z);
 
-        const cab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.7, 0.9), stripeMat);
-        cab.position.set(0, 1.3, -0.55);
-        cab.castShadow = true;
-        this.mesh.add(cab);
+            const bulb = new THREE.Mesh(
+                new THREE.BoxGeometry(0.28 * scale, 0.42 * scale, 0.36 * scale),
+                scleraMat
+            );
+            eyeGroup.add(bulb);
 
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.16, 1.05), darkMat);
-        roof.position.set(0, 2.2, -0.55);
-        this.mesh.add(roof);
+            const iris = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08 * scale, 0.2 * scale, 0.16 * scale),
+                irisMat
+            );
+            iris.position.set(sideSign * 0.12 * scale, 0, 0);
+            eyeGroup.add(iris);
 
-        // Smokestack funnel
-        const stack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.55, 0.36), darkMat);
-        stack.position.set(0, 2.05, 0.48);
-        stack.castShadow = true;
-        this.mesh.add(stack);
+            const pupil = new THREE.Mesh(
+                new THREE.BoxGeometry(0.1 * scale, 0.1 * scale, 0.08 * scale),
+                pupilMat
+            );
+            pupil.position.set(sideSign * 0.13 * scale, 0, 0);
+            eyeGroup.add(pupil);
 
-        // Side crimson boiler stripes
+            parent.add(eyeGroup);
+        };
+
+        // Hollow fleshy front mouth rim (top, left, right) + deep crimson throat cavity
+        const topLip = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.48, 2.0), fleshMat);
+        topLip.position.set(0, 2.55, 0.2);
+        topLip.castShadow = true;
+        this.mesh.add(topLip);
+
         for (const xSign of [-1, 1]) {
-            const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 1.75), stripeMat);
-            stripe.position.set(xSign * 0.68, 1.25, 0.05);
-            this.mesh.add(stripe);
+            const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.48, 2.25, 2.0), fleshMat);
+            sideWall.position.set(xSign * 0.98, 1.45, 0.2);
+            sideWall.castShadow = true;
+            this.mesh.add(sideWall);
+
+            const innerSide = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.9, 1.65), throatMat);
+            innerSide.position.set(xSign * 0.72, 1.45, 0.18);
+            this.mesh.add(innerSide);
         }
 
-        // Predator headlight eyes
-        for (const xSign of [-1, 1]) {
-            const eye = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.12), eyeMat);
-            eye.position.set(xSign * 0.36, 1.52, 0.91);
-            this.mesh.add(eye);
-        }
+        const innerTop = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 1.65), throatMat);
+        innerTop.position.set(0, 2.3, 0.18);
+        this.mesh.add(innerTop);
 
-        // Upper teeth & hinged lower maw jaw
-        const mawBack = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.55, 0.25), mawMat);
-        mawBack.position.set(0, 0.92, 0.84);
-        this.mesh.add(mawBack);
+        const throatBack = new THREE.Mesh(new THREE.BoxGeometry(1.65, 2.0, 0.22), throatMat);
+        throatBack.position.set(0, 1.45, -0.45);
+        this.mesh.add(throatBack);
 
-        for (let tx = -0.36; tx <= 0.36; tx += 0.24) {
-            const upperTooth = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.2, 0.1), teethMat);
-            upperTooth.position.set(tx, 1.15, 0.96);
+        const headSleeve = new THREE.Mesh(new THREE.CylinderGeometry(1.32, 1.38, 1.35, 10), fleshMat);
+        headSleeve.rotation.x = Math.PI / 2;
+        headSleeve.position.set(0, 1.45, -0.75);
+        headSleeve.castShadow = true;
+        this.mesh.add(headSleeve);
+
+        // Sharp upper ivory-white teeth
+        const toothGeo = new THREE.CylinderGeometry(0.02, 0.12, 0.34, 4);
+        for (let i = 0; i < 6; i++) {
+            const tx = -0.68 + i * 0.272;
+            const upperTooth = new THREE.Mesh(toothGeo, teethMat);
+            upperTooth.rotation.x = Math.PI;
+            upperTooth.position.set(tx, 2.18, 1.12);
             this.mesh.add(upperTooth);
         }
 
+        // Hinged lower jaw + sharp lower teeth
         this.jawGroup = new THREE.Group();
-        this.jawGroup.position.set(0, 0.68, 0.85);
-        const lowerJaw = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.22, 0.45), darkMat);
-        lowerJaw.position.set(0, -0.05, 0.14);
-        this.jawGroup.add(lowerJaw);
-        for (let tx = -0.38; tx <= 0.38; tx += 0.25) {
-            const lowerTooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.1), teethMat);
-            lowerTooth.position.set(tx, 0.12, 0.28);
+        this.jawGroup.position.set(0, 0.42, 0.2);
+        const bottomLip = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 1.95), fleshMat);
+        bottomLip.position.set(0, 0, 0.05);
+        bottomLip.castShadow = true;
+        this.jawGroup.add(bottomLip);
+
+        const innerBottom = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 1.6), throatMat);
+        innerBottom.position.set(0, 0.21, 0.02);
+        this.jawGroup.add(innerBottom);
+
+        for (let i = 0; i < 6; i++) {
+            const tx = -0.68 + i * 0.272;
+            const lowerTooth = new THREE.Mesh(toothGeo, teethMat);
+            lowerTooth.position.set(tx, 0.34, 0.92);
             this.jawGroup.add(lowerTooth);
         }
         this.mesh.add(this.jawGroup);
 
-        // Wheels
-        this.wheels = [];
-        const wheelGeo = new THREE.BoxGeometry(0.16, 0.45, 0.45);
-        for (const xSign of [-1, 1]) {
-            for (const zOff of [-0.55, 0.1, 0.65]) {
-                const wheel = new THREE.Mesh(wheelGeo, darkMat);
-                wheel.position.set(xSign * 0.72, 0.25, zOff);
-                wheel.castShadow = true;
-                this.mesh.add(wheel);
-                this.wheels.push(wheel);
-            }
-        }
+        // Fleshy humanoid lure figure stretching its arms inside the open red throat
+        this.lureFigure = new THREE.Group();
+        this.lureFigure.position.set(0, 1.32, 0.55);
 
-        // 2 articulated trailing train carriage segments
+        const lureTorso = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.72, 0.16), lureMat);
+        this.lureFigure.add(lureTorso);
+
+        const lureHead = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.24), lureMat);
+        lureHead.position.set(0, 0.5, 0.03);
+        this.lureFigure.add(lureHead);
+
+        for (const xSign of [-1, 1]) {
+            const lureEye = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), pupilMat);
+            lureEye.position.set(xSign * 0.06, 0.52, 0.14);
+            this.lureFigure.add(lureEye);
+
+            const lureArm = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.12, 0.12), lureMat);
+            lureArm.position.set(xSign * 0.36, 0.28, -0.02);
+            lureArm.rotation.z = xSign * 0.38;
+            this.lureFigure.add(lureArm);
+
+            const lureLeg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.55, 0.12), lureMat);
+            lureLeg.position.set(xSign * 0.08, -0.58, -0.04);
+            this.lureFigure.add(lureLeg);
+        }
+        this.mesh.add(this.lureFigure);
+
+        // Scattered pale-yellow eyeball mounds on head flanks
+        addEyeball(this.mesh, -1.16, 1.95, 0.45, 1.25, -1);
+        addEyeball(this.mesh, -1.18, 1.15, 0.55, 1.35, -1);
+        addEyeball(this.mesh, 1.16, 1.85, 0.5, 1.15, 1);
+        addEyeball(this.mesh, 1.18, 1.05, 0.35, 0.9, 1);
+
+        // 4 thick fleshy tubular body segments trailing behind head with scattered yellow eyeballs
         this.tailSegments = [];
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < 4; i++) {
             const seg = new THREE.Group();
-            seg.position.set(0, 0.95, -1.65 - i * 1.2);
-            const car = new THREE.Mesh(new THREE.BoxGeometry(1.05 - i * 0.15, 1.0 - i * 0.1, 1.0), bodyMat);
-            car.castShadow = true;
-            seg.add(car);
-            const win = new THREE.Mesh(new THREE.BoxGeometry(1.08 - i * 0.15, 0.28, 0.55), windowMat);
-            win.position.set(0, 0.12, 0);
-            seg.add(win);
+            seg.position.set(0, 1.4 - i * 0.04, -1.85 - i * 1.25);
+            const radius = 1.24 - i * 0.1;
+            const segMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(radius * 0.94, radius, 1.35, 10),
+                fleshMat
+            );
+            segMesh.rotation.x = Math.PI / 2;
+            segMesh.castShadow = true;
+            seg.add(segMesh);
+
+            const sideA = i % 2 === 0 ? -1 : 1;
+            addEyeball(seg, sideA * (radius - 0.04), 0.35, 0.15, 1.05 - i * 0.1, sideA);
+            addEyeball(seg, -sideA * (radius - 0.04), -0.25, -0.2, 0.85, -sideA);
+            if (i % 2 === 0) {
+                addEyeball(seg, sideA * (radius - 0.06), -0.4, 0.35, 0.72, sideA);
+            }
+
             this.mesh.add(seg);
             this.tailSegments.push(seg);
         }
@@ -2284,30 +2351,30 @@ export class TrainEater extends Mob {
     updateAI(dt, isLiquid) {
         if (this.attackCooldown > 0) this.attackCooldown -= dt;
         const speedMag = Math.hypot(this.velocity.x, this.velocity.z);
-        this.movePhase += dt * (2.5 + speedMag * 1.8);
+        this.movePhase += dt * (2.6 + speedMag * 1.6);
 
         if (this.attackAnimTimer > 0) {
             this.attackAnimTimer -= dt;
             const chomp = Math.sin((this.attackAnimTimer / 0.5) * Math.PI);
-            if (this.jawGroup) this.jawGroup.rotation.x = chomp * 0.7;
+            if (this.jawGroup) this.jawGroup.rotation.x = chomp * 0.68;
         } else if (this.jawGroup) {
             this.jawGroup.rotation.x = Math.max(0, Math.sin(this.movePhase * 0.5) * 0.14);
         }
 
-        if (this.wheels) {
-            for (const wheel of this.wheels) {
-                wheel.rotation.x += speedMag * dt * 2.2;
-            }
+        if (this.lureFigure) {
+            this.lureFigure.rotation.z = Math.sin(this.movePhase * 0.9) * 0.12;
+            this.lureFigure.position.y = 1.32 + Math.sin(this.movePhase * 1.3) * 0.06;
         }
+
         if (this.tailSegments) {
             for (let i = 0; i < this.tailSegments.length; i++) {
-                this.tailSegments[i].position.x = Math.sin(this.movePhase - i * 0.9) * 0.16;
-                this.tailSegments[i].rotation.y = Math.cos(this.movePhase - i * 0.9) * 0.12;
+                this.tailSegments[i].position.x = Math.sin(this.movePhase - i * 0.85) * 0.24;
+                this.tailSegments[i].rotation.y = Math.cos(this.movePhase - i * 0.85) * 0.14;
             }
         }
 
         let target = null;
-        let minDist = 24.0;
+        let minDist = 26.0;
         const player = this.game?.player;
         if (player) {
             const distToPlayer = this.position.distanceTo(player.position);
@@ -2347,7 +2414,7 @@ export class TrainEater extends Mob {
             this.velocity.z = Math.cos(angle) * currentSpeed;
 
             const dist = this.position.distanceTo(tPos);
-            if (dist < 2.6 && this.attackCooldown <= 0) {
+            if (dist < 3.4 && this.attackCooldown <= 0) {
                 this.attackCooldown = 1.1;
                 this.attackAnimTimer = 0.5;
                 sounds.playMonsterRoarSound('train');
@@ -2369,7 +2436,6 @@ export class TrainEater extends Mob {
         } else {
             this.wanderTimer -= dt;
             if (this.position.z >= SEA_START_Z - 1) {
-                // Keep Train Eater on land away from deep ocean
                 this.wanderAngle = Math.PI + (Math.random() - 0.5) * 0.8;
                 this.wanderTimer = 1.8;
             } else if (this.wanderTimer <= 0) {
@@ -2387,21 +2453,27 @@ export class TrainEater extends Mob {
     }
 }
 
-// 12. SEA EATER (Aquatic abyssal leviathan boss in ocean zone)
+// 12. SEA EATER (Colossal grey-green arched-maw ocean leviathan with towering bent limbs)
 export class SeaEater extends Mob {
     constructor(x, y, z, scene, world, game) {
         super('seaeater', x, y, z, scene, world, game);
         this.hp = 650;
         this.maxHp = 650;
-        this.width = 1.6;
-        this.height = 1.8;
-        this.speed = 3.6;
+        this.width = 3.2;
+        this.height = 6.5;
+        this.speed = 3.0;
         this.attackCooldown = 0;
         this.attackAnimTimer = 0;
         this.swimPhase = Math.random() * Math.PI * 2;
     }
 
     initMesh() {
+        const makeTexMat = (map, extra = {}) => {
+            const mat = new THREE.MeshLambertMaterial({ map, ...extra });
+            mat.userData.baseHex = 0xffffff;
+            this.materialsToDispose.push(mat);
+            return mat;
+        };
         const makeMat = (hex, extra = {}) => {
             const mat = new THREE.MeshLambertMaterial({ color: hex, ...extra });
             mat.userData.baseHex = hex;
@@ -2409,83 +2481,88 @@ export class SeaEater extends Mob {
             return mat;
         };
 
-        const scaleMat = makeMat(0x0b3954);
-        const tealMat = makeMat(0x087e8b);
-        const bellyMat = makeMat(0x94d2bd);
-        const eyeMat = makeMat(0x22d3ee, { emissive: new THREE.Color(0x06b6d4), emissiveIntensity: 0.9 });
-        const teethMat = makeMat(0xf8fafc);
-        const mawMat = makeMat(0x4c0519);
+        const skinMat = makeTexMat(textures.seaEaterSkin);
+        const darkSkinMat = makeMat(0x344444);
+        const mawMat = makeTexMat(textures.seaEaterMaw);
 
-        // Armored leviathan head & upper torso
-        const head = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.6), scaleMat);
-        head.position.set(0, 1.0, 0.2);
-        head.castShadow = true;
-        this.mesh.add(head);
-
-        const belly = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 1.5), bellyMat);
-        belly.position.set(0, 0.5, 0.15);
-        this.mesh.add(belly);
-
-        // Dorsal crest
-        const dorsal = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.6, 1.1), tealMat);
-        dorsal.position.set(0, 1.65, -0.1);
-        this.mesh.add(dorsal);
-
-        // Bioluminescent eyes
+        // Colossal arched hood & cavernous pitch-black mouth
         for (const xSign of [-1, 1]) {
-            const eye = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.2), eyeMat);
-            eye.position.set(xSign * 0.56, 1.18, 0.88);
-            this.mesh.add(eye);
+            const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.15, 5.8, 2.8), skinMat);
+            pillar.position.set(xSign * 1.9, 2.9, 0.35);
+            pillar.castShadow = true;
+            this.mesh.add(pillar);
+
+            const upperArch = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.5, 2.8), skinMat);
+            upperArch.position.set(xSign * 1.25, 6.25, 0.35);
+            upperArch.rotation.z = xSign * 0.56;
+            upperArch.castShadow = true;
+            this.mesh.add(upperArch);
+
+            const innerBlackWall = new THREE.Mesh(new THREE.BoxGeometry(0.18, 6.0, 2.2), mawMat);
+            innerBlackWall.position.set(xSign * 1.32, 3.2, 0.32);
+            this.mesh.add(innerBlackWall);
         }
 
-        // Pectoral fins
-        for (const xSign of [-1, 1]) {
-            const fin = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.12, 0.6), tealMat);
-            fin.position.set(xSign * 1.0, 0.72, 0.1);
-            fin.rotation.z = -xSign * 0.28;
-            this.mesh.add(fin);
-        }
+        const crown = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.15, 2.85), skinMat);
+        crown.position.set(0, 7.25, 0.35);
+        crown.castShadow = true;
+        this.mesh.add(crown);
 
-        // Tooth-lined maw & snapping lower jaw
-        const maw = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.45, 0.25), mawMat);
-        maw.position.set(0, 0.8, 0.92);
-        this.mesh.add(maw);
+        const innerCrown = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.35, 2.2), mawMat);
+        innerCrown.position.set(0, 6.55, 0.3);
+        this.mesh.add(innerCrown);
 
-        for (let tx = -0.38; tx <= 0.38; tx += 0.25) {
-            const upperTooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.1), teethMat);
-            upperTooth.position.set(tx, 0.98, 1.0);
-            this.mesh.add(upperTooth);
-        }
+        const mawBack = new THREE.Mesh(new THREE.BoxGeometry(3.2, 6.8, 0.55), mawMat);
+        mawBack.position.set(0, 3.4, -0.75);
+        this.mesh.add(mawBack);
 
+        // Subtle dark lower maw ridge that sways when lunging/breathing
         this.jawGroup = new THREE.Group();
-        this.jawGroup.position.set(0, 0.62, 0.82);
-        const lowerJaw = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.2, 0.52), scaleMat);
-        lowerJaw.position.set(0, -0.04, 0.18);
-        this.jawGroup.add(lowerJaw);
-        for (let tx = -0.38; tx <= 0.38; tx += 0.25) {
-            const lowerTooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.1), teethMat);
-            lowerTooth.position.set(tx, 0.11, 0.34);
-            this.jawGroup.add(lowerTooth);
-        }
+        this.jawGroup.position.set(0, 0.5, 0.8);
+        const lowerMaw = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.7, 1.3), darkSkinMat);
+        lowerMaw.position.set(0, -0.1, 0.35);
+        this.jawGroup.add(lowerMaw);
         this.mesh.add(this.jawGroup);
 
-        // 3 articulated undulating sea-serpent tail segments + tail fluke
+        // Two colossal bent pillar-limbs (asymmetrical tall arches plunging into the ocean)
+        const buildBentLimb = (sideSign, upperLen, elbowX, elbowY, lowerLen) => {
+            const limb = new THREE.Group();
+            limb.position.set(sideSign * 1.9, 3.6, -0.15);
+
+            const upperSeg = new THREE.Mesh(new THREE.BoxGeometry(1.1, upperLen, 1.1), skinMat);
+            upperSeg.position.set(elbowX * 0.5, elbowY * 0.5, 0);
+            upperSeg.rotation.z = Math.atan2(-elbowX, elbowY);
+            upperSeg.castShadow = true;
+            limb.add(upperSeg);
+
+            const elbowJoint = new THREE.Mesh(new THREE.BoxGeometry(1.28, 1.28, 1.28), skinMat);
+            elbowJoint.position.set(elbowX, elbowY, 0);
+            elbowJoint.castShadow = true;
+            limb.add(elbowJoint);
+
+            const lowerPillar = new THREE.Mesh(new THREE.BoxGeometry(1.15, lowerLen, 1.15), skinMat);
+            lowerPillar.position.set(elbowX + sideSign * 0.18, elbowY - lowerLen * 0.5, 0);
+            lowerPillar.castShadow = true;
+            limb.add(lowerPillar);
+
+            this.mesh.add(limb);
+            return limb;
+        };
+
+        this.leftLimb = buildBentLimb(-1, 4.2, -2.5, 2.7, 6.8);
+        this.rightLimb = buildBentLimb(1, 5.1, 2.6, 3.8, 7.9);
+
+        // 2 heavy submerged rear body humps trailing behind the hood
         this.tailSegments = [];
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 2; i++) {
             const seg = new THREE.Group();
-            seg.position.set(0, 0.92, -1.0 - i * 0.95);
-            const scaleFactor = 1 - i * 0.22;
+            seg.position.set(0, 2.7 - i * 0.9, -2.5 - i * 2.1);
             const segBody = new THREE.Mesh(
-                new THREE.BoxGeometry(1.0 * scaleFactor, 0.75 * scaleFactor, 0.95),
-                i % 2 === 0 ? tealMat : scaleMat
+                new THREE.BoxGeometry(3.4 - i * 0.8, 3.2 - i * 0.8, 2.5),
+                i === 0 ? skinMat : darkSkinMat
             );
             segBody.castShadow = true;
             seg.add(segBody);
-            if (i === 2) {
-                const fluke = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.6), tealMat);
-                fluke.position.set(0, 0, -0.55);
-                seg.add(fluke);
-            }
             this.mesh.add(seg);
             this.tailSegments.push(seg);
         }
@@ -2493,10 +2570,12 @@ export class SeaEater extends Mob {
 
     update(dt) {
         const feetBlock = this.world.getBlockAt(this.position.x, this.position.y, this.position.z);
-        const centerBlock = this.world.getBlockAt(this.position.x, this.position.y + 0.5, this.position.z);
+        const midBlock = this.world.getBlockAt(this.position.x, this.position.y + 1.5, this.position.z);
+        const upperBlock = this.world.getBlockAt(this.position.x, this.position.y + 3.0, this.position.z);
         const inWater = Boolean(
             (feetBlock && feetBlock.startsWith('water')) ||
-            (centerBlock && centerBlock.startsWith('water'))
+            (midBlock && midBlock.startsWith('water')) ||
+            (upperBlock && upperBlock.startsWith('water'))
         );
         this.gravity = inWater ? 0 : -25.0;
         super.update(dt);
@@ -2504,25 +2583,30 @@ export class SeaEater extends Mob {
 
     updateAI(dt, isLiquid) {
         if (this.attackCooldown > 0) this.attackCooldown -= dt;
-        this.swimPhase += dt * (isLiquid ? 5.2 : 2.2);
+        this.swimPhase += dt * (isLiquid ? 3.2 : 1.6);
 
         if (this.attackAnimTimer > 0) {
             this.attackAnimTimer -= dt;
             const snap = Math.sin((this.attackAnimTimer / 0.5) * Math.PI);
-            if (this.jawGroup) this.jawGroup.rotation.x = snap * 0.75;
+            if (this.jawGroup) this.jawGroup.rotation.x = snap * 0.45;
         } else if (this.jawGroup) {
-            this.jawGroup.rotation.x = Math.max(0, Math.sin(this.swimPhase * 0.6) * 0.16);
+            this.jawGroup.rotation.x = Math.max(0, Math.sin(this.swimPhase * 0.6) * 0.12);
+        }
+
+        if (this.leftLimb && this.rightLimb) {
+            this.leftLimb.rotation.x = Math.sin(this.swimPhase) * 0.16;
+            this.rightLimb.rotation.x = -Math.sin(this.swimPhase) * 0.16;
         }
 
         if (this.tailSegments) {
             for (let i = 0; i < this.tailSegments.length; i++) {
-                this.tailSegments[i].position.x = Math.sin(this.swimPhase - i * 0.85) * 0.28;
-                this.tailSegments[i].rotation.y = Math.cos(this.swimPhase - i * 0.85) * 0.24;
+                this.tailSegments[i].position.x = Math.sin(this.swimPhase - i * 0.9) * 0.28;
+                this.tailSegments[i].rotation.y = Math.cos(this.swimPhase - i * 0.9) * 0.14;
             }
         }
 
         let target = null;
-        let minDist = 28.0;
+        let minDist = 32.0;
         const player = this.game?.player;
         if (player) {
             const pBlock = this.world.getBlockAt(player.position.x, player.position.y, player.position.z);
@@ -2565,21 +2649,21 @@ export class SeaEater extends Mob {
             this.velocity.z = Math.cos(angle) * activeSpeed;
 
             if (isLiquid) {
-                const clampedTargetY = Math.max(3.2, Math.min(6.2, tPos.y + 0.2));
-                this.velocity.y = THREE.MathUtils.clamp((clampedTargetY - this.position.y) * 2.5, -3.5, 3.5);
-                if (this.position.y > 5.4 && Math.random() < 0.18 && this.game?.particles) {
+                const targetDepthY = 2.6;
+                this.velocity.y = THREE.MathUtils.clamp((targetDepthY - this.position.y) * 2.2, -2.5, 2.5);
+                if (Math.random() < 0.2 && this.game?.particles) {
                     const mat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
                     const pMesh = new THREE.Mesh(SHARED_MOB_PARTICLE_GEO, mat);
                     pMesh.position.set(
-                        this.position.x + (Math.random() - 0.5),
-                        this.position.y + 0.8,
-                        this.position.z + (Math.random() - 0.5)
+                        this.position.x + (Math.random() - 0.5) * 3.0,
+                        6.4,
+                        this.position.z + (Math.random() - 0.5) * 2.0
                     );
                     this.scene.add(pMesh);
                     this.game.particles.push({
                         mesh: pMesh,
-                        velocity: new THREE.Vector3((Math.random() - 0.5) * 2, 2.5, (Math.random() - 0.5) * 2),
-                        life: 0.4,
+                        velocity: new THREE.Vector3((Math.random() - 0.5) * 2.5, 3.0, (Math.random() - 0.5) * 2.5),
+                        life: 0.45,
                         elapsed: 0,
                         material: mat,
                         sharedGeo: true
@@ -2587,9 +2671,9 @@ export class SeaEater extends Mob {
                 }
             }
 
-            const dist = this.position.distanceTo(tPos);
-            if (dist < 2.8 && this.attackCooldown <= 0) {
-                this.attackCooldown = 1.05;
+            const horizDist = Math.hypot(tPos.x - this.position.x, tPos.z - this.position.z);
+            if (horizDist < 4.5 && this.attackCooldown <= 0) {
+                this.attackCooldown = 1.1;
                 this.attackAnimTimer = 0.5;
                 sounds.playMonsterRoarSound('sea');
                 if (target.type === 'player' && player) {
@@ -2603,21 +2687,20 @@ export class SeaEater extends Mob {
             }
         } else {
             this.wanderTimer -= dt;
-            if (this.position.z < SEA_START_Z + 1) {
-                // Keep Sea Eater inside the ocean zone (+Z)
+            if (this.position.z < SEA_START_Z + 3) {
                 this.wanderAngle = (Math.random() - 0.5) * 0.9;
                 this.wanderTimer = 1.6;
             } else if (this.wanderTimer <= 0) {
                 this.wanderTimer = 2.2 + Math.random() * 3.0;
                 this.wanderAngle = Math.random() * Math.PI * 2;
             }
-            this.velocity.x = Math.sin(this.wanderAngle) * (activeSpeed * 0.6);
-            this.velocity.z = Math.cos(this.wanderAngle) * (activeSpeed * 0.6);
+            this.velocity.x = Math.sin(this.wanderAngle) * (activeSpeed * 0.55);
+            this.velocity.z = Math.cos(this.wanderAngle) * (activeSpeed * 0.55);
             this.mesh.rotation.y = this.wanderAngle;
 
             if (isLiquid) {
-                const patrolY = 4.2 + Math.sin(this.swimPhase * 0.35) * 0.8;
-                this.velocity.y = THREE.MathUtils.clamp((patrolY - this.position.y) * 2.0, -2.5, 2.5);
+                const patrolY = 2.6 + Math.sin(this.swimPhase * 0.35) * 0.25;
+                this.velocity.y = THREE.MathUtils.clamp((patrolY - this.position.y) * 2.0, -2.0, 2.0);
             }
         }
     }

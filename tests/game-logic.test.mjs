@@ -940,7 +940,7 @@ test('TrainEater and SeaEater bosses are hostile, instantiate cleanly, and updat
     const mockGame = { player: null, mobs: [], particles: [] };
 
     const trainEater = new TrainEater(0, 7, -10, scene, world, mockGame);
-    const seaEater = new SeaEater(0, 4.5, 32, scene, world, mockGame);
+    const seaEater = new SeaEater(0, 2.6, 36, scene, world, mockGame);
     mockGame.mobs.push(trainEater, seaEater);
 
     for (let i = 0; i < 10; i++) {
@@ -950,8 +950,12 @@ test('TrainEater and SeaEater bosses are hostile, instantiate cleanly, and updat
 
     assert.equal(trainEater.hp, 600);
     assert.equal(seaEater.hp, 650);
-    assert.ok(trainEater.tailSegments.length === 2);
-    assert.ok(seaEater.tailSegments.length === 3);
+    assert.equal(trainEater.tailSegments.length, 4);
+    assert.ok(trainEater.lureFigure);
+    assert.ok(trainEater.jawGroup);
+    assert.equal(seaEater.tailSegments.length, 2);
+    assert.ok(seaEater.leftLimb);
+    assert.ok(seaEater.rightLimb);
     assert.equal(seaEater.gravity, 0);
 
     trainEater.cleanupMesh();

@@ -982,11 +982,18 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
         'spawn_cursedthomas'
     ];
     const { ITEM_CATALOG } = await import('../src/utils/icons.js');
+    const { textures } = await import('../src/utils/textures.js');
     const hotbarByType = new Map(HOTBAR_ITEMS.map(item => [item.type, item]));
     for (const eggType of expectedEggs) {
         assert.ok(hotbarByType.has(eggType), `Expected ${eggType} in HOTBAR_ITEMS`);
         assert.ok(ITEM_CATALOG[eggType], `Expected ${eggType} in ITEM_CATALOG`);
     }
+    assert.equal(ITEM_CATALOG.spawn_jj.color, '#ef4444');
+    assert.equal(ITEM_CATALOG.spawn_mikey.color, '#22c55e');
+    assert.ok(textures.jjTorsoFront);
+    assert.ok(textures.mikeyBelly);
+    assert.ok(textures.mikeyShell);
+
     const keys = HOTBAR_ITEMS.map(item => item.key.toLowerCase());
     assert.equal(new Set(keys).size, keys.length, 'Expected unique hotbar shortcut keys');
 
@@ -994,7 +1001,7 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
     const { World } = await import('../src/world/world.js');
     const {
         Charles, InfectedOcean, InfectedSky,
-        JJ, Mikey, RedSun, LunarMoon, CursedThomas
+        JJ, Mikey, RedSun, LunarMoon, CursedThomas, Arrow
     } = await import('../src/entities/mob.js');
 
     const scene = new THREE.Scene();
@@ -1026,6 +1033,8 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
     assert.equal(infectedOcean.gravity, 0);
     assert.equal(infectedSky.tendrils.length, 8);
     assert.equal(infectedSky.gravity, 0);
+    assert.equal(jj.isFriendly, true);
+    assert.equal(mikey.isFriendly, true);
     assert.ok(jj.swordGroup);
     assert.ok(mikey.swordGroup);
     assert.ok(redSun.coronaGroup);
@@ -1036,17 +1045,22 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
     assert.ok(cursedThomas.abdomen);
     assert.ok(cursedThomas.neckGroup);
 
-    // Exercise active combat with a mock player, projectiles, and JJ/Mikey vs nearby hostiles
+    // Exercise active simulation: JJ & Mikey stay peaceful toward both player and mobs,
+    // and ignore player-fired arrows
+    let playerHitCount = 0;
     mockGame.player = {
         position: new THREE.Vector3(0, 7, 0),
         velocity: new THREE.Vector3(),
         width: 0.6,
         height: 1.8,
-        takeDamage() {}
+        takeDamage() { playerHitCount++; }
     };
     const nearbyEnemy = new Charles(2.6, 7, 2.2, scene, world, mockGame);
     mockGame.mobs.push(nearbyEnemy);
     const prevEnemyHp = nearbyEnemy.hp;
+    const prevJjHp = jj.hp;
+    const prevMikeyHp = mikey.hp;
+
     for (let i = 0; i < 12; i++) {
         jj.update(0.08);
         mikey.update(0.08);
@@ -1054,7 +1068,21 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
         redSun.update(0.08);
         lunarMoon.update(0.08);
     }
-    assert.ok(nearbyEnemy.hp < prevEnemyHp, 'Expected JJ/Mikey to slash nearby hostile mob');
+    assert.equal(nearbyEnemy.hp, prevEnemyHp, 'Expected peaceful JJ & Mikey never to damage other mobs');
+    assert.equal(playerHitCount, 0, 'Expected peaceful JJ & Mikey never to damage player');
+
+    const friendlyArrow = new Arrow(
+        new THREE.Vector3(jj.position.x, jj.position.y + 0.9, jj.position.z - 0.5),
+        new THREE.Vector3(jj.position.x, jj.position.y + 0.9, jj.position.z + 1.5),
+        scene, world, mockGame, 'player', { damage: 25 }
+    );
+    for (let i = 0; i < 6; i++) {
+        friendlyArrow.update(0.05);
+    }
+    friendlyArrow.destroy();
+    assert.equal(jj.hp, prevJjHp, 'Expected player arrow not to hurt JJ');
+    assert.equal(mikey.hp, prevMikeyHp, 'Expected player arrow not to hurt Mikey');
+
     for (const arrow of mockGame.arrows) {
         arrow.update(0.05);
         arrow.destroy();

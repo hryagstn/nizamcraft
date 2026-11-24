@@ -727,8 +727,10 @@ const INTERACTIVE_PROMPT_LABELS = {
 };
 
 function syncContextualHUD(target) {
-    // 1. Primary Mobile Arc Button: Swords on Mob, Pickaxe otherwise
-    const isMob = target?.type === 'mob' && target.mob.type !== 'minecart';
+    // 1. Primary Mobile Arc Button: Swords on attackable Mob, Pickaxe otherwise
+    const targetMobType = target?.type === 'mob' ? target.mob.type : null;
+    const isFriend = targetMobType === 'jj' || targetMobType === 'mikey';
+    const isMob = target?.type === 'mob' && targetMobType !== 'minecart' && !isFriend;
     const nextPrimaryIcon = isMob ? 'swords' : 'pickaxe';
     if (nextPrimaryIcon !== lastPrimaryIconName && mobilePrimaryIcon) {
         mobilePrimaryIcon.innerHTML = svgIcon(nextPrimaryIcon, 22);
@@ -740,7 +742,9 @@ function syncContextualHUD(target) {
     let promptText = '';
     let isInteractive = false;
 
-    if (target?.type === 'mob' && target.mob.type === 'minecart') {
+    if (isFriend) {
+        promptText = targetMobType === 'jj' ? 'JJ (Teman)' : 'Mikey (Teman)';
+    } else if (target?.type === 'mob' && targetMobType === 'minecart') {
         promptText = '[Klik Kanan / .] Naiki Minecart';
         isInteractive = true;
     } else if (target?.type === 'block') {
@@ -874,6 +878,12 @@ function addItemToInventory(type, count = 1, extra = {}) {
 
 function performAttack(mob) {
     if (!mob) return;
+
+    if (mob.type === 'jj' || mob.type === 'mikey') {
+        sounds.playClickSound();
+        game.showNotification(mob.type === 'jj' ? 'JJ adalah temanmu!' : 'Mikey adalah temanmu!');
+        return;
+    }
 
     if (mob.type === 'minecart') {
         sounds.playDigSound();
@@ -1136,8 +1146,8 @@ const SPAWN_EGG_DEFS = {
     spawn_charles: { cls: Charles, yOffset: 0.5, roar: 'train', color: 0xb91c1c, message: 'Charles dipanggil!' },
     spawn_infectedocean: { cls: InfectedOcean, yOffset: 0.5, roar: 'sea', color: 0x991b1b, message: 'Infected Ocean dipanggil!' },
     spawn_infectedsky: { cls: InfectedSky, skyMinY: 12.0, roar: 'sky', color: 0xe11d48, message: 'Infected Sky dipanggil di langit!' },
-    spawn_jj: { cls: JJ, yOffset: 0.5, roar: null, color: 0x22c55e, message: 'JJ dipanggil!' },
-    spawn_mikey: { cls: Mikey, yOffset: 0.5, roar: null, color: 0xef4444, message: 'Mikey dipanggil!' },
+    spawn_jj: { cls: JJ, yOffset: 0.5, roar: null, color: 0xef4444, message: 'JJ (Teman) dipanggil!' },
+    spawn_mikey: { cls: Mikey, yOffset: 0.5, roar: null, color: 0x22c55e, message: 'Mikey (Teman) dipanggil!' },
     spawn_redsun: { cls: RedSun, skyMinY: 12.0, roar: 'celestial', color: 0xff2a6d, message: 'Red Sun muncul di langit!' },
     spawn_lunarmoon: { cls: LunarMoon, skyMinY: 12.0, roar: 'celestial', color: 0xef4444, message: 'Lunar Moon muncul di langit!' },
     spawn_cursedthomas: { cls: CursedThomas, yOffset: 0.5, roar: 'train', color: 0x0ea5e9, message: 'Cursed Thomas dipanggil!' }

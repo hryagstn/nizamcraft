@@ -1509,8 +1509,8 @@ textures.infectedPlaneTurbine = createPixelTexture((ctx) => {
     ctx.fillRect(12, 9, 2, 3);
 });
 
-// 56. JJ Turtle Yellow Belly & Checkered Shell
-textures.jjBelly = createPixelTexture((ctx) => {
+// 56. Mikey Turtle Yellow Belly & Checkered Shell
+textures.mikeyBelly = createPixelTexture((ctx) => {
     ctx.fillStyle = '#eab308';
     ctx.fillRect(0, 0, 16, 16);
     ctx.fillStyle = '#ca8a04';
@@ -1526,7 +1526,7 @@ textures.jjBelly = createPixelTexture((ctx) => {
     ctx.fillRect(10, 7, 3, 2);
 });
 
-textures.jjShell = createPixelTexture((ctx) => {
+textures.mikeyShell = createPixelTexture((ctx) => {
     ctx.fillStyle = '#5c4d21';
     ctx.fillRect(0, 0, 16, 16);
     for (let x = 0; x < 16; x += 4) {
@@ -1540,8 +1540,8 @@ textures.jjShell = createPixelTexture((ctx) => {
     ctx.fillRect(0, 15, 16, 1);
 });
 
-// 57. Mikey Open Red Hoodie Over White Shirt
-textures.mikeyTorsoFront = createPixelTexture((ctx) => {
+// 57. JJ Open Red Hoodie Over White Shirt
+textures.jjTorsoFront = createPixelTexture((ctx) => {
     ctx.fillStyle = '#dc2626';
     ctx.fillRect(0, 0, 16, 16);
     ctx.fillStyle = '#b91c1c';

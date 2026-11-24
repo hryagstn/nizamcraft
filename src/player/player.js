@@ -828,8 +828,8 @@ export class Player {
                 spawn_charles: { shell: 0xb91c1c, spot: 0xf8fafc },
                 spawn_infectedocean: { shell: 0x991b1b, spot: 0xcbd5e1 },
                 spawn_infectedsky: { shell: 0xe2e8f0, spot: 0xe11d48 },
-                spawn_jj: { shell: 0x22c55e, spot: 0xeab308 },
-                spawn_mikey: { shell: 0xdc2626, spot: 0x38bdf8 },
+                spawn_jj: { shell: 0xdc2626, spot: 0x38bdf8 },
+                spawn_mikey: { shell: 0x22c55e, spot: 0xeab308 },
                 spawn_redsun: { shell: 0xff2a6d, spot: 0xffffff },
                 spawn_lunarmoon: { shell: 0xa8a29e, spot: 0xef4444 },
                 spawn_cursedthomas: { shell: 0x0ea5e9, spot: 0xef4444 }

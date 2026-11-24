@@ -115,7 +115,7 @@ function createMobFaceTexture(type) {
         // Dark mouth grate
         ctx.fillStyle = '#090a0f';
         ctx.fillRect(2, 6, 4, 1);
-    } else if (type === 'jj') {
+    } else if (type === 'mikey') {
         ctx.fillStyle = '#22c55e'; // Bright turtle green
         ctx.fillRect(0, 0, 8, 8);
         ctx.fillStyle = '#16a34a'; // Subtle turtle crown shading
@@ -130,7 +130,7 @@ function createMobFaceTexture(type) {
         ctx.fillRect(3, 4, 2, 2);
         ctx.fillStyle = '#ef4444';
         ctx.fillRect(4, 5, 1, 1);
-    } else if (type === 'mikey') {
+    } else if (type === 'jj') {
         ctx.fillStyle = '#fcd5b5'; // Fair skin
         ctx.fillRect(0, 0, 8, 8);
         // Red hoodie top & side trim
@@ -843,7 +843,7 @@ export class Arrow {
             if (this.game.mobs) {
                 for (let i = this.game.mobs.length - 1; i >= 0; i--) {
                     const mob = this.game.mobs[i];
-                    if (!mob || mob.type === 'minecart') continue;
+                    if (!mob || mob.type === 'minecart' || mob.type === 'jj' || mob.type === 'mikey') continue;
                     const mobPos = mob.position;
                     const mRadius = Math.max(0.4, (mob.width || 0.8) / 2);
                     const mHeight = mob.height || 1.8;
@@ -1614,7 +1614,7 @@ export class BloodGolem extends Mob {
         if (this.game.mobs) {
             for (let i = 0; i < this.game.mobs.length; i++) {
                 const mob = this.game.mobs[i];
-                if (mob !== this && (mob.type === 'irongolem' || mob.type === 'giantirongolem' || mob.type === 'jj' || mob.type === 'mikey' || mob.type === 'pig' || mob.type === 'cow' || mob.type === 'chicken')) {
+                if (mob !== this && (mob.type === 'irongolem' || mob.type === 'giantirongolem' || mob.type === 'pig' || mob.type === 'cow' || mob.type === 'chicken')) {
                     const dist = this.position.distanceTo(mob.position);
                     if (dist < minDist) {
                         minDist = dist;
@@ -2431,8 +2431,6 @@ export class TrainEater extends Mob {
                     (mob.type === 'minecart' ||
                         mob.type === 'irongolem' ||
                         mob.type === 'giantirongolem' ||
-                        mob.type === 'jj' ||
-                        mob.type === 'mikey' ||
                         mob.type === 'pig' ||
                         mob.type === 'cow' ||
                         mob.type === 'chicken')
@@ -2666,8 +2664,6 @@ export class SeaEater extends Mob {
                     mob !== this &&
                     (mob.type === 'irongolem' ||
                         mob.type === 'giantirongolem' ||
-                        mob.type === 'jj' ||
-                        mob.type === 'mikey' ||
                         mob.type === 'pig' ||
                         mob.type === 'cow' ||
                         mob.type === 'chicken')
@@ -2850,8 +2846,6 @@ function findNearestBossTarget(mob, maxDist, opts = {}) {
                 (includeMinecarts && other.type === 'minecart') ||
                 other.type === 'irongolem' ||
                 other.type === 'giantirongolem' ||
-                other.type === 'jj' ||
-                other.type === 'mikey' ||
                 other.type === 'pig' ||
                 other.type === 'cow' ||
                 other.type === 'chicken';
@@ -3542,17 +3536,16 @@ export class InfectedSky extends Mob {
     }
 }
 
-// 16 & 17. JJ AND Mikey (Friendly Hero Duo wielding Diamond Swords)
+// 16 & 17. JJ AND Mikey (Peaceful Friendly Companions wielding Diamond Swords)
 class AllyHero extends Mob {
     constructor(type, x, y, z, scene, world, game) {
         super(type, x, y, z, scene, world, game);
+        this.isFriendly = true;
         this.hp = 260;
         this.maxHp = 260;
         this.width = 0.6;
         this.height = 1.8;
-        this.speed = type === 'mikey' ? 3.0 : 2.9;
-        this.attackCooldown = 0;
-        this.attackAnimTimer = 0;
+        this.speed = type === 'jj' ? 2.6 : 2.5;
         this.walkPhase = 0;
         this.targetMob = null;
     }
@@ -3587,80 +3580,39 @@ class AllyHero extends Mob {
     }
 
     updateAI(dt, isLiquid) {
-        if (this.attackCooldown > 0) this.attackCooldown -= dt;
         const speedMag = Math.hypot(this.velocity.x, this.velocity.z);
         this.walkPhase += dt * (4.0 + speedMag * 3.0);
 
-        let closestMob = null;
-        let minDist = 24.0;
-        if (this.game?.mobs) {
-            for (let i = 0; i < this.game.mobs.length; i++) {
-                const mob = this.game.mobs[i];
-                if (mob !== this && HOSTILE_MOBS.has(mob.type)) {
-                    const dist = this.position.distanceTo(mob.position);
-                    if (dist < minDist) {
-                        minDist = dist;
-                        closestMob = mob;
-                    }
-                }
-            }
-        }
-        this.targetMob = closestMob;
-
         const currentSpeed = isLiquid ? this.speed * 0.45 : this.speed;
-        if (this.targetMob) {
-            const tPos = this.targetMob.position;
-            const angle = Math.atan2(tPos.x - this.position.x, tPos.z - this.position.z);
-            this.mesh.rotation.y = angle;
-            this.velocity.x = Math.sin(angle) * currentSpeed;
-            this.velocity.z = Math.cos(angle) * currentSpeed;
+        const player = this.game?.player;
+        const distToPlayer = player ? this.position.distanceTo(player.position) : 0;
 
-            const horizDist = Math.hypot(tPos.x - this.position.x, tPos.z - this.position.z);
-            const strikeRange = 2.0 + (this.targetMob.width || 0.6) * 0.55;
-            const verticalReach = Math.abs(tPos.y - this.position.y) <= (this.targetMob.height || 1.8) + 2.2;
-            if (horizDist < strikeRange && verticalReach && this.attackCooldown <= 0) {
-                this.attackCooldown = 0.85;
-                this.attackAnimTimer = 0.35;
-                this.targetMob.takeDamage(35);
-                this.targetMob.velocity.y = Math.max(this.targetMob.velocity.y, 5.5);
-                const pushDir = tPos.clone().sub(this.position).setY(0).normalize();
-                this.targetMob.velocity.addScaledVector(pushDir, 4.2);
-                sounds.playClickSound();
-            }
+        if (player && distToPlayer > 6.5 && distToPlayer < 22.0) {
+            const angle = Math.atan2(player.position.x - this.position.x, player.position.z - this.position.z);
+            this.mesh.rotation.y = angle;
+            this.velocity.x = Math.sin(angle) * (currentSpeed * 0.78);
+            this.velocity.z = Math.cos(angle) * (currentSpeed * 0.78);
         } else {
-            const player = this.game?.player;
-            const distToPlayer = player ? this.position.distanceTo(player.position) : 0;
-            if (player && distToPlayer > 5.5 && distToPlayer < 20.0) {
-                const angle = Math.atan2(player.position.x - this.position.x, player.position.z - this.position.z);
-                this.mesh.rotation.y = angle;
-                this.velocity.x = Math.sin(angle) * (currentSpeed * 0.78);
-                this.velocity.z = Math.cos(angle) * (currentSpeed * 0.78);
-            } else {
-                this.wanderTimer -= dt;
-                if (this.wanderTimer <= 0) {
-                    this.wanderTimer = 2.5 + Math.random() * 3.0;
-                    this.wanderAngle = Math.random() * Math.PI * 2;
-                }
-                this.velocity.x = Math.sin(this.wanderAngle) * (currentSpeed * 0.42);
-                this.velocity.z = Math.cos(this.wanderAngle) * (currentSpeed * 0.42);
-                this.mesh.rotation.y = this.wanderAngle;
+            this.wanderTimer -= dt;
+            if (this.wanderTimer <= 0) {
+                this.wanderTimer = 2.5 + Math.random() * 3.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
             }
+            this.velocity.x = Math.sin(this.wanderAngle) * (currentSpeed * 0.4);
+            this.velocity.z = Math.cos(this.wanderAngle) * (currentSpeed * 0.4);
+            this.mesh.rotation.y = this.wanderAngle;
         }
 
-        const legSwing = speedMag > 0.15 ? Math.sin(this.walkPhase) * 0.6 : 0;
+        const legSwing = speedMag > 0.15 ? Math.sin(this.walkPhase) * 0.55 : 0;
         if (this.lLeg && this.rLeg) {
             this.lLeg.rotation.x = legSwing;
             this.rLeg.rotation.x = -legSwing;
         }
         if (this.lArm) {
-            this.lArm.rotation.x = -legSwing * 0.7;
+            this.lArm.rotation.x = -legSwing * 0.65;
         }
-        if (this.attackAnimTimer > 0) {
-            this.attackAnimTimer -= dt;
-            const swing = Math.sin((this.attackAnimTimer / 0.35) * Math.PI);
-            if (this.rArm) this.rArm.rotation.x = -0.3 - swing * 1.4;
-        } else if (this.rArm) {
-            this.rArm.rotation.x = legSwing * 0.55 - 0.18;
+        if (this.rArm) {
+            this.rArm.rotation.x = legSwing * 0.45 - 0.15;
         }
 
         if (isLiquid && Math.random() < 0.08) {
@@ -3675,79 +3627,14 @@ export class JJ extends AllyHero {
     }
 
     initMesh() {
-        const greenMat = createTrackedColorMat(this, 0x22c55e);
-        const darkGreenMat = createTrackedColorMat(this, 0x15803d);
-        const bellyMat = createTrackedTexMat(this, textures.jjBelly);
-        const shellMat = createTrackedTexMat(this, textures.jjShell);
-        const faceTex = createMobFaceTexture('jj');
-        const faceMat = createTrackedTexMat(this, faceTex);
-
-        // Turtle head
-        const headMats = [greenMat, greenMat, greenMat, greenMat, faceMat, greenMat];
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.54), headMats);
-        head.position.set(0, 1.56, 0);
-        head.castShadow = true;
-        this.mesh.add(head);
-
-        // Torso with yellow plastron front and checkered brown shell back
-        const torsoMats = [greenMat, greenMat, greenMat, greenMat, bellyMat, shellMat];
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.32), torsoMats);
-        torso.position.set(0, 0.94, 0);
-        torso.castShadow = true;
-        this.mesh.add(torso);
-
-        const backShell = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.64, 0.14), shellMat);
-        backShell.position.set(0, 0.94, -0.2);
-        backShell.castShadow = true;
-        this.mesh.add(backShell);
-
-        // Arms & legs with darker turtle-claw tips
-        const makeLimb = (w, h, d, tipColorMat) => {
-            const grp = new THREE.Group();
-            const upper = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.75, d), greenMat);
-            upper.position.set(0, -h * 0.375, 0);
-            upper.castShadow = true;
-            grp.add(upper);
-
-            const tip = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.25, d), tipColorMat);
-            tip.position.set(0, -h * 0.875, 0);
-            grp.add(tip);
-            return grp;
-        };
-
-        this.lArm = makeLimb(0.22, 0.68, 0.22, darkGreenMat);
-        this.lArm.position.set(-0.38, 1.28, 0);
-        this.mesh.add(this.lArm);
-
-        this.rArm = makeLimb(0.22, 0.68, 0.22, darkGreenMat);
-        this.rArm.position.set(0.38, 1.28, 0);
-        this.mesh.add(this.rArm);
-        this.attachDiamondSword(-0.58);
-
-        this.lLeg = makeLimb(0.24, 0.6, 0.24, darkGreenMat);
-        this.lLeg.position.set(-0.14, 0.6, 0);
-        this.mesh.add(this.lLeg);
-
-        this.rLeg = makeLimb(0.24, 0.6, 0.24, darkGreenMat);
-        this.rLeg.position.set(0.14, 0.6, 0);
-        this.mesh.add(this.rLeg);
-    }
-}
-
-export class Mikey extends AllyHero {
-    constructor(x, y, z, scene, world, game) {
-        super('mikey', x, y, z, scene, world, game);
-    }
-
-    initMesh() {
         const hoodieMat = createTrackedColorMat(this, 0xdc2626);
         const darkCuffMat = createTrackedColorMat(this, 0x18181b);
         const skinMat = createTrackedColorMat(this, 0xfcd5b5);
         const pantsMat = createTrackedColorMat(this, 0x1f2937);
         const sneakerMat = createTrackedColorMat(this, 0xd946ef);
         const soleMat = createTrackedColorMat(this, 0xf8fafc);
-        const torsoFrontMat = createTrackedTexMat(this, textures.mikeyTorsoFront);
-        const faceTex = createMobFaceTexture('mikey');
+        const torsoFrontMat = createTrackedTexMat(this, textures.jjTorsoFront);
+        const faceTex = createMobFaceTexture('jj');
         const faceMat = createTrackedTexMat(this, faceTex);
 
         // Head wrapped in red hoodie hood
@@ -3818,6 +3705,71 @@ export class Mikey extends AllyHero {
         this.mesh.add(this.lLeg);
 
         this.rLeg = makeLeg();
+        this.rLeg.position.set(0.14, 0.6, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+export class Mikey extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('mikey', x, y, z, scene, world, game);
+    }
+
+    initMesh() {
+        const greenMat = createTrackedColorMat(this, 0x22c55e);
+        const darkGreenMat = createTrackedColorMat(this, 0x15803d);
+        const bellyMat = createTrackedTexMat(this, textures.mikeyBelly);
+        const shellMat = createTrackedTexMat(this, textures.mikeyShell);
+        const faceTex = createMobFaceTexture('mikey');
+        const faceMat = createTrackedTexMat(this, faceTex);
+
+        // Turtle head
+        const headMats = [greenMat, greenMat, greenMat, greenMat, faceMat, greenMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.54), headMats);
+        head.position.set(0, 1.56, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        // Torso with yellow plastron front and checkered brown shell back
+        const torsoMats = [greenMat, greenMat, greenMat, greenMat, bellyMat, shellMat];
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.32), torsoMats);
+        torso.position.set(0, 0.94, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        const backShell = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.64, 0.14), shellMat);
+        backShell.position.set(0, 0.94, -0.2);
+        backShell.castShadow = true;
+        this.mesh.add(backShell);
+
+        // Arms & legs with darker turtle-claw tips
+        const makeLimb = (w, h, d, tipColorMat) => {
+            const grp = new THREE.Group();
+            const upper = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.75, d), greenMat);
+            upper.position.set(0, -h * 0.375, 0);
+            upper.castShadow = true;
+            grp.add(upper);
+
+            const tip = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.25, d), tipColorMat);
+            tip.position.set(0, -h * 0.875, 0);
+            grp.add(tip);
+            return grp;
+        };
+
+        this.lArm = makeLimb(0.22, 0.68, 0.22, darkGreenMat);
+        this.lArm.position.set(-0.38, 1.28, 0);
+        this.mesh.add(this.lArm);
+
+        this.rArm = makeLimb(0.22, 0.68, 0.22, darkGreenMat);
+        this.rArm.position.set(0.38, 1.28, 0);
+        this.mesh.add(this.rArm);
+        this.attachDiamondSword(-0.58);
+
+        this.lLeg = makeLimb(0.24, 0.6, 0.24, darkGreenMat);
+        this.lLeg.position.set(-0.14, 0.6, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = makeLimb(0.24, 0.6, 0.24, darkGreenMat);
         this.rLeg.position.set(0.14, 0.6, 0);
         this.mesh.add(this.rLeg);
     }

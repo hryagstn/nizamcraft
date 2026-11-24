@@ -1347,6 +1347,376 @@ textures.seaEaterMaw = createPixelTexture((ctx) => {
     }
 });
 
+// 50. Charles Weathered Crimson Locomotive Metal
+textures.charlesRedMetal = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const r = Math.random();
+            if (r < 0.2) {
+                ctx.fillStyle = '#7f1d1d';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.32) {
+                ctx.fillStyle = '#dc2626';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.42) {
+                ctx.fillStyle = '#18181b';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    ctx.fillStyle = '#27272a';
+    ctx.fillRect(1, 1, 1, 1);
+    ctx.fillRect(14, 1, 1, 1);
+    ctx.fillRect(1, 14, 1, 1);
+    ctx.fillRect(14, 14, 1, 1);
+});
+
+// 51. Charles Pale Nightmare Face
+textures.charlesFace = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(0, 0, 16, 16);
+    // Pale circular face base
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillRect(3, 1, 10, 14);
+    ctx.fillRect(2, 2, 12, 12);
+    ctx.fillRect(1, 4, 14, 8);
+    // Cheek shadow & grime
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(2, 10, 2, 3);
+    ctx.fillRect(12, 10, 2, 3);
+    // Arched sinister brows
+    ctx.fillStyle = '#09090b';
+    ctx.fillRect(3, 3, 3, 1);
+    ctx.fillRect(10, 3, 3, 1);
+    // Dark sunken eye sockets with bloodshot sclera + tiny dark pupils
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(2, 5, 4, 3);
+    ctx.fillRect(10, 5, 4, 3);
+    ctx.fillStyle = '#fee2e2';
+    ctx.fillRect(3, 6, 2, 1);
+    ctx.fillRect(11, 6, 2, 1);
+    ctx.fillStyle = '#7f1d1d';
+    ctx.fillRect(4, 6, 1, 1);
+    ctx.fillRect(11, 6, 1, 1);
+    // Tiny nose
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(7, 7, 2, 2);
+    // Wide crimson-stained jagged grin
+    ctx.fillStyle = '#7f1d1d';
+    ctx.fillRect(2, 9, 12, 5);
+    ctx.fillRect(4, 14, 8, 1);
+    ctx.fillStyle = '#09090b';
+    ctx.fillRect(3, 10, 10, 3);
+    // Jagged sharp white teeth
+    ctx.fillStyle = '#f8fafc';
+    for (let x = 3; x <= 11; x += 2) {
+        ctx.fillRect(x, 10, 1, 2);
+        ctx.fillRect(x + 1, 11, 1, 2);
+    }
+});
+
+// 52. Infected Ocean Weathered Ship Hull
+textures.infectedShipHull = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const r = Math.random();
+            if (r < 0.2) {
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.34) {
+                ctx.fillStyle = '#e2e8f0';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.4) {
+                ctx.fillStyle = '#64748b';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(0, 7, 16, 1);
+    ctx.fillRect(0, 15, 16, 1);
+});
+
+// 53. Infected Ocean Crimson Kraken Tentacle Skin
+textures.infectedOceanTentacle = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const r = Math.random();
+            if (r < 0.25) {
+                ctx.fillStyle = '#7f1d1d';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.48) {
+                ctx.fillStyle = '#dc2626';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.58) {
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+});
+
+// 54. Infected Sky Cracked White Plane Skin
+textures.infectedPlaneSkin = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            if (Math.random() < 0.16) {
+                ctx.fillStyle = '#cbd5e1';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    // Dark jagged infection cracks
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(2, 2, 3, 1);
+    ctx.fillRect(4, 3, 2, 2);
+    ctx.fillRect(5, 5, 1, 3);
+    ctx.fillRect(10, 8, 4, 1);
+    ctx.fillRect(11, 9, 1, 3);
+    ctx.fillRect(9, 12, 3, 1);
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(1, 11, 3, 1);
+    ctx.fillRect(12, 3, 2, 1);
+});
+
+// 55. Infected Sky Spiral Jet Turbine Intake
+textures.infectedPlaneTurbine = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(0, 0, 16, 1);
+    ctx.fillRect(0, 15, 16, 1);
+    ctx.fillRect(0, 0, 1, 16);
+    ctx.fillRect(15, 0, 1, 16);
+    // White spiral fan blades
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(7, 7, 2, 2);
+    ctx.fillRect(7, 2, 2, 5);
+    ctx.fillRect(9, 2, 3, 2);
+    ctx.fillRect(7, 9, 2, 5);
+    ctx.fillRect(4, 12, 3, 2);
+    ctx.fillRect(2, 7, 5, 2);
+    ctx.fillRect(2, 4, 2, 3);
+    ctx.fillRect(9, 7, 5, 2);
+    ctx.fillRect(12, 9, 2, 3);
+});
+
+// 56. JJ Turtle Yellow Belly & Checkered Shell
+textures.jjBelly = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#ca8a04';
+    ctx.fillRect(0, 0, 2, 16);
+    ctx.fillRect(14, 0, 2, 16);
+    ctx.fillRect(0, 5, 16, 1);
+    ctx.fillRect(0, 10, 16, 1);
+    ctx.fillRect(7, 0, 2, 16);
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(3, 2, 3, 2);
+    ctx.fillRect(10, 2, 3, 2);
+    ctx.fillRect(3, 7, 3, 2);
+    ctx.fillRect(10, 7, 3, 2);
+});
+
+textures.jjShell = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#5c4d21';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x += 4) {
+        for (let y = 0; y < 16; y += 4) {
+            ctx.fillStyle = ((x + y) / 4) % 2 === 0 ? '#6b5b2a' : '#4a3f1c';
+            ctx.fillRect(x, y, 4, 4);
+        }
+    }
+    ctx.fillStyle = '#362d13';
+    ctx.fillRect(0, 0, 16, 1);
+    ctx.fillRect(0, 15, 16, 1);
+});
+
+// 57. Mikey Open Red Hoodie Over White Shirt
+textures.mikeyTorsoFront = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillRect(0, 0, 2, 16);
+    ctx.fillRect(14, 0, 2, 16);
+    // White inner t-shirt strip
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(5, 0, 6, 16);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(5, 0, 1, 16);
+    ctx.fillRect(10, 0, 1, 16);
+    // Black jacket hem accents
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(0, 14, 5, 2);
+    ctx.fillRect(11, 14, 5, 2);
+});
+
+// 58. Red Sun Blazing Pink/Magenta Solar Face & Surface
+textures.redSunFace = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#f43f8e';
+    ctx.fillRect(0, 0, 16, 16);
+    // White-hot solar halo rim
+    ctx.fillStyle = '#fff1f2';
+    ctx.fillRect(0, 0, 16, 1);
+    ctx.fillRect(0, 15, 16, 1);
+    ctx.fillRect(0, 0, 1, 16);
+    ctx.fillRect(15, 0, 1, 16);
+    ctx.fillStyle = '#fbcfe8';
+    ctx.fillRect(1, 1, 14, 1);
+    ctx.fillRect(1, 14, 14, 1);
+    // Mottled magenta-violet blotches
+    ctx.fillStyle = '#db2777';
+    ctx.fillRect(2, 2, 3, 2);
+    ctx.fillRect(11, 2, 3, 2);
+    // Slanted dark violet eye sockets with blazing white eyes
+    ctx.fillStyle = '#4c1d95';
+    ctx.fillRect(2, 4, 4, 4);
+    ctx.fillRect(10, 4, 4, 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(3, 5, 3, 2);
+    ctx.fillRect(10, 5, 3, 2);
+    // Wide sinister dark-violet mouth with glowing jagged teeth
+    ctx.fillStyle = '#3b0764';
+    ctx.fillRect(2, 9, 12, 5);
+    ctx.fillRect(4, 14, 8, 1);
+    ctx.fillStyle = '#ffffff';
+    for (let x = 3; x <= 11; x += 2) {
+        ctx.fillRect(x, 9, 1, 2);
+        ctx.fillRect(x + 1, 12, 1, 2);
+    }
+});
+
+textures.redSunSurface = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#e11d48';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const r = Math.random();
+            if (r < 0.3) {
+                ctx.fillStyle = '#ff2a6d';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.55) {
+                ctx.fillStyle = '#f472b6';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.65) {
+                ctx.fillStyle = '#fff1f2';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+});
+
+// 59. Lunar Moon Cratered Surface & Red-Eyed Menacing Face
+textures.lunarMoonCrater = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#a8a29e';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let x = 0; x < 16; x++) {
+        for (let y = 0; y < 16; y++) {
+            const r = Math.random();
+            if (r < 0.25) {
+                ctx.fillStyle = '#78716c';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.45) {
+                ctx.fillStyle = '#d6d3d1';
+                ctx.fillRect(x, y, 1, 1);
+            } else if (r < 0.55) {
+                ctx.fillStyle = '#57534e';
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+    // Deep crater circles
+    ctx.fillStyle = '#44403c';
+    ctx.fillRect(2, 3, 3, 3);
+    ctx.fillRect(10, 10, 4, 3);
+    ctx.fillRect(9, 2, 2, 2);
+});
+
+textures.lunarMoonFace = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#a8a29e';
+    ctx.fillRect(0, 0, 16, 16);
+    //Rocky crater speckles
+    ctx.fillStyle = '#78716c';
+    ctx.fillRect(1, 1, 3, 2);
+    ctx.fillRect(12, 2, 3, 2);
+    ctx.fillRect(0, 11, 2, 3);
+    ctx.fillRect(14, 10, 2, 4);
+    ctx.fillStyle = '#d6d3d1';
+    ctx.fillRect(5, 1, 6, 2);
+    // Sunken black eye sockets + piercing glowing red eyes
+    ctx.fillStyle = '#09090b';
+    ctx.fillRect(2, 4, 4, 4);
+    ctx.fillRect(10, 4, 4, 4);
+    ctx.fillStyle = '#ff1e1e';
+    ctx.fillRect(3, 5, 2, 2);
+    ctx.fillRect(11, 5, 2, 2);
+    // Gaunt skull nose cavity
+    ctx.fillStyle = '#292524';
+    ctx.fillRect(7, 7, 2, 2);
+    ctx.fillStyle = '#09090b';
+    ctx.fillRect(7, 8, 2, 1);
+    // Wide black grimace filled with uneven yellow teeth
+    ctx.fillStyle = '#09090b';
+    ctx.fillRect(2, 10, 12, 4);
+    ctx.fillStyle = '#fde047';
+    for (let x = 3; x <= 11; x += 2) {
+        ctx.fillRect(x, 10, 1, 2);
+        ctx.fillRect(x + 1, 12, 1, 2);
+    }
+});
+
+// 60. Cursed Thomas Sky-Blue Hull & Red-Eyed Pale Face
+textures.cursedThomasBlue = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(1, 1, 14, 1);
+    ctx.fillRect(1, 14, 14, 1);
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(0, 7, 16, 1);
+    ctx.fillRect(7, 0, 1, 16);
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(0, 15, 16, 1);
+});
+
+textures.cursedThomasFace = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(0, 0, 16, 16);
+    // Pale grey circular Thomas face
+    ctx.fillStyle = '#d4d4d8';
+    ctx.fillRect(3, 1, 10, 14);
+    ctx.fillRect(2, 2, 12, 12);
+    ctx.fillRect(1, 4, 14, 8);
+    ctx.fillStyle = '#a1a1aa';
+    ctx.fillRect(2, 11, 12, 2);
+    // Dark brows
+    ctx.fillStyle = '#27272a';
+    ctx.fillRect(3, 4, 3, 1);
+    ctx.fillRect(10, 4, 3, 1);
+    // Glowing bright red eyes
+    ctx.fillStyle = '#450a0a';
+    ctx.fillRect(3, 5, 3, 3);
+    ctx.fillRect(10, 5, 3, 3);
+    ctx.fillStyle = '#ff1e1e';
+    ctx.fillRect(4, 6, 2, 2);
+    ctx.fillRect(10, 6, 2, 2);
+    // Grey nose + unsettling smile
+    ctx.fillStyle = '#71717a';
+    ctx.fillRect(7, 8, 2, 2);
+    ctx.fillStyle = '#27272a';
+    ctx.fillRect(4, 11, 8, 1);
+    ctx.fillRect(3, 10, 1, 1);
+    ctx.fillRect(12, 10, 1, 1);
+});
+
 const BLOCK_TEXTURE_KEY = {
     grass: 'grassSide',
     dirt: 'dirt',

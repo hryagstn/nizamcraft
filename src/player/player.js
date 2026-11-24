@@ -819,18 +819,22 @@ export class Player {
             this.heldItem.position.set(-0.02, 0.04, -0.06);
             this.heldItem.rotation.set(0.2, 0.4, 0.1);
             this.handContainer.add(this.heldItem);
-        } else if (
-            type === 'spawn_irongolem' ||
-            type === 'spawn_snowgolem' ||
-            type === 'spawn_traineater' ||
-            type === 'spawn_seaeater'
-        ) {
-            const eggColors = {
+        } else if (type.startsWith('spawn_')) {
+            const SPAWN_EGG_COLORS = {
                 spawn_irongolem: { shell: 0xdcdcdc, spot: 0x990000 },
                 spawn_snowgolem: { shell: 0xe0e2db, spot: 0xff7a00 },
                 spawn_traineater: { shell: 0x9b1c1c, spot: 0xf5e9a6 },
-                spawn_seaeater: { shell: 0x4f6363, spot: 0x0b1012 }
-            }[type];
+                spawn_seaeater: { shell: 0x4f6363, spot: 0x0b1012 },
+                spawn_charles: { shell: 0xb91c1c, spot: 0xf8fafc },
+                spawn_infectedocean: { shell: 0x991b1b, spot: 0xcbd5e1 },
+                spawn_infectedsky: { shell: 0xe2e8f0, spot: 0xe11d48 },
+                spawn_jj: { shell: 0x22c55e, spot: 0xeab308 },
+                spawn_mikey: { shell: 0xdc2626, spot: 0x38bdf8 },
+                spawn_redsun: { shell: 0xff2a6d, spot: 0xffffff },
+                spawn_lunarmoon: { shell: 0xa8a29e, spot: 0xef4444 },
+                spawn_cursedthomas: { shell: 0x0ea5e9, spot: 0xef4444 }
+            };
+            const eggColors = SPAWN_EGG_COLORS[type] || { shell: 0xdcdcdc, spot: 0x990000 };
             const eggGroup = new THREE.Group();
             const eggGeo = new THREE.BoxGeometry(0.05, 0.07, 0.05);
             const eggMat = new THREE.MeshLambertMaterial({ color: eggColors.shell });

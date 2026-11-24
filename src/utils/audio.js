@@ -336,23 +336,30 @@ class SoundManager {
         if (!this.ctx) return;
 
         const now = this.ctx.currentTime;
-        const freqs = variant === 'sea' ? [72, 98] : [138, 185];
-        freqs.forEach((baseFreq) => {
+        const profiles = {
+            sea: { freqs: [72, 98], type: 'triangle', ramp: 0.72, noiseFreq: 240, gain: 0.16, duration: 0.38 },
+            sky: { freqs: [320, 440], type: 'sawtooth', ramp: 0.48, noiseFreq: 860, gain: 0.14, duration: 0.34 },
+            celestial: { freqs: [58, 82], type: 'sine', ramp: 0.88, noiseFreq: 180, gain: 0.2, duration: 0.5 },
+            train: { freqs: [138, 185], type: 'sawtooth', ramp: 0.72, noiseFreq: 420, gain: 0.16, duration: 0.38 }
+        };
+        const profile = profiles[variant] || profiles.train;
+
+        profile.freqs.forEach((baseFreq) => {
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
-            osc.type = variant === 'sea' ? 'triangle' : 'sawtooth';
+            osc.type = profile.type;
             osc.frequency.setValueAtTime(baseFreq, now);
-            osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.72, now + 0.38);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * profile.ramp, now + profile.duration);
 
-            gain.gain.setValueAtTime(0.16, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+            gain.gain.setValueAtTime(profile.gain, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + profile.duration + 0.02);
 
             osc.connect(gain);
             gain.connect(this.ctx.destination);
             osc.start(now);
-            osc.stop(now + 0.42);
+            osc.stop(now + profile.duration + 0.04);
         });
-        this.playNoise(0.22, variant === 'sea' ? 240 : 420, 0.14);
+        this.playNoise(0.22, profile.noiseFreq, 0.14);
     }
 }
 

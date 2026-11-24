@@ -111,7 +111,13 @@ export const HOSTILE_MOBS = new Set([
     'bloodgolem',
     'witherskeleton',
     'traineater',
-    'seaeater'
+    'seaeater',
+    'charles',
+    'infectedocean',
+    'infectedsky',
+    'redsun',
+    'lunarmoon',
+    'cursedthomas'
 ]);
 
 /**
@@ -951,6 +957,14 @@ export const HOTBAR_ITEMS = [
     { type: 'spawn_snowgolem', label: 'G. Snow', key: "'", category: 'special', nameId: 'Telur Snow Golem' },
     { type: 'spawn_traineater', label: 'T. Eater', key: '(', category: 'special', nameId: 'Telur Train Eater' },
     { type: 'spawn_seaeater', label: 'S. Eater', key: ')', category: 'special', nameId: 'Telur Sea Eater' },
+    { type: 'spawn_charles', label: 'Charles', key: '!', category: 'special', nameId: 'Telur Charles' },
+    { type: 'spawn_infectedocean', label: 'Inf. Ocean', key: '@', category: 'special', nameId: 'Telur Infected Ocean' },
+    { type: 'spawn_infectedsky', label: 'Inf. Sky', key: '#', category: 'special', nameId: 'Telur Infected Sky' },
+    { type: 'spawn_jj', label: 'JJ', key: '$', category: 'special', nameId: 'Telur JJ' },
+    { type: 'spawn_mikey', label: 'Mikey', key: '%', category: 'special', nameId: 'Telur Mikey' },
+    { type: 'spawn_redsun', label: 'Red Sun', key: '^', category: 'special', nameId: 'Telur Red Sun' },
+    { type: 'spawn_lunarmoon', label: 'Lunar Moon', key: '&', category: 'special', nameId: 'Telur Lunar Moon' },
+    { type: 'spawn_cursedthomas', label: 'C. Thomas', key: '*', category: 'special', nameId: 'Telur Cursed Thomas' },
     { type: 'coal_ore', label: 'Coal Ore', key: 'K', category: 'mineral', nameId: 'Bijih Batu Bara' },
     { type: 'iron_ore', label: 'Iron Ore', key: 'J', category: 'mineral', nameId: 'Bijih Besi' },
     { type: 'gold_ore', label: 'Gold Ore', key: 'N', category: 'mineral', nameId: 'Bijih Emas' },

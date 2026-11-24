@@ -22,6 +22,7 @@ import {
     computeArmorReduction,
     computeThornsDamage,
     DEFAULT_HOTBAR_LOADOUT,
+    HOTBAR_ITEMS,
     selectOrAssignHotbarSlot,
     CRAFTING_RECIPES,
     canCraftRecipeFromSlots,
@@ -960,4 +961,107 @@ test('TrainEater and SeaEater bosses are hostile, instantiate cleanly, and updat
 
     trainEater.cleanupMesh();
     seaEater.cleanupMesh();
+});
+
+test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and CursedThomas register factions, eggs, and update cleanly', async () => {
+    const newHostiles = ['charles', 'infectedocean', 'infectedsky', 'redsun', 'lunarmoon', 'cursedthomas'];
+    for (const id of newHostiles) {
+        assert.equal(HOSTILE_MOBS.has(id), true, `Expected ${id} in HOSTILE_MOBS`);
+    }
+    assert.equal(HOSTILE_MOBS.has('jj'), false);
+    assert.equal(HOSTILE_MOBS.has('mikey'), false);
+
+    const expectedEggs = [
+        'spawn_charles',
+        'spawn_infectedocean',
+        'spawn_infectedsky',
+        'spawn_jj',
+        'spawn_mikey',
+        'spawn_redsun',
+        'spawn_lunarmoon',
+        'spawn_cursedthomas'
+    ];
+    const { ITEM_CATALOG } = await import('../src/utils/icons.js');
+    const hotbarByType = new Map(HOTBAR_ITEMS.map(item => [item.type, item]));
+    for (const eggType of expectedEggs) {
+        assert.ok(hotbarByType.has(eggType), `Expected ${eggType} in HOTBAR_ITEMS`);
+        assert.ok(ITEM_CATALOG[eggType], `Expected ${eggType} in ITEM_CATALOG`);
+    }
+    const keys = HOTBAR_ITEMS.map(item => item.key.toLowerCase());
+    assert.equal(new Set(keys).size, keys.length, 'Expected unique hotbar shortcut keys');
+
+    const THREE = await import('three');
+    const { World } = await import('../src/world/world.js');
+    const {
+        Charles, InfectedOcean, InfectedSky,
+        JJ, Mikey, RedSun, LunarMoon, CursedThomas
+    } = await import('../src/entities/mob.js');
+
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+    const mockGame = { player: null, mobs: [], particles: [], arrows: [] };
+
+    const charles = new Charles(0, 7, -12, scene, world, mockGame);
+    const infectedOcean = new InfectedOcean(0, 2.6, 36, scene, world, mockGame);
+    const infectedSky = new InfectedSky(-10, 14, -10, scene, world, mockGame);
+    const jj = new JJ(2, 7, 2, scene, world, mockGame);
+    const mikey = new Mikey(-2, 7, 2, scene, world, mockGame);
+    const redSun = new RedSun(14, 15, -14, scene, world, mockGame);
+    const lunarMoon = new LunarMoon(-14, 15, 14, scene, world, mockGame);
+    const cursedThomas = new CursedThomas(10, 7, -10, scene, world, mockGame);
+
+    const roster = [charles, infectedOcean, infectedSky, jj, mikey, redSun, lunarMoon, cursedThomas];
+    mockGame.mobs.push(...roster);
+
+    for (let i = 0; i < 10; i++) {
+        for (const mob of roster) {
+            mob.update(0.05);
+        }
+    }
+
+    assert.equal(charles.spiderLegs.length, 8);
+    assert.ok(charles.jawGroup);
+    assert.equal(infectedOcean.tentacles.length, 6);
+    assert.ok(infectedOcean.jawGroup);
+    assert.equal(infectedOcean.gravity, 0);
+    assert.equal(infectedSky.tendrils.length, 8);
+    assert.equal(infectedSky.gravity, 0);
+    assert.ok(jj.swordGroup);
+    assert.ok(mikey.swordGroup);
+    assert.ok(redSun.coronaGroup);
+    assert.equal(redSun.gravity, 0);
+    assert.equal(lunarMoon.orbitRocks.length, 6);
+    assert.equal(lunarMoon.gravity, 0);
+    assert.equal(cursedThomas.spiderLegs.length, 6);
+    assert.ok(cursedThomas.abdomen);
+    assert.ok(cursedThomas.neckGroup);
+
+    // Exercise active combat with a mock player, projectiles, and JJ/Mikey vs nearby hostiles
+    mockGame.player = {
+        position: new THREE.Vector3(0, 7, 0),
+        velocity: new THREE.Vector3(),
+        width: 0.6,
+        height: 1.8,
+        takeDamage() {}
+    };
+    const nearbyEnemy = new Charles(2.6, 7, 2.2, scene, world, mockGame);
+    mockGame.mobs.push(nearbyEnemy);
+    const prevEnemyHp = nearbyEnemy.hp;
+    for (let i = 0; i < 12; i++) {
+        jj.update(0.08);
+        mikey.update(0.08);
+        infectedSky.update(0.08);
+        redSun.update(0.08);
+        lunarMoon.update(0.08);
+    }
+    assert.ok(nearbyEnemy.hp < prevEnemyHp, 'Expected JJ/Mikey to slash nearby hostile mob');
+    for (const arrow of mockGame.arrows) {
+        arrow.update(0.05);
+        arrow.destroy();
+    }
+
+    nearbyEnemy.cleanupMesh();
+    for (const mob of roster) {
+        mob.cleanupMesh();
+    }
 });

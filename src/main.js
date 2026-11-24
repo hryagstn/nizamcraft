@@ -6,7 +6,8 @@ import { Player, isAnyOverlayOpen, flashScreen } from './player/player.js';
 import {
     Zombie, Creeper, Skeleton, Arrow, IronGolem, SnowGolem,
     Chicken, Pig, Cow, BloodGolem, GiantIronGolem, WitherSkeleton, Minecart,
-    TrainEater, SeaEater
+    TrainEater, SeaEater, Charles, InfectedOcean, InfectedSky,
+    JJ, Mikey, RedSun, LunarMoon, CursedThomas
 } from './entities/mob.js';
 import { PrimedTNT } from './entities/tnt.js';
 import { FallingBlock } from './entities/fallingBlock.js';
@@ -96,12 +97,20 @@ const game = {
     },
     onMobDefeated(mobType) {
         const lootingLevel = getMeleeStats(getActiveHeldItem()).lootingLevel || 0;
-        if (
-            mobType === 'bloodgolem' ||
-            mobType === 'witherskeleton' ||
-            mobType === 'traineater' ||
-            mobType === 'seaeater'
-        ) {
+        const bossRewards = {
+            bloodgolem: { xp: 35, apex: false },
+            witherskeleton: { xp: 35, apex: false },
+            traineater: { xp: 45, apex: true, bonusItem: 'iron_ingot', bonusCount: 4 },
+            seaeater: { xp: 50, apex: true, bonusItem: 'emerald', bonusCount: 2 },
+            charles: { xp: 45, apex: true, bonusItem: 'iron_ingot', bonusCount: 4 },
+            infectedocean: { xp: 50, apex: true, bonusItem: 'emerald', bonusCount: 2 },
+            infectedsky: { xp: 48, apex: true, bonusItem: 'gold_ingot', bonusCount: 3 },
+            redsun: { xp: 55, apex: true, bonusItem: 'gold_ingot', bonusCount: 3 },
+            lunarmoon: { xp: 55, apex: true, bonusItem: 'gold_ingot', bonusCount: 3 },
+            cursedthomas: { xp: 48, apex: true, bonusItem: 'iron_ingot', bonusCount: 4 }
+        };
+        const reward = bossRewards[mobType];
+        if (reward) {
             const bossPool = ['sharpness', 'protection', 'power', 'fire_aspect', 'fortune'];
             const pick = bossPool[Math.floor(Math.random() * bossPool.length)];
             const lvl = Math.min(ENCHANTMENTS[pick].maxLevel, 2);
@@ -109,18 +118,14 @@ const game = {
                 enchants: { [pick]: lvl },
                 enchant: { id: pick, level: lvl }
             });
-            const isApex = mobType === 'traineater' || mobType === 'seaeater';
-            addItemToInventory('diamond', (isApex ? 3 : 2) + lootingLevel);
-            if (mobType === 'traineater') {
-                addItemToInventory('iron_ingot', 4 + lootingLevel);
-            } else if (mobType === 'seaeater') {
-                addItemToInventory('emerald', 2 + lootingLevel);
+            addItemToInventory('diamond', (reward.apex ? 3 : 2) + lootingLevel);
+            if (reward.bonusItem) {
+                addItemToInventory(reward.bonusItem, reward.bonusCount + lootingLevel);
             }
-            const xpReward = mobType === 'seaeater' ? 50 : (mobType === 'traineater' ? 45 : 35);
-            grantPlayerXp(xpReward);
+            grantPlayerXp(reward.xp);
             sounds.playEnchantSound();
             this.showNotification(
-                `${mobType.toUpperCase()} tumbang. Dapat Buku Enchant (${ENCHANTMENTS[pick].name} ${ROMAN_NUMERALS[lvl]}), Berlian, dan +${xpReward} XP.`
+                `${mobType.toUpperCase()} tumbang. Dapat Buku Enchant (${ENCHANTMENTS[pick].name} ${ROMAN_NUMERALS[lvl]}), Berlian, dan +${reward.xp} XP.`
             );
         } else if (mobType === 'zombie' || mobType === 'skeleton' || mobType === 'creeper') {
             grantPlayerXp(12);
@@ -1123,36 +1128,34 @@ function handleBlockDig(targetPos) {
     onWorldTopologyChanged(tx, ty, tz);
 }
 
+const SPAWN_EGG_DEFS = {
+    spawn_irongolem: { cls: IronGolem, yOffset: 0.5, roar: null, color: 0xcccccc, message: 'Iron Golem dipanggil.' },
+    spawn_snowgolem: { cls: SnowGolem, yOffset: 0.5, roar: null, color: 0xffffff, message: 'Snow Golem dipanggil.' },
+    spawn_traineater: { cls: TrainEater, yOffset: 0.5, roar: 'train', color: 0xdc2626, message: 'Train Eater dipanggil!' },
+    spawn_seaeater: { cls: SeaEater, yOffset: 0.5, roar: 'sea', color: 0x22d3ee, message: 'Sea Eater dipanggil!' },
+    spawn_charles: { cls: Charles, yOffset: 0.5, roar: 'train', color: 0xb91c1c, message: 'Charles dipanggil!' },
+    spawn_infectedocean: { cls: InfectedOcean, yOffset: 0.5, roar: 'sea', color: 0x991b1b, message: 'Infected Ocean dipanggil!' },
+    spawn_infectedsky: { cls: InfectedSky, skyMinY: 12.0, roar: 'sky', color: 0xe11d48, message: 'Infected Sky dipanggil di langit!' },
+    spawn_jj: { cls: JJ, yOffset: 0.5, roar: null, color: 0x22c55e, message: 'JJ dipanggil!' },
+    spawn_mikey: { cls: Mikey, yOffset: 0.5, roar: null, color: 0xef4444, message: 'Mikey dipanggil!' },
+    spawn_redsun: { cls: RedSun, skyMinY: 12.0, roar: 'celestial', color: 0xff2a6d, message: 'Red Sun muncul di langit!' },
+    spawn_lunarmoon: { cls: LunarMoon, skyMinY: 12.0, roar: 'celestial', color: 0xef4444, message: 'Lunar Moon muncul di langit!' },
+    spawn_cursedthomas: { cls: CursedThomas, yOffset: 0.5, roar: 'train', color: 0x0ea5e9, message: 'Cursed Thomas dipanggil!' }
+};
+
 function handleGolemSpawn(type, x, y, z) {
-    if (type === 'spawn_irongolem') {
-        game.mobs.push(new IronGolem(x, y + 0.5, z, scene, world, game));
+    const def = SPAWN_EGG_DEFS[type];
+    if (!def) return false;
+    const spawnY = def.skyMinY ? Math.max(y + 5.0, def.skyMinY) : y + def.yOffset;
+    game.mobs.push(new def.cls(x, spawnY, z, scene, world, game));
+    if (def.roar) {
+        sounds.playMonsterRoarSound(def.roar);
+    } else {
         sounds.playPlaceSound();
-        world.spawnCropParticles(x, y + 0.5, z, 0xcccccc);
-        game.showNotification('Iron Golem dipanggil.');
-        return true;
     }
-    if (type === 'spawn_snowgolem') {
-        game.mobs.push(new SnowGolem(x, y + 0.5, z, scene, world, game));
-        sounds.playPlaceSound();
-        world.spawnCropParticles(x, y + 0.5, z, 0xffffff);
-        game.showNotification('Snow Golem dipanggil.');
-        return true;
-    }
-    if (type === 'spawn_traineater') {
-        game.mobs.push(new TrainEater(x, y + 0.5, z, scene, world, game));
-        sounds.playMonsterRoarSound('train');
-        world.spawnCropParticles(x, y + 0.5, z, 0xdc2626);
-        game.showNotification('Train Eater dipanggil!');
-        return true;
-    }
-    if (type === 'spawn_seaeater') {
-        game.mobs.push(new SeaEater(x, y + 0.5, z, scene, world, game));
-        sounds.playMonsterRoarSound('sea');
-        world.spawnCropParticles(x, y + 0.5, z, 0x22d3ee);
-        game.showNotification('Sea Eater dipanggil!');
-        return true;
-    }
-    return false;
+    world.spawnCropParticles(x, y + 0.5, z, def.color);
+    game.showNotification(def.message);
+    return true;
 }
 
 function handlePrimaryAction() {
@@ -1342,13 +1345,7 @@ function handleSecondaryAction() {
         return;
     }
 
-    if (
-        blockToPlace === 'spawn_irongolem' ||
-        blockToPlace === 'spawn_snowgolem' ||
-        blockToPlace === 'spawn_traineater' ||
-        blockToPlace === 'spawn_seaeater'
-    ) {
-        handleGolemSpawn(blockToPlace, buildX, buildY, buildZ);
+    if (blockToPlace.startsWith('spawn_') && handleGolemSpawn(blockToPlace, buildX, buildY, buildZ)) {
         return;
     }
 
@@ -1550,12 +1547,26 @@ mobileAuxBtn?.addEventListener('touchstart', (e) => {
 // ==========================================
 
 function spawnMob(type) {
-    if (type === 'seaeater') {
+    if (type === 'seaeater' || type === 'infectedocean') {
         const x = Math.floor((Math.random() - 0.5) * (world.width - 16));
         const minSeaZ = SEA_START_Z + 8;
         const maxSeaZ = Math.floor(world.depth / 2) - 8;
         const z = minSeaZ + Math.floor(Math.random() * Math.max(1, maxSeaZ - minSeaZ + 1));
-        game.mobs.push(new SeaEater(x, 2.6, z, scene, world, game));
+        const SeaCls = type === 'infectedocean' ? InfectedOcean : SeaEater;
+        game.mobs.push(new SeaCls(x, 2.6, z, scene, world, game));
+        return;
+    }
+
+    if (type === 'infectedsky' || type === 'redsun' || type === 'lunarmoon') {
+        let x = Math.floor((Math.random() - 0.5) * (world.width - 16));
+        let z = Math.floor((Math.random() - 0.5) * (world.depth - 16));
+        for (let attempt = 0; attempt < 12 && Math.hypot(x, z) < 24; attempt++) {
+            x = Math.floor((Math.random() - 0.5) * (world.width - 16));
+            z = Math.floor((Math.random() - 0.5) * (world.depth - 16));
+        }
+        const skyY = type === 'infectedsky' ? 14.0 : 15.0;
+        const SkyCls = type === 'infectedsky' ? InfectedSky : (type === 'redsun' ? RedSun : LunarMoon);
+        game.mobs.push(new SkyCls(x, skyY, z, scene, world, game));
         return;
     }
 
@@ -1564,8 +1575,16 @@ function spawnMob(type) {
     let x = Math.floor((Math.random() - 0.5) * (world.width - 10));
     let z = minLandZ + Math.floor(Math.random() * Math.max(1, maxLandZ - minLandZ + 1));
 
-    if (type === 'traineater') {
-        for (let attempt = 0; attempt < 10 && Math.hypot(x, z) < 16; attempt++) {
+    if (type === 'jj' || type === 'mikey') {
+        for (let attempt = 0; attempt < 10; attempt++) {
+            x = Math.floor((Math.random() - 0.5) * 20);
+            z = Math.floor((Math.random() - 0.5) * 20);
+            if (Math.hypot(x, z) >= 4 && z <= maxLandZ) break;
+        }
+        z = Math.min(z, maxLandZ);
+    } else if (type === 'traineater' || type === 'charles' || type === 'cursedthomas') {
+        const minClear = type === 'traineater' ? 16 : 20;
+        for (let attempt = 0; attempt < 12 && Math.hypot(x, z) < minClear; attempt++) {
             x = Math.floor((Math.random() - 0.5) * (world.width - 12));
             z = minLandZ + Math.floor(Math.random() * Math.max(1, maxLandZ - minLandZ + 1));
         }
@@ -1593,6 +1612,10 @@ function spawnMob(type) {
         else if (type === 'giantirongolem') mobInstance = new GiantIronGolem(x, sy, z, scene, world, game);
         else if (type === 'witherskeleton') mobInstance = new WitherSkeleton(x, sy, z, scene, world, game);
         else if (type === 'traineater') mobInstance = new TrainEater(x, sy, z, scene, world, game);
+        else if (type === 'charles') mobInstance = new Charles(x, sy, z, scene, world, game);
+        else if (type === 'cursedthomas') mobInstance = new CursedThomas(x, sy, z, scene, world, game);
+        else if (type === 'jj') mobInstance = new JJ(x, sy, z, scene, world, game);
+        else if (type === 'mikey') mobInstance = new Mikey(x, sy, z, scene, world, game);
 
         if (mobInstance) game.mobs.push(mobInstance);
     }
@@ -1609,22 +1632,44 @@ function spawnInitialMobs() {
     spawnMob('bloodgolem');
     spawnMob('traineater');
     spawnMob('seaeater');
+    spawnMob('jj');
+    spawnMob('mikey');
+    spawnMob('charles');
+    spawnMob('infectedocean');
+    spawnMob('infectedsky');
+    spawnMob('redsun');
+    spawnMob('lunarmoon');
+    spawnMob('cursedthomas');
 }
 
 function startMobSpawner() {
     if (mobSpawnIntervalId !== null) return;
+    const uniqueTypes = [
+        'traineater', 'seaeater', 'charles', 'infectedocean',
+        'infectedsky', 'jj', 'mikey', 'redsun', 'lunarmoon', 'cursedthomas'
+    ];
     mobSpawnIntervalId = setInterval(() => {
-        if (hasGameStarted && document.body.classList.contains('in-game') && !isGameplayModalOpen() && game.mobs.length < 22) {
-            const trainEaters = game.mobs.filter(m => m.type === 'traineater').length;
-            const seaEaters = game.mobs.filter(m => m.type === 'seaeater').length;
+        if (hasGameStarted && document.body.classList.contains('in-game') && !isGameplayModalOpen() && game.mobs.length < 30) {
+            const counts = {};
+            for (const t of uniqueTypes) {
+                counts[t] = game.mobs.filter(m => m.type === t).length;
+            }
             const rand = Math.random();
             if (rand < 0.03) spawnMob('giantirongolem');
-            else if (rand < 0.06 && trainEaters < 1) spawnMob('traineater');
-            else if (rand < 0.09 && seaEaters < 1) spawnMob('seaeater');
-            else if (rand < 0.13) spawnMob('bloodgolem');
-            else if (rand < 0.18) spawnMob('irongolem');
-            else if (rand < 0.23) spawnMob('snowgolem');
-            else if (rand < 0.5) {
+            else if (rand < 0.05 && counts.traineater < 1) spawnMob('traineater');
+            else if (rand < 0.07 && counts.seaeater < 1) spawnMob('seaeater');
+            else if (rand < 0.09 && counts.charles < 1) spawnMob('charles');
+            else if (rand < 0.11 && counts.infectedocean < 1) spawnMob('infectedocean');
+            else if (rand < 0.13 && counts.infectedsky < 1) spawnMob('infectedsky');
+            else if (rand < 0.15 && counts.redsun < 1) spawnMob('redsun');
+            else if (rand < 0.17 && counts.lunarmoon < 1) spawnMob('lunarmoon');
+            else if (rand < 0.19 && counts.cursedthomas < 1) spawnMob('cursedthomas');
+            else if (rand < 0.21 && counts.jj < 1) spawnMob('jj');
+            else if (rand < 0.23 && counts.mikey < 1) spawnMob('mikey');
+            else if (rand < 0.27) spawnMob('bloodgolem');
+            else if (rand < 0.31) spawnMob('irongolem');
+            else if (rand < 0.35) spawnMob('snowgolem');
+            else if (rand < 0.58) {
                 const animals = ['chicken', 'pig', 'cow'];
                 spawnMob(animals[Math.floor(Math.random() * animals.length)]);
             } else {

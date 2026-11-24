@@ -228,6 +228,76 @@ class SoundManager {
         osc.stop(time + 0.13);
     }
 
+    playNuclearShotSound() {
+        this.init();
+        if (!this.ctx) return;
+
+        const time = this.ctx.currentTime;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(640, time);
+        osc.frequency.exponentialRampToValueAtTime(110, time + 0.18);
+        gain.gain.setValueAtTime(0.32, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.19);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(time);
+        osc.stop(time + 0.2);
+
+        const sub = this.ctx.createOscillator();
+        const subGain = this.ctx.createGain();
+        sub.type = 'triangle';
+        sub.frequency.setValueAtTime(140, time);
+        sub.frequency.exponentialRampToValueAtTime(42, time + 0.22);
+        subGain.gain.setValueAtTime(0.36, time);
+        subGain.gain.exponentialRampToValueAtTime(0.01, time + 0.23);
+        sub.connect(subGain);
+        subGain.connect(this.ctx.destination);
+        sub.start(time);
+        sub.stop(time + 0.24);
+    }
+
+    playNuclearBlastSound() {
+        this.init();
+        if (!this.ctx) return;
+
+        const time = this.ctx.currentTime;
+        const boom = this.ctx.createOscillator();
+        const boomGain = this.ctx.createGain();
+        boom.type = 'sawtooth';
+        boom.frequency.setValueAtTime(125, time);
+        boom.frequency.exponentialRampToValueAtTime(28, time + 0.45);
+        boomGain.gain.setValueAtTime(0.45, time);
+        boomGain.gain.exponentialRampToValueAtTime(0.01, time + 0.48);
+        boom.connect(boomGain);
+        boomGain.connect(this.ctx.destination);
+        boom.start(time);
+        boom.stop(time + 0.5);
+
+        const dur = 0.3;
+        const bufSize = Math.floor(this.ctx.sampleRate * dur);
+        const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buf;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(480, time);
+        const nGain = this.ctx.createGain();
+        nGain.gain.setValueAtTime(0.32, time);
+        nGain.gain.exponentialRampToValueAtTime(0.01, time + dur);
+        noise.connect(filter);
+        filter.connect(nGain);
+        nGain.connect(this.ctx.destination);
+        noise.start(time);
+        noise.stop(time + dur + 0.02);
+    }
+
     playEnchantSound() {
         this.init();
         if (!this.ctx) return;

@@ -700,22 +700,53 @@ export class Player {
 
         if (type === 'bow') {
             const group = new THREE.Group();
-            const woodMat = new THREE.MeshLambertMaterial({
-                color: 0x8b5a2b,
+            const bodyMat = new THREE.MeshLambertMaterial({
+                color: 0x27272a,
                 emissive: glintEmissive,
                 emissiveIntensity: glintIntensity
             });
-            const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.02), woodMat);
-            group.add(p1);
+            const barrelMat = new THREE.MeshLambertMaterial({
+                color: 0x3f3f46,
+                emissive: glintEmissive,
+                emissiveIntensity: glintIntensity
+            });
+            const hazardMat = new THREE.MeshLambertMaterial({
+                color: 0xfacc15,
+                emissive: glintEmissive,
+                emissiveIntensity: glintIntensity
+            });
+            const stockMat = new THREE.MeshLambertMaterial({
+                color: 0x334155,
+                emissive: glintEmissive,
+                emissiveIntensity: glintIntensity
+            });
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0x84cc16 });
+            const scopeGlowMat = new THREE.MeshBasicMaterial({ color: 0xa3e635 });
 
-            const stringMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
-            const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.16, 0.005), stringMat);
-            s1.position.set(-0.02, 0, -0.01);
-            group.add(s1);
+            const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.052, 0.14), bodyMat);
+            receiver.position.set(0, 0, 0);
+            const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.032, 0.15), barrelMat);
+            barrel.position.set(0, 0.006, -0.14);
+            const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.042, 0.035), bodyMat);
+            muzzle.position.set(0, 0.006, -0.22);
+            const hazardBand = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.038, 0.025), hazardMat);
+            hazardBand.position.set(0, 0.006, -0.11);
+            const uraniumCore = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.022, 0.075), coreMat);
+            uraniumCore.position.set(0, 0.004, -0.01);
+            const scopeRail = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.022, 0.085), bodyMat);
+            scopeRail.position.set(0, 0.038, -0.02);
+            const scopeLens = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.01), scopeGlowMat);
+            scopeLens.position.set(0, 0.038, -0.066);
+            const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.068, 0.034), bodyMat);
+            grip.position.set(0, -0.05, 0.035);
+            grip.rotation.x = 0.24;
+            const stock = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.056, 0.095), stockMat);
+            stock.position.set(0, -0.01, 0.11);
 
+            group.add(receiver, barrel, muzzle, hazardBand, uraniumCore, scopeRail, scopeLens, grip, stock);
             this.heldItem = group;
-            this.heldItem.position.set(-0.04, 0.05, -0.05);
-            this.heldItem.rotation.set(0, Math.PI / 4, 0);
+            this.heldItem.position.set(-0.02, 0.04, -0.06);
+            this.heldItem.rotation.set(0.05, 0.08, 0);
             this.handContainer.add(this.heldItem);
         } else if (type.startsWith('sword_')) {
             const group = new THREE.Group();

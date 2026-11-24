@@ -47,7 +47,8 @@ const LUCIDE_INNER = {
     slash: '<path d="M22 2L2 22"/>',
     zap: '<path d="M15.914 4a1.5 1.5 0 0 0-2.474-1.561l-9 9A1.5 1.5 0 0 0 5.5 14h4.002a.5.5 0 0 1 .471.666L8.086 20a1.5 1.5 0 0 0 2.475 1.56l9-9A1.5 1.5 0 0 0 18.5 10h-3.997a.5.5 0 0 1-.472-.667z"/>',
     library: '<path d="m16 6l4 14M12 6v14M8 8v12M4 4v16"/>',
-    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3.128a4 4 0 0 1 0 7.744M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>'
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3.128a4 4 0 0 1 0 7.744M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>',
+    radiation: '<path d="M12 12h.01M14 15.464a4 4 0 0 1-4 0l-2.472 4.282a1 1 0 0 0 .465 1.416a10 10 0 0 0 8.014 0a1 1 0 0 0 .465-1.416zM16 12a4 4 0 0 0-2-3.464l2.472-4.282a1 1 0 0 1 1.46-.305a10 10 0 0 1 4.006 6.94A1 1 0 0 1 21 12zm-8 0a4 4 0 0 1 2-3.464L7.528 4.254a1 1 0 0 0-1.46-.305a10 10 0 0 0-4.006 6.94A1 1 0 0 0 3 12z"/>'
 };
 
 export function svgIcon(name, size = 18, color = 'currentColor') {
@@ -120,7 +121,7 @@ export const ITEM_CATALOG = {
     enchanted_book: { name: 'Buku Enchant', icon: 'bookMarked', color: '#c084fc' },
     golden_apple: { name: 'Apel Emas', icon: 'apple', color: '#fbbf24' },
     minecart: { name: 'Minecart', icon: 'cart', color: '#cbd5e1' },
-    bow: { name: 'Busur Panah', icon: 'crosshair', color: '#f59e0b' },
+    bow: { name: 'Senapan Nuklir', icon: 'radiation', color: '#84cc16' },
     sword_wood: { name: 'Pedang Kayu', icon: 'sword', color: '#d97706' },
     sword_stone: { name: 'Pedang Batu', icon: 'sword', color: '#94a3b8' },
     sword_iron: { name: 'Pedang Besi', icon: 'sword', color: '#e2e8f0' },

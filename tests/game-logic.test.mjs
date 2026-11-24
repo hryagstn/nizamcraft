@@ -152,12 +152,14 @@ test('Enchanted books apply, combine equal levels, reject wrong gear, and boost 
     const pickaxe = { type: 'pickaxe_diamond', count: 1, enchants: { efficiency: 2 } };
     assert.equal(getMiningStats(pickaxe).hitPower, 8);
 
-    // Bow Power II + Fire Aspect I
+    // Senapan Nuklir (bow) Power II + Fire Aspect I
     const bow = { type: 'bow', count: 1, enchants: { power: 2, fire_aspect: 1 } };
     const bowStats = getBowStats(bow);
-    assert.equal(bowStats.damage, 25 + 30 + 8);
-    assert.equal(bowStats.lifeSteal, 4);
+    assert.equal(bowStats.damage, 140 + 70 + 15);
+    assert.equal(bowStats.lifeSteal, 8);
     assert.equal(bowStats.isFire, true);
+    assert.equal(bowStats.isNuclear, true);
+    assert.equal(bowStats.blastRadius, 6.5);
 
     // Protection caps safely at 85%
     const maxArmor = {
@@ -1051,8 +1053,8 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
     assert.ok(cursedThomas.abdomen);
     assert.ok(cursedThomas.neckGroup);
 
-    // Exercise active simulation: JJ & Mikey stay peaceful toward both player and mobs,
-    // and ignore player-fired arrows
+    // Exercise active simulation: JJ & Mikey help fight hostile mobs like Iron Golem,
+    // never hurt player or friends, and ignore player-fired shots
     let playerHitCount = 0;
     mockGame.player = {
         position: new THREE.Vector3(0, 7, 0),
@@ -1074,20 +1076,22 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
         redSun.update(0.08);
         lunarMoon.update(0.08);
     }
-    assert.equal(nearbyEnemy.hp, prevEnemyHp, 'Expected peaceful JJ & Mikey never to damage other mobs');
-    assert.equal(playerHitCount, 0, 'Expected peaceful JJ & Mikey never to damage player');
+    assert.ok(nearbyEnemy.hp < prevEnemyHp, 'Expected JJ & Mikey to damage nearby hostile mob');
+    assert.equal(playerHitCount, 0, 'Expected JJ & Mikey never to damage player');
+    assert.equal(jj.hp, prevJjHp, 'Expected JJ not to be hurt by Mikey');
+    assert.equal(mikey.hp, prevMikeyHp, 'Expected Mikey not to be hurt by JJ');
 
     const friendlyArrow = new Arrow(
         new THREE.Vector3(jj.position.x, jj.position.y + 0.9, jj.position.z - 0.5),
         new THREE.Vector3(jj.position.x, jj.position.y + 0.9, jj.position.z + 1.5),
-        scene, world, mockGame, 'player', { damage: 25 }
+        scene, world, mockGame, 'player', getBowStats(null)
     );
     for (let i = 0; i < 6; i++) {
         friendlyArrow.update(0.05);
     }
     friendlyArrow.destroy();
-    assert.equal(jj.hp, prevJjHp, 'Expected player arrow not to hurt JJ');
-    assert.equal(mikey.hp, prevMikeyHp, 'Expected player arrow not to hurt Mikey');
+    assert.equal(jj.hp, prevJjHp, 'Expected player shot not to hurt JJ');
+    assert.equal(mikey.hp, prevMikeyHp, 'Expected player shot not to hurt Mikey');
 
     for (const arrow of mockGame.arrows) {
         arrow.update(0.05);
@@ -1100,7 +1104,7 @@ test('Charles, InfectedOcean, InfectedSky, JJ, Mikey, RedSun, LunarMoon, and Cur
     }
 });
 
-test('BananaKid, Carrie, Buu, Cookie, and Penduduk register as peaceful friendly characters and update cleanly', async () => {
+test('BananaKid, Carrie, Buu, Cookie, and Penduduk support mini scaling and defender combat AI', async () => {
     const peacefulIds = ['bananakid', 'carrie', 'buu', 'cookie', 'penduduk'];
     for (const id of peacefulIds) {
         assert.equal(HOSTILE_MOBS.has(id), false, `Expected ${id} NOT to be in HOSTILE_MOBS`);
@@ -1161,7 +1165,9 @@ test('BananaKid, Carrie, Buu, Cookie, and Penduduk register as peaceful friendly
         },
         mobs: [],
         particles: [],
-        arrows: []
+        arrows: [],
+        showNotification() {},
+        onMobDefeated() {}
     };
 
     const bananakid = new BananaKid(2, 7, 2, scene, world, mockGame);
@@ -1178,37 +1184,149 @@ test('BananaKid, Carrie, Buu, Cookie, and Penduduk register as peaceful friendly
     assert.ok(buu.flowerGroup, 'Expected Buu to hold a red poppy flower');
     assert.ok(penduduk.foldedArms, 'Expected Penduduk to have folded crossed arms');
     assert.equal(penduduk.followPlayer, false, 'Expected Penduduk to wander calmly rather than follow player');
+    assert.equal(penduduk.combatStyle, 'none', 'Expected Penduduk to stay non-combatant');
+
+    // Carrie & Cookie use mini scale like their original proportions
+    assert.equal(carrie.modelScale, 0.55);
+    assert.equal(carrie.mesh.scale.y, 0.55);
+    assert.ok(carrie.height < 1.1, 'Expected mini Carrie height < 1.1');
+    assert.equal(cookie.modelScale, 0.52);
+    assert.equal(cookie.mesh.scale.y, 0.52);
+    assert.ok(cookie.height < 1.0, 'Expected mini Cookie height < 1.0');
+
+    // Combat styles match Iron Golem (melee) & Snow Golem (ranged)
+    assert.equal(bananakid.combatStyle, 'melee');
+    assert.equal(buu.combatStyle, 'melee');
+    assert.equal(carrie.combatStyle, 'ranged');
+    assert.equal(cookie.combatStyle, 'ranged');
 
     for (const friend of friends) {
         assert.equal(friend.isFriendly, true, `Expected ${friend.type} to have isFriendly = true`);
     }
 
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 18; i++) {
         for (const friend of friends) {
             friend.update(0.08);
         }
+        for (let j = mockGame.arrows.length - 1; j >= 0; j--) {
+            if (!mockGame.arrows[j].update(0.08)) {
+                mockGame.arrows.splice(j, 1);
+            }
+        }
     }
 
-    assert.equal(nearbyEnemy.hp, prevEnemyHp, 'Expected new friendly characters never to damage other mobs');
-    assert.equal(playerHitCount, 0, 'Expected new friendly characters never to damage player');
+    assert.ok(nearbyEnemy.hp < prevEnemyHp, 'Expected Maizen defenders to damage nearby hostile mob');
+    assert.equal(playerHitCount, 0, 'Expected friendly characters never to damage player');
+
+    // Verify Penduduk alone stays completely passive
+    const calmGame = {
+        player: mockGame.player,
+        mobs: [],
+        particles: [],
+        arrows: [],
+        showNotification() {},
+        onMobDefeated() {}
+    };
+    const soloPenduduk = new Penduduk(0, 7, 0, scene, world, calmGame);
+    const soloHostile = new Charles(1.5, 7, 0, scene, world, calmGame);
+    calmGame.mobs.push(soloPenduduk, soloHostile);
+    const soloHostileHp = soloHostile.hp;
+    for (let i = 0; i < 10; i++) {
+        soloPenduduk.update(0.08);
+    }
+    assert.equal(soloHostile.hp, soloHostileHp, 'Expected Penduduk never to attack mobs');
+    soloPenduduk.cleanupMesh();
+    soloHostile.cleanupMesh();
 
     for (const friend of friends) {
         const prevHp = friend.hp;
         const arrow = new Arrow(
-            new THREE.Vector3(friend.position.x, friend.position.y + 0.9, friend.position.z - 0.5),
-            new THREE.Vector3(friend.position.x, friend.position.y + 0.9, friend.position.z + 1.5),
+            new THREE.Vector3(friend.position.x, friend.position.y + 0.4, friend.position.z - 0.5),
+            new THREE.Vector3(friend.position.x, friend.position.y + 0.4, friend.position.z + 1.5),
             scene, world, mockGame, 'player', { damage: 25 }
         );
         for (let i = 0; i < 6; i++) {
             arrow.update(0.05);
         }
         arrow.destroy();
-        assert.equal(friend.hp, prevHp, `Expected player arrow not to hurt ${friend.type}`);
+        assert.equal(friend.hp, prevHp, `Expected player shot not to hurt ${friend.type}`);
     }
 
+    for (const shot of mockGame.arrows) {
+        shot.destroy();
+    }
     nearbyEnemy.cleanupMesh();
     for (const friend of friends) {
         friend.cleanupMesh();
+    }
+});
+
+test('Senapan Nuklir deals massive AoE nuclear damage to hostiles without hurting player or allies', async () => {
+    const { ITEM_CATALOG } = await import('../src/utils/icons.js');
+    assert.equal(ITEM_CATALOG.bow.name, 'Senapan Nuklir');
+    assert.equal(ITEM_CATALOG.bow.icon, 'radiation');
+
+    const THREE = await import('three');
+    const { World } = await import('../src/world/world.js');
+    const { Zombie, JJ, Carrie, Penduduk, Arrow } = await import('../src/entities/mob.js');
+
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+    let playerHitCount = 0;
+    const mockGame = {
+        player: {
+            position: new THREE.Vector3(0, 7, 0),
+            velocity: new THREE.Vector3(),
+            width: 0.6,
+            height: 1.8,
+            takeDamage() { playerHitCount++; },
+            heal() {}
+        },
+        mobs: [],
+        particles: [],
+        arrows: [],
+        showNotification() {},
+        onMobDefeated() {}
+    };
+
+    const z1 = new Zombie(0, 7, 4, scene, world, mockGame);
+    const z2 = new Zombie(2.5, 7, 4, scene, world, mockGame);
+    const allyJJ = new JJ(-1.5, 7, 4, scene, world, mockGame);
+    const allyCarrie = new Carrie(1.2, 7, 4, scene, world, mockGame);
+    const villager = new Penduduk(0.5, 7, 5, scene, world, mockGame);
+
+    mockGame.mobs.push(z1, z2, allyJJ, allyCarrie, villager);
+
+    const prevZ1 = z1.hp;
+    const prevZ2 = z2.hp;
+    const prevJJ = allyJJ.hp;
+    const prevCarrie = allyCarrie.hp;
+    const prevVillager = villager.hp;
+
+    const nukeShot = new Arrow(
+        new THREE.Vector3(0, 7.9, 2),
+        new THREE.Vector3(0, 7.9, 5),
+        scene, world, mockGame, 'player', getBowStats(null)
+    );
+    assert.equal(nukeShot.isNuclear, true);
+
+    for (let i = 0; i < 12; i++) {
+        if (!nukeShot.update(0.05)) break;
+    }
+
+    assert.ok(z1.hp < prevZ1, 'Expected direct hostile target to take nuclear damage');
+    assert.ok(z2.hp < prevZ2, 'Expected nearby hostile mob to take nuclear blast AoE damage');
+    assert.equal(allyJJ.hp, prevJJ, 'Expected Senapan Nuklir never to hurt JJ');
+    assert.equal(allyCarrie.hp, prevCarrie, 'Expected Senapan Nuklir never to hurt Carrie');
+    assert.equal(villager.hp, prevVillager, 'Expected Senapan Nuklir never to hurt Penduduk');
+    assert.equal(playerHitCount, 0, 'Expected Senapan Nuklir never to hurt player');
+
+    for (const mob of [...mockGame.mobs]) {
+        mob.cleanupMesh();
+    }
+    for (const p of mockGame.particles) {
+        scene.remove(p.mesh);
+        p.material?.dispose();
     }
 });
 

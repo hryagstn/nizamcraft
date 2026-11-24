@@ -894,7 +894,7 @@ const mobileAuxIcon = document.getElementById('mobile-icon-aux');
 
 let lastPrimaryIconName = 'pickaxe';
 let lastSecondaryIconName = 'box';
-let lastAuxIconName = 'crosshair';
+let lastAuxIconName = 'radiation';
 let lastPromptText = '';
 
 const INTERACTIVE_PROMPT_LABELS = {
@@ -949,9 +949,9 @@ function syncContextualHUD(target) {
     }
     mobileSecondaryBtn?.classList.toggle('target-interact', isInteractive);
 
-    // 3. Aux Mobile Arc Button: Sprout on empty Farmland, Crosshair (Bow) otherwise
+    // 3. Aux Mobile Arc Button: Sprout on empty Farmland, Radiation (Senapan Nuklir) otherwise
     const canPlant = activePlantTarget !== null;
-    const nextAuxIcon = canPlant ? 'sprout' : 'crosshair';
+    const nextAuxIcon = canPlant ? 'sprout' : 'radiation';
     if (nextAuxIcon !== lastAuxIconName && mobileAuxIcon) {
         mobileAuxIcon.innerHTML = svgIcon(nextAuxIcon, 19);
         lastAuxIconName = nextAuxIcon;
@@ -1116,7 +1116,8 @@ function shootPlayerArrow() {
     const bowStats = getBowStats(findPlayerBowItem());
     const arrow = new Arrow(startPos, targetPos, scene, world, game, 'player', bowStats);
     game.arrows.push(arrow);
-    sounds.playBowSound();
+    sounds.playNuclearShotSound();
+    flashScreen('rgba(132, 204, 22, 0.14)', 45, 110);
 }
 
 function triggerLuckyEvent(x, y, z) {

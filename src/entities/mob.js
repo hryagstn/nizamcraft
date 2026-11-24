@@ -852,36 +852,119 @@ export class Skeleton extends Mob {
     }
 }
 
-// Arrow Projectile spawned by Skeletons or Player
+// Arrow / Nuclear Projectile spawned by Skeletons, Bosses, or Player's Senapan Nuklir
 export class Arrow {
     constructor(startPos, targetPos, scene, world, game, firedBy = 'mob', options = {}) {
         this.scene = scene;
         this.world = world;
         this.game = game;
         this.firedBy = firedBy;
-        this.damage = options.damage || (firedBy === 'player' ? 25 : 15);
-        this.knockback = options.knockback || 6.0;
+        this.isNuclear = !!options.isNuclear;
+        this.blastRadius = options.blastRadius || 5.5;
+        this.damage = options.damage || (firedBy === 'player' ? (this.isNuclear ? 140 : 25) : 15);
+        this.knockback = options.knockback || (this.isNuclear ? 12.0 : 6.0);
         this.lifeSteal = options.lifeSteal || 0;
         this.isFire = !!options.isFire;
 
         this.position = startPos.clone();
 
         const dir = targetPos.clone().sub(startPos).normalize();
-        const speed = options.speed || (firedBy === 'player' ? 22.0 : 15.0);
+        const speed = options.speed || (firedBy === 'player' ? (this.isNuclear ? 36.0 : 22.0) : 15.0);
         this.velocity = dir.multiplyScalar(speed);
 
         this.life = 4.0;
         this.isStuck = false;
 
-        const geo = new THREE.BoxGeometry(0.08, 0.08, 0.35);
-        const mat = new THREE.MeshBasicMaterial({ color: this.isFire ? 0xf97316 : 0xeeeeee });
-        this.mesh = new THREE.Mesh(geo, mat);
-        this.mesh.position.copy(this.position);
+        if (this.isNuclear) {
+            const warhead = new THREE.Group();
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0xa3e635 });
+            const tipMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+            const finMat = new THREE.MeshBasicMaterial({ color: 0x27272a });
 
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.42), coreMat);
+            const tip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.12), tipMat);
+            tip.position.set(0, 0, 0.24);
+            const fins = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.1), finMat);
+            fins.position.set(0, 0, -0.18);
+            warhead.add(body, tip, fins);
+            this.mesh = warhead;
+        } else {
+            const geo = new THREE.BoxGeometry(0.08, 0.08, 0.35);
+            const mat = new THREE.MeshBasicMaterial({ color: this.isFire ? 0xf97316 : 0xeeeeee });
+            this.mesh = new THREE.Mesh(geo, mat);
+            sounds.playClickSound();
+        }
+        this.mesh.position.copy(this.position);
         this.mesh.lookAt(targetPos);
         this.scene.add(this.mesh);
+    }
 
-        sounds.playClickSound();
+    detonateNuclear(impactPos, directMob = null) {
+        sounds.playNuclearBlastSound();
+
+        const blastColors = [0x84cc16, 0xa3e635, 0xfacc15, 0xf97316, 0x3f3f46];
+        if (this.game) {
+            if (!this.game.particles) this.game.particles = [];
+            for (let i = 0; i < 26; i++) {
+                const color = blastColors[i % blastColors.length];
+                const mat = new THREE.MeshBasicMaterial({ color });
+                const mesh = new THREE.Mesh(SHARED_MOB_PARTICLE_GEO, mat);
+                mesh.position.copy(impactPos);
+                const vel = new THREE.Vector3(
+                    Math.random() - 0.5,
+                    Math.random() * 0.9 - 0.15,
+                    Math.random() - 0.5
+                ).normalize().multiplyScalar(3.5 + Math.random() * 6.5);
+                this.scene.add(mesh);
+                this.game.particles.push({
+                    mesh,
+                    velocity: vel,
+                    life: 0.45 + Math.random() * 0.4,
+                    elapsed: 0,
+                    material: mat,
+                    sharedGeo: true
+                });
+            }
+        }
+
+        if (!this.game?.mobs) return;
+
+        // Snapshot targets before applying damage so mob.die() splicing never skips entries
+        const hits = [];
+        for (let i = 0; i < this.game.mobs.length; i++) {
+            const mob = this.game.mobs[i];
+            if (!mob || mob.type === 'minecart' || mob.isFriendly) continue;
+            const mobCenter = mob.position.clone().setY(mob.position.y + (mob.height || 1.8) * 0.5);
+            const dist = Math.min(impactPos.distanceTo(mob.position), impactPos.distanceTo(mobCenter));
+            if (mob === directMob || dist <= this.blastRadius) {
+                const dmg = mob === directMob
+                    ? this.damage
+                    : Math.max(
+                        Math.round(this.damage * 0.45),
+                        Math.round(this.damage * (1 - dist / Math.max(1, this.blastRadius)))
+                    );
+                hits.push({ mob, dmg, mobCenter });
+            }
+        }
+
+        let hitAny = false;
+        for (const { mob, dmg, mobCenter } of hits) {
+            mob.takeDamage(dmg);
+            hitAny = true;
+            if (this.isFire && this.world) {
+                this.world.spawnBlockBreakParticles(mob.position.x, mob.position.y + 0.8, mob.position.z, 'lava', 0xf97316);
+            }
+            const pushDir = mobCenter.clone().sub(impactPos);
+            if (pushDir.lengthSq() < 0.001) {
+                pushDir.copy(this.velocity);
+            }
+            pushDir.setY(0.45).normalize();
+            mob.velocity.addScaledVector(pushDir, this.knockback);
+        }
+
+        if (hitAny && this.lifeSteal > 0 && this.game.player) {
+            this.game.player.heal(this.lifeSteal);
+        }
     }
 
     update(dt) {
@@ -895,8 +978,24 @@ export class Arrow {
             return true;
         }
 
-        this.velocity.y -= 2.0 * dt;
+        this.velocity.y -= (this.isNuclear ? 0.6 : 2.0) * dt;
         const nextPos = this.position.clone().addScaledVector(this.velocity, dt);
+
+        if (this.isNuclear && this.game && Math.random() < 0.65) {
+            if (!this.game.particles) this.game.particles = [];
+            const mat = new THREE.MeshBasicMaterial({ color: Math.random() < 0.5 ? 0xa3e635 : 0xfacc15 });
+            const p = new THREE.Mesh(SHARED_MOB_PARTICLE_GEO, mat);
+            p.position.copy(this.position);
+            this.scene.add(p);
+            this.game.particles.push({
+                mesh: p,
+                velocity: new THREE.Vector3((Math.random() - 0.5) * 1.2, 0.5 + Math.random(), (Math.random() - 0.5) * 1.2),
+                life: 0.25,
+                elapsed: 0,
+                material: mat,
+                sharedGeo: true
+            });
+        }
 
         const gridX = Math.round(nextPos.x);
         const gridY = Math.round(nextPos.y);
@@ -904,6 +1003,11 @@ export class Arrow {
         const block = this.world.getBlockAt(gridX, gridY, gridZ);
 
         if (isSolidBlock(block)) {
+            if (this.isNuclear) {
+                this.detonateNuclear(nextPos, null);
+                this.destroy();
+                return false;
+            }
             this.isStuck = true;
             this.position.copy(nextPos);
             this.mesh.position.copy(this.position);
@@ -939,6 +1043,11 @@ export class Arrow {
                     const hitY = nextPos.y >= mobPos.y && nextPos.y <= mobPos.y + mHeight;
 
                     if (hitX && hitY && hitZ) {
+                        if (this.isNuclear) {
+                            this.detonateNuclear(nextPos, mob);
+                            this.destroy();
+                            return false;
+                        }
                         mob.takeDamage(this.damage);
                         if (this.lifeSteal > 0 && this.game.player) {
                             this.game.player.heal(this.lifeSteal);
@@ -966,8 +1075,18 @@ export class Arrow {
 
     destroy() {
         this.scene.remove(this.mesh);
-        this.mesh.geometry.dispose();
-        this.mesh.material.dispose();
+        this.mesh.traverse(child => {
+            if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(m => m.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -1282,30 +1401,32 @@ export class SnowGolem extends Mob {
     }
 }
 
-// Snowball projectile fired by Snow Golem
+// Snowball / ranged friendly projectile fired by Snow Golem and ranged allies
 export class Snowball {
-    constructor(startPos, targetPos, scene, world, game) {
+    constructor(startPos, targetPos, scene, world, game, options = {}) {
         this.scene = scene;
         this.world = world;
         this.game = game;
+        this.damage = options.damage ?? 15;
+        const speed = options.speed ?? 16.0;
+        const color = options.color ?? 0xffffff;
+        const size = options.size ?? 0.15;
 
         this.position = startPos.clone();
-        
-        // Compute direction
-        const dir = targetPos.clone().sub(startPos).normalize();
-        this.velocity = dir.multiplyScalar(16.0); // travel speed
 
-        this.life = 3.0; // disappears after 3 seconds
+        const dir = targetPos.clone().sub(startPos).normalize();
+        this.velocity = dir.multiplyScalar(speed);
+
+        this.life = 3.0;
         this.isStuck = false;
 
-        // Round-ish white snowball mesh (small box)
-        const geo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
-        const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const geo = new THREE.BoxGeometry(size, size, size);
+        const mat = new THREE.MeshBasicMaterial({ color });
         this.mesh = new THREE.Mesh(geo, mat);
         this.mesh.position.copy(this.position);
-        
+
         this.scene.add(this.mesh);
-        sounds.playClickSound(); // light snap sound
+        sounds.playClickSound();
     }
 
     update(dt) {
@@ -1346,7 +1467,7 @@ export class Snowball {
                     const hitY = nextPos.y >= mobPos.y && nextPos.y <= mobPos.y + mHeight;
 
                     if (hitX && hitY && hitZ) {
-                        mob.takeDamage(15); // snowballs deal 15 damage!
+                        mob.takeDamage(this.damage);
                         
                         // Push mob back slightly
                         const pushVec = this.velocity.clone().setY(2.0).normalize();
@@ -3623,12 +3744,13 @@ export class InfectedSky extends Mob {
     }
 }
 
-// 16 - 22. JJ, Mikey, BananaKid, Carrie, Buu, Cookie & Penduduk (Peaceful Friendly Characters)
+// 16 - 22. JJ, Mikey, BananaKid, Carrie, Buu, Cookie & Penduduk (Friendly Companions)
 class AllyHero extends Mob {
     constructor(type, x, y, z, scene, world, game) {
         super(type, x, y, z, scene, world, game);
         this.isFriendly = true;
         this.followPlayer = type !== 'penduduk';
+        this.modelScale = 1.0;
         this.hp = 260;
         this.maxHp = 260;
         this.width = 0.6;
@@ -3636,6 +3758,22 @@ class AllyHero extends Mob {
         this.speed = type === 'jj' ? 2.6 : (type === 'penduduk' ? 1.55 : 2.5);
         this.walkPhase = 0;
         this.targetMob = null;
+        this.attackCooldown = 0;
+        this.attackAnimTimer = 0;
+        this.combatStyle = type === 'penduduk'
+            ? 'none'
+            : ((type === 'carrie' || type === 'cookie') ? 'ranged' : 'melee');
+        this.attackDamage = type === 'jj'
+            ? 42
+            : (type === 'mikey' ? 40 : ((type === 'carrie' || type === 'cookie') ? 26 : 34));
+        this.projectileColor = type === 'carrie' ? 0xf43f5e : 0xa855f7;
+    }
+
+    applyScale(scale) {
+        this.modelScale = scale;
+        this.width = 0.6 * scale;
+        this.height = 1.8 * scale;
+        this.mesh.scale.setScalar(scale);
     }
 
     buildTwoToneLimb(w, h, d, topMat, topRatio, bottomMat) {
@@ -3695,27 +3833,100 @@ class AllyHero extends Mob {
     }
 
     updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        if (this.attackAnimTimer > 0) this.attackAnimTimer -= dt;
+
         const speedMag = Math.hypot(this.velocity.x, this.velocity.z);
         this.walkPhase += dt * (4.0 + speedMag * 3.0);
 
         const currentSpeed = isLiquid ? this.speed * 0.45 : this.speed;
-        const player = this.game?.player;
-        const distToPlayer = player ? this.position.distanceTo(player.position) : 0;
 
-        if (this.followPlayer && player && distToPlayer > 6.5 && distToPlayer < 22.0) {
-            const angle = Math.atan2(player.position.x - this.position.x, player.position.z - this.position.z);
-            this.mesh.rotation.y = angle;
-            this.velocity.x = Math.sin(angle) * (currentSpeed * 0.78);
-            this.velocity.z = Math.cos(angle) * (currentSpeed * 0.78);
-        } else {
-            this.wanderTimer -= dt;
-            if (this.wanderTimer <= 0) {
-                this.wanderTimer = 2.5 + Math.random() * 3.0;
-                this.wanderAngle = Math.random() * Math.PI * 2;
+        // Scan for nearest hostile mob (Iron Golem / Snow Golem defender style)
+        let closestMob = null;
+        if (this.combatStyle !== 'none' && this.game?.mobs) {
+            let minDist = 18.0;
+            for (let i = 0; i < this.game.mobs.length; i++) {
+                const mob = this.game.mobs[i];
+                if (!mob || mob === this || !HOSTILE_MOBS.has(mob.type)) continue;
+                if (this.combatStyle === 'melee' && Math.abs(mob.position.y - this.position.y) >= 4.5) continue;
+                const dist = this.position.distanceTo(mob.position);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestMob = mob;
+                }
             }
-            this.velocity.x = Math.sin(this.wanderAngle) * (currentSpeed * 0.4);
-            this.velocity.z = Math.cos(this.wanderAngle) * (currentSpeed * 0.4);
-            this.mesh.rotation.y = this.wanderAngle;
+        }
+        this.targetMob = closestMob;
+
+        if (this.targetMob) {
+            const tPos = this.targetMob.position;
+            const angle = Math.atan2(tPos.x - this.position.x, tPos.z - this.position.z);
+            this.mesh.rotation.y = angle;
+            const dist = this.position.distanceTo(tPos);
+
+            if (this.combatStyle === 'ranged') {
+                if (dist > 8.5) {
+                    this.velocity.x = Math.sin(angle) * currentSpeed;
+                    this.velocity.z = Math.cos(angle) * currentSpeed;
+                } else if (dist < 3.5) {
+                    this.velocity.x = -Math.sin(angle) * (currentSpeed * 0.65);
+                    this.velocity.z = -Math.cos(angle) * (currentSpeed * 0.65);
+                } else {
+                    this.velocity.x *= 0.5;
+                    this.velocity.z *= 0.5;
+                }
+
+                if (dist < 16.0 && this.attackCooldown <= 0) {
+                    this.attackCooldown = 0.85;
+                    this.attackAnimTimer = 0.25;
+                    const startPos = this.position.clone().setY(this.position.y + this.height * 0.58);
+                    const aimPos = tPos.clone().setY(tPos.y + (this.targetMob.height || 1.8) * 0.5);
+                    const shot = new Snowball(startPos, aimPos, this.scene, this.world, this.game, {
+                        color: this.projectileColor,
+                        damage: this.attackDamage,
+                        speed: 20.0,
+                        size: 0.14
+                    });
+                    if (!this.game.arrows) this.game.arrows = [];
+                    this.game.arrows.push(shot);
+                }
+            } else {
+                this.velocity.x = Math.sin(angle) * currentSpeed;
+                this.velocity.z = Math.cos(angle) * currentSpeed;
+
+                const meleeReach = 2.1 + (this.targetMob.width || 0.6) * 0.45;
+                if (dist < meleeReach && this.attackCooldown <= 0) {
+                    this.attackCooldown = 0.75;
+                    this.attackAnimTimer = 0.35;
+                    this.targetMob.takeDamage(this.attackDamage);
+                    this.targetMob.velocity.y = Math.max(this.targetMob.velocity.y, 6.0);
+                    const pushDir = tPos.clone().sub(this.position).setY(0);
+                    if (pushDir.lengthSq() > 0.0001) {
+                        pushDir.normalize();
+                        this.targetMob.velocity.addScaledVector(pushDir, 4.5);
+                    }
+                    sounds.playClickSound();
+                }
+            }
+        } else {
+            const player = this.game?.player;
+            const distToPlayer = player ? this.position.distanceTo(player.position) : 0;
+
+            if (this.followPlayer && player && distToPlayer > 6.5 && distToPlayer < 22.0) {
+                const angle = Math.atan2(player.position.x - this.position.x, player.position.z - this.position.z);
+                this.mesh.rotation.y = angle;
+                this.velocity.x = Math.sin(angle) * (currentSpeed * 0.78);
+                this.velocity.z = Math.cos(angle) * (currentSpeed * 0.78);
+            } else {
+                this.wanderTimer -= dt;
+                if (this.wanderTimer <= 0) {
+                    this.wanderTimer = 2.5 + Math.random() * 3.0;
+                    this.wanderAngle = Math.random() * Math.PI * 2;
+                }
+                this.velocity.x = Math.sin(this.wanderAngle) * (currentSpeed * 0.4);
+                this.velocity.z = Math.cos(this.wanderAngle) * (currentSpeed * 0.4);
+                this.mesh.rotation.y = this.wanderAngle;
+            }
         }
 
         const legSwing = speedMag > 0.15 ? Math.sin(this.walkPhase) * 0.55 : 0;
@@ -3727,7 +3938,12 @@ class AllyHero extends Mob {
             this.lArm.rotation.x = -legSwing * 0.65;
         }
         if (this.rArm) {
-            this.rArm.rotation.x = legSwing * 0.45 - 0.15;
+            if (this.attackAnimTimer > 0) {
+                const swing = Math.sin((this.attackAnimTimer / 0.35) * Math.PI) * 1.45;
+                this.rArm.rotation.x = -swing - 0.35;
+            } else {
+                this.rArm.rotation.x = legSwing * 0.45 - 0.15;
+            }
         }
 
         if (isLiquid && Math.random() < 0.08) {
@@ -3944,6 +4160,7 @@ export class BananaKid extends AllyHero {
 export class Carrie extends AllyHero {
     constructor(x, y, z, scene, world, game) {
         super('carrie', x, y, z, scene, world, game);
+        this.applyScale(0.55);
     }
 
     initMesh() {
@@ -4065,6 +4282,7 @@ export class Buu extends AllyHero {
 export class Cookie extends AllyHero {
     constructor(x, y, z, scene, world, game) {
         super('cookie', x, y, z, scene, world, game);
+        this.applyScale(0.52);
     }
 
     initMesh() {

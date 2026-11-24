@@ -403,7 +403,7 @@ export const ENCHANTMENTS = {
         targets: ['bow'],
         weight: 10,
         anvilCost: 1,
-        description: '+15 damage & kecepatan lesat anak panah per level pada Busur.'
+        description: '+35 damage, kecepatan & radius ledak per level pada Senapan Nuklir.'
     },
     punch: {
         id: 'punch',
@@ -412,7 +412,7 @@ export const ENCHANTMENTS = {
         targets: ['bow'],
         weight: 4,
         anvilCost: 2,
-        description: 'Mendorong target lebih kuat saat terkena panah.'
+        description: 'Mendorong target lebih kuat saat terkena tembakan Senapan Nuklir.'
     },
     protection: {
         id: 'protection',
@@ -840,29 +840,31 @@ export function getMiningStats(heldItem) {
 }
 
 export function getBowStats(bowItem) {
-    let damage = 25;
-    let speed = 22.0;
-    let knockback = 6.0;
+    let damage = 140;
+    let speed = 36.0;
+    let knockback = 12.0;
     let lifeSteal = 0;
     let isFire = false;
+    let blastRadius = 5.5;
 
     if (bowItem) {
         const ench = getItemEnchants(bowItem);
         if (ench.power) {
-            damage += ench.power * 15;
+            damage += ench.power * 35;
             speed += ench.power * 4.0;
+            blastRadius += ench.power * 0.5;
         }
         if (ench.punch) {
-            knockback += ench.punch * 4.0;
+            knockback += ench.punch * 5.0;
         }
         if (ench.fire_aspect) {
-            damage += ench.fire_aspect * 8;
-            lifeSteal = ench.fire_aspect * 4;
+            damage += ench.fire_aspect * 15;
+            lifeSteal = ench.fire_aspect * 8;
             isFire = true;
         }
     }
 
-    return { damage, speed, knockback, lifeSteal, isFire };
+    return { damage, speed, knockback, lifeSteal, isFire, isNuclear: true, blastRadius };
 }
 
 export function computeArmorReduction(armor, damageSource = 'normal') {
@@ -1150,11 +1152,11 @@ export const CRAFTING_RECIPES = [
         id: 'bow',
         category: 'weapon',
         result: 'bow',
-        resultName: 'Busur Panah',
+        resultName: 'Senapan Nuklir',
         resultCount: 1,
         pattern: [' SC', 'S C', ' SC'],
         key: { S: 'stick', C: 'crop' },
-        description: 'Senjata jarak jauh. Mendukung Kekuatan, Hentakan, dan Aspek Api.'
+        description: 'Senapan nuklir jarak jauh berdaya ledak tinggi. Mendukung Kekuatan, Hentakan, dan Aspek Api.'
     }),
 
     // Zirah Lengkap (Besi, Emas, Berlian)

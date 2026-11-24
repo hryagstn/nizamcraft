@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nizamcraft-cache-v16';
+const CACHE_NAME = 'nizamcraft-cache-v17';
 
 const LOCAL_ASSETS = [
     '/',

@@ -622,6 +622,7 @@ function switchGameMode(nextMode) {
 
     syncModeUI();
     updateArmorUI();
+    updateHealthUI();
     updateXpUI();
     updateInventoryUI();
     game.showNotification(
@@ -644,6 +645,7 @@ function handleLoad() {
         syncLaserBeams();
         syncModeUI();
         updateArmorUI();
+        updateHealthUI();
         updateXpUI();
         updateInventoryUI();
         if (!hasGameStarted) gameRenderer.render();
@@ -696,6 +698,7 @@ function handleReset() {
     syncModeUI();
     selectHotbarSlot(0);
     updateArmorUI();
+    updateHealthUI();
     updateXpUI();
     updateInventoryUI();
     saveAllState(true);
@@ -1114,16 +1117,6 @@ document.querySelectorAll('#game-mode-switch .mode-pill-btn').forEach(btn => {
         }
     });
 });
-
-if (isSurvivalMode()) {
-    loadModeState(GAME_MODES.SURVIVAL);
-} else if (world.loadedFromSave) {
-    restorePlayerAndChests(getModeStorageKeys(GAME_MODES.FREEPLAY));
-}
-syncModeUI();
-updateArmorUI();
-updateXpUI();
-updateInventoryUI();
 
 window.addEventListener('contextmenu', (e) => e.preventDefault(), { capture: true });
 window.addEventListener('wheel', (e) => {
@@ -3966,9 +3959,16 @@ function updateXpUI() {
     xpText.textContent = `Lv. ${player.xpLevel}`;
 }
 
+if (isSurvivalMode()) {
+    loadModeState(GAME_MODES.SURVIVAL);
+} else if (world.loadedFromSave) {
+    restorePlayerAndChests(getModeStorageKeys(GAME_MODES.FREEPLAY));
+}
+syncModeUI();
 updateArmorUI();
 updateHealthUI();
 updateXpUI();
+updateInventoryUI();
 syncLaserBeams();
 
 let playerHazardCooldown = 0;

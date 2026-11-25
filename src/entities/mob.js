@@ -239,6 +239,63 @@ function createMobFaceTexture(type) {
         // Subtle lower mouth shadow
         ctx.fillStyle = '#7c4e35';
         ctx.fillRect(3, 6, 2, 1);
+    } else if (type === 'steve') {
+        ctx.fillStyle = '#b58567'; // Classic Steve tan skin
+        ctx.fillRect(0, 0, 8, 8);
+        // Dark brown hair across top + corner tufts
+        ctx.fillStyle = '#432d1c';
+        ctx.fillRect(0, 0, 8, 2);
+        ctx.fillRect(0, 2, 1, 1);
+        ctx.fillRect(7, 2, 1, 1);
+        // White sclera & indigo-blue eyes
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(1, 4, 1, 1);
+        ctx.fillRect(6, 4, 1, 1);
+        ctx.fillStyle = '#4338ca';
+        ctx.fillRect(2, 4, 1, 1);
+        ctx.fillRect(5, 4, 1, 1);
+        // Nose & iconic brown beard/mouth
+        ctx.fillStyle = '#8f5d42';
+        ctx.fillRect(3, 5, 2, 1);
+        ctx.fillStyle = '#432d1c';
+        ctx.fillRect(2, 6, 4, 2);
+        ctx.fillStyle = '#9c684b';
+        ctx.fillRect(3, 6, 2, 1);
+    } else if (type === 'alex') {
+        ctx.fillStyle = '#f8d7be'; // Fair peach skin
+        ctx.fillRect(0, 0, 8, 8);
+        // Ginger-orange swept hair bangs
+        ctx.fillStyle = '#ea7a26';
+        ctx.fillRect(0, 0, 8, 2);
+        ctx.fillRect(0, 2, 2, 1);
+        ctx.fillRect(7, 2, 1, 1);
+        // White sclera & emerald-green eyes
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(1, 3, 1, 1);
+        ctx.fillRect(6, 3, 1, 1);
+        ctx.fillStyle = '#15803d';
+        ctx.fillRect(2, 3, 1, 1);
+        ctx.fillRect(5, 3, 1, 1);
+        // Warm pink mouth
+        ctx.fillStyle = '#f472b6';
+        ctx.fillRect(3, 5, 2, 1);
+    } else if (type === 'optimus') {
+        ctx.fillStyle = '#1d4ed8'; // Royal-blue helmet
+        ctx.fillRect(0, 0, 8, 8);
+        // Central silver helmet crest
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(3, 0, 2, 3);
+        // Dark recess & glowing yellow visor eyes
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(1, 3, 6, 2);
+        ctx.fillStyle = '#facc15';
+        ctx.fillRect(1, 3, 2, 1);
+        ctx.fillRect(5, 3, 2, 1);
+        // Silver faceplate mask
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(2, 5, 4, 3);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(3, 5, 2, 2);
     }
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -3744,18 +3801,18 @@ export class InfectedSky extends Mob {
     }
 }
 
-// 16 - 22. JJ, Mikey, BananaKid, Carrie, Buu, Cookie & Penduduk (Friendly Companions)
+// 16 - 25. JJ, Mikey, BananaKid, Carrie, Buu, Cookie, Penduduk, Steve, Alex & Optimus (Friendly Companions)
 class AllyHero extends Mob {
     constructor(type, x, y, z, scene, world, game) {
         super(type, x, y, z, scene, world, game);
         this.isFriendly = true;
         this.followPlayer = type !== 'penduduk';
         this.modelScale = 1.0;
-        this.hp = 260;
-        this.maxHp = 260;
+        this.hp = type === 'optimus' ? 480 : 260;
+        this.maxHp = this.hp;
         this.width = 0.6;
         this.height = 1.8;
-        this.speed = type === 'jj' ? 2.6 : (type === 'penduduk' ? 1.55 : 2.5);
+        this.speed = type === 'jj' ? 2.6 : (type === 'penduduk' ? 1.55 : (type === 'optimus' ? 2.4 : 2.5));
         this.walkPhase = 0;
         this.targetMob = null;
         this.attackCooldown = 0;
@@ -3763,9 +3820,16 @@ class AllyHero extends Mob {
         this.combatStyle = type === 'penduduk'
             ? 'none'
             : ((type === 'carrie' || type === 'cookie') ? 'ranged' : 'melee');
-        this.attackDamage = type === 'jj'
-            ? 42
-            : (type === 'mikey' ? 40 : ((type === 'carrie' || type === 'cookie') ? 26 : 34));
+        const dmgTable = {
+            optimus: 56,
+            jj: 42,
+            mikey: 40,
+            steve: 40,
+            alex: 38,
+            carrie: 26,
+            cookie: 26
+        };
+        this.attackDamage = dmgTable[type] ?? 34;
         this.projectileColor = type === 'carrie' ? 0xf43f5e : 0xa855f7;
     }
 
@@ -4781,6 +4845,390 @@ export class CursedThomas extends Mob {
 
         if (isLiquid && Math.random() < 0.08) {
             this.velocity.y = 4.0;
+        }
+    }
+}
+
+export class Steve extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('steve', x, y, z, scene, world, game);
+    }
+
+    initMesh() {
+        const hairMat = createTrackedColorMat(this, 0x432d1c);
+        const skinMat = createTrackedColorMat(this, 0xb58567);
+        const shirtMat = createTrackedColorMat(this, 0x14b8b8);
+        const pantsMat = createTrackedColorMat(this, 0x4736a8);
+        const shoeMat = createTrackedColorMat(this, 0x52525b);
+
+        const hairSideMat = createTrackedTexMat(this, textures.steveHairSide);
+        const torsoFrontMat = createTrackedTexMat(this, textures.steveTorsoFront);
+        const faceMat = createTrackedTexMat(this, createMobFaceTexture('steve'));
+
+        const headMats = [hairSideMat, hairSideMat, hairMat, skinMat, faceMat, hairMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.54), headMats);
+        head.position.set(0, 1.56, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        const torsoMats = [shirtMat, shirtMat, shirtMat, pantsMat, torsoFrontMat, shirtMat];
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.32), torsoMats);
+        torso.position.set(0, 0.94, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        this.lArm = this.buildTwoToneLimb(0.22, 0.68, 0.22, shirtMat, 0.38, skinMat);
+        this.lArm.position.set(-0.38, 1.28, 0);
+        this.mesh.add(this.lArm);
+
+        this.rArm = this.buildTwoToneLimb(0.22, 0.68, 0.22, shirtMat, 0.38, skinMat);
+        this.rArm.position.set(0.38, 1.28, 0);
+        this.mesh.add(this.rArm);
+
+        this.lLeg = this.buildTwoToneLimb(0.24, 0.6, 0.24, pantsMat, 0.85, shoeMat);
+        this.lLeg.position.set(-0.14, 0.6, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = this.buildTwoToneLimb(0.24, 0.6, 0.24, pantsMat, 0.85, shoeMat);
+        this.rLeg.position.set(0.14, 0.6, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+export class Alex extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('alex', x, y, z, scene, world, game);
+    }
+
+    initMesh() {
+        const hairMat = createTrackedColorMat(this, 0xea7a26);
+        const skinMat = createTrackedColorMat(this, 0xf8d7be);
+        const tunicMat = createTrackedColorMat(this, 0x73b06b);
+        const pantsMat = createTrackedColorMat(this, 0x5c3c24);
+        const bootMat = createTrackedColorMat(this, 0x3f3f46);
+
+        const hairSideMat = createTrackedTexMat(this, textures.alexHairSide);
+        const torsoFrontMat = createTrackedTexMat(this, textures.alexTorsoFront);
+        const faceMat = createTrackedTexMat(this, createMobFaceTexture('alex'));
+
+        const headMats = [hairSideMat, hairSideMat, hairMat, skinMat, faceMat, hairMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.54, 0.54), headMats);
+        head.position.set(0, 1.56, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        const torsoMats = [tunicMat, tunicMat, tunicMat, pantsMat, torsoFrontMat, tunicMat];
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.72, 0.32), torsoMats);
+        torso.position.set(0, 0.94, 0);
+        torso.castShadow = true;
+        this.mesh.add(torso);
+
+        // Slim Alex arms (0.18 width)
+        this.lArm = this.buildTwoToneLimb(0.18, 0.68, 0.18, tunicMat, 0.38, skinMat);
+        this.lArm.position.set(-0.36, 1.28, 0);
+        this.mesh.add(this.lArm);
+
+        this.rArm = this.buildTwoToneLimb(0.18, 0.68, 0.18, tunicMat, 0.38, skinMat);
+        this.rArm.position.set(0.36, 1.28, 0);
+        this.mesh.add(this.rArm);
+
+        this.lLeg = this.buildTwoToneLimb(0.24, 0.6, 0.24, pantsMat, 0.74, bootMat);
+        this.lLeg.position.set(-0.14, 0.6, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = this.buildTwoToneLimb(0.24, 0.6, 0.24, pantsMat, 0.74, bootMat);
+        this.rLeg.position.set(0.14, 0.6, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+export class Optimus extends AllyHero {
+    constructor(x, y, z, scene, world, game) {
+        super('optimus', x, y, z, scene, world, game);
+        this.width = 1.05;
+        this.height = 2.95;
+    }
+
+    initMesh() {
+        const redMat = createTrackedColorMat(this, 0xdc2626);
+        const blueMat = createTrackedColorMat(this, 0x1d4ed8);
+        const silverMat = createTrackedColorMat(this, 0x9ca3af);
+        const darkMetalMat = createTrackedColorMat(this, 0x18181b);
+        const wheelMat = createTrackedColorMat(this, 0x09090b);
+        const visorMat = createTrackedColorMat(this, 0xfacc15, true);
+        const chestMat = createTrackedTexMat(this, textures.optimusChest);
+        const grillMat = createTrackedTexMat(this, textures.optimusGrill);
+        const faceMat = createTrackedTexMat(this, createMobFaceTexture('optimus'));
+
+        // Helmet head with ear antennae + central crest
+        const headMats = [blueMat, blueMat, blueMat, silverMat, faceMat, blueMat];
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), headMats);
+        head.position.set(0, 2.52, 0);
+        head.castShadow = true;
+        this.mesh.add(head);
+
+        for (const side of [-1, 1]) {
+            const antenna = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.14), blueMat);
+            antenna.position.set(side * 0.35, 2.74, 0);
+            antenna.castShadow = true;
+            this.mesh.add(antenna);
+        }
+        const crest = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.66), silverMat);
+        crest.position.set(0, 2.86, 0);
+        this.mesh.add(crest);
+
+        const visorBar = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.06), visorMat);
+        visorBar.position.set(0, 2.56, 0.3);
+        this.mesh.add(visorBar);
+
+        // Red truck-cab chest + ribbed silver abdomen + shoulder smokestacks
+        const torsoMats = [redMat, redMat, redMat, silverMat, chestMat, redMat];
+        const chest = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.68, 0.54), torsoMats);
+        chest.position.set(0, 1.84, 0);
+        chest.castShadow = true;
+        this.mesh.add(chest);
+
+        const abdomen = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.42, 0.44), grillMat);
+        abdomen.position.set(0, 1.32, 0);
+        abdomen.castShadow = true;
+        this.mesh.add(abdomen);
+
+        for (const side of [-1, 1]) {
+            const pipe = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.72, 0.1), silverMat);
+            pipe.position.set(side * 0.54, 2.34, -0.14);
+            pipe.castShadow = true;
+            this.mesh.add(pipe);
+        }
+
+        // Broad Mech Arms (red pauldrons, silver biceps, red forearms, blue fists)
+        const makeMechArm = () => {
+            const grp = new THREE.Group();
+            const pauldron = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.36), redMat);
+            pauldron.position.set(0, -0.14, 0);
+            pauldron.castShadow = true;
+            grp.add(pauldron);
+
+            const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.34, 0.24), silverMat);
+            bicep.position.set(0, -0.46, 0);
+            grp.add(bicep);
+
+            const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.42, 0.32), redMat);
+            forearm.position.set(0, -0.82, 0);
+            forearm.castShadow = true;
+            grp.add(forearm);
+
+            const fist = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.28), blueMat);
+            fist.position.set(0, -1.12, 0);
+            grp.add(fist);
+            return grp;
+        };
+
+        this.lArm = makeMechArm();
+        this.lArm.position.set(-0.66, 2.12, 0);
+        this.mesh.add(this.lArm);
+
+        this.rArm = makeMechArm();
+        this.rArm.position.set(0.66, 2.12, 0);
+        this.mesh.add(this.rArm);
+
+        // Ion Blaster cannon mounted on right arm
+        const blaster = new THREE.Group();
+        blaster.position.set(0, -1.04, 0.28);
+        const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.68), darkMetalMat);
+        const barrelTip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.28), silverMat);
+        barrelTip.position.set(0, 0.02, 0.44);
+        blaster.add(gunBody, barrelTip);
+        this.rArm.add(blaster);
+        this.blasterGroup = blaster;
+
+        // Heavy Legs (silver thighs, royal-blue shins with truck wheels, silver feet)
+        const makeMechLeg = (side) => {
+            const grp = new THREE.Group();
+            const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.44, 0.32), silverMat);
+            thigh.position.set(0, -0.22, 0);
+            thigh.castShadow = true;
+            grp.add(thigh);
+
+            const shin = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.56, 0.4), blueMat);
+            shin.position.set(0, -0.7, 0);
+            shin.castShadow = true;
+            grp.add(shin);
+
+            for (const wy of [-0.56, -0.84]) {
+                const wheel = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.22), wheelMat);
+                wheel.position.set(side * 0.22, wy, 0);
+                grp.add(wheel);
+            }
+
+            const foot = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, 0.48), silverMat);
+            foot.position.set(0, -1.04, 0.04);
+            grp.add(foot);
+            return grp;
+        };
+
+        this.lLeg = makeMechLeg(-1);
+        this.lLeg.position.set(-0.24, 1.12, 0);
+        this.mesh.add(this.lLeg);
+
+        this.rLeg = makeMechLeg(1);
+        this.rLeg.position.set(0.24, 1.12, 0);
+        this.mesh.add(this.rLeg);
+    }
+}
+
+// 26. SANDWORM (Colossal Ribbed Desert Worm Boss with Crimson Fang Maw)
+export class Sandworm extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('sandworm', x, y, z, scene, world, game);
+        this.hp = 680;
+        this.maxHp = 680;
+        this.width = 2.8;
+        this.height = 4.6;
+        this.speed = 2.15;
+        this.attackCooldown = 0;
+        this.attackAnimTimer = 0;
+        this.walkPhase = Math.random() * Math.PI * 2;
+    }
+
+    initMesh() {
+        const skinMat = createTrackedTexMat(this, textures.sandwormSkin);
+        const mawMat = createTrackedTexMat(this, textures.sandwormMaw);
+        const fangMat = createTrackedColorMat(this, 0xd4d4d8);
+        const crestMat = createTrackedColorMat(this, 0xcbd5e1);
+        const sandMat = createTrackedColorMat(this, 0xd6be8a);
+
+        // Sandy eruption base mound
+        const baseRing = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.42, 2.6), sandMat);
+        baseRing.position.set(0, 0.21, 0);
+        baseRing.receiveShadow = true;
+        this.mesh.add(baseRing);
+
+        // 5 curving articulated ribbed worm segments rising out of the ground
+        this.wormSegments = [];
+        const segSpecs = [
+            { y: 0.72, z: -0.35, r: 2.0, h: 0.92, tilt: 0.15 },
+            { y: 1.54, z: -0.2, r: 1.92, h: 0.92, tilt: 0.28 },
+            { y: 2.34, z: 0.08, r: 1.88, h: 0.9, tilt: 0.44 },
+            { y: 3.08, z: 0.48, r: 1.96, h: 0.9, tilt: 0.65 },
+            { y: 3.68, z: 1.02, r: 2.12, h: 0.88, tilt: 0.9 }
+        ];
+        for (let i = 0; i < segSpecs.length; i++) {
+            const spec = segSpecs[i];
+            const seg = new THREE.Mesh(new THREE.BoxGeometry(spec.r, spec.h, spec.r), skinMat);
+            seg.position.set(0, spec.y, spec.z);
+            seg.rotation.x = spec.tilt;
+            seg.castShadow = true;
+            seg.userData.baseY = spec.y;
+            seg.userData.baseZ = spec.z;
+            seg.userData.baseTilt = spec.tilt;
+            this.mesh.add(seg);
+            this.wormSegments.push(seg);
+        }
+
+        // Massive crimson funnel maw + 12 jagged white fangs + rocky side crest
+        this.mawGroup = new THREE.Group();
+        this.mawGroup.position.set(0, 3.92, 1.44);
+        this.mawGroup.rotation.x = 0.22;
+
+        const mawFace = new THREE.Mesh(new THREE.BoxGeometry(2.34, 2.34, 0.56), [
+            skinMat, skinMat, skinMat, skinMat, mawMat, skinMat
+        ]);
+        mawFace.castShadow = true;
+        this.mawGroup.add(mawFace);
+
+        const crest = new THREE.Mesh(new THREE.BoxGeometry(0.46, 1.65, 0.88), crestMat);
+        crest.position.set(1.16, 0.1, -0.18);
+        crest.rotation.z = -0.12;
+        this.mawGroup.add(crest);
+
+        for (let i = 0; i < 12; i++) {
+            const ang = (i / 12) * Math.PI * 2;
+            const fang = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.52, 0.14), fangMat);
+            fang.position.set(Math.cos(ang) * 0.98, Math.sin(ang) * 0.98, 0.36);
+            fang.rotation.z = ang - Math.PI / 2;
+            fang.rotation.x = 0.55;
+            this.mawGroup.add(fang);
+        }
+
+        this.mesh.add(this.mawGroup);
+    }
+
+    updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        if (this.attackAnimTimer > 0) this.attackAnimTimer -= dt;
+
+        const speedMag = Math.hypot(this.velocity.x, this.velocity.z);
+        this.walkPhase += dt * (2.6 + speedMag * 1.4);
+
+        const lunge = this.attackAnimTimer > 0
+            ? Math.sin((this.attackAnimTimer / 0.45) * Math.PI) * 0.55
+            : 0;
+
+        if (this.wormSegments) {
+            for (let i = 0; i < this.wormSegments.length; i++) {
+                const seg = this.wormSegments[i];
+                const sway = Math.sin(this.walkPhase - i * 0.65) * (0.06 + i * 0.025);
+                seg.position.x = sway;
+                seg.position.z = seg.userData.baseZ + lunge * (i / this.wormSegments.length);
+                seg.rotation.z = sway * 0.4;
+            }
+        }
+        if (this.mawGroup) {
+            this.mawGroup.position.z = 1.44 + lunge;
+            this.mawGroup.position.x = Math.sin(this.walkPhase - 2.4) * 0.16;
+            this.mawGroup.rotation.x = 0.22 + lunge * 0.28;
+        }
+
+        const { target } = findNearestBossTarget(this, 30.0, { landOnly: true, includeMinecarts: true });
+        if (target) {
+            const tPos = target.position;
+            const angle = Math.atan2(tPos.x - this.position.x, tPos.z - this.position.z);
+            this.mesh.rotation.y = angle;
+            const currentSpeed = isLiquid ? this.speed * 0.45 : this.speed;
+            this.velocity.x = Math.sin(angle) * currentSpeed;
+            this.velocity.z = Math.cos(angle) * currentSpeed;
+
+            const dist = this.position.distanceTo(tPos);
+            if (dist < 3.9 && this.attackCooldown <= 0) {
+                this.attackCooldown = 1.15;
+                this.attackAnimTimer = 0.45;
+                sounds.playMonsterRoarSound('sea');
+                applyBossMeleeHit(this, target, 36, 52, 8.5, 6.0);
+            }
+        } else {
+            this.wanderTimer -= dt;
+            if (this.position.z >= SEA_START_Z - 1) {
+                this.wanderAngle = Math.PI + (Math.random() - 0.5) * 0.8;
+                this.wanderTimer = 1.8;
+            } else if (this.wanderTimer <= 0) {
+                this.wanderTimer = 2.2 + Math.random() * 3.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (this.speed * 0.45);
+            this.velocity.z = Math.cos(this.wanderAngle) * (this.speed * 0.45);
+            this.mesh.rotation.y = this.wanderAngle;
+        }
+
+        if (isLiquid && Math.random() < 0.08) {
+            this.velocity.y = 4.2;
+        }
+        if (this.game?.particles && Math.random() < 0.18) {
+            const mat = new THREE.MeshBasicMaterial({ color: 0xd6be8a });
+            const p = new THREE.Mesh(SHARED_MOB_PARTICLE_GEO, mat);
+            p.position.set(
+                this.position.x + (Math.random() - 0.5) * 1.8,
+                this.position.y + 0.3,
+                this.position.z + (Math.random() - 0.5) * 1.8
+            );
+            this.scene.add(p);
+            this.game.particles.push({
+                mesh: p,
+                velocity: new THREE.Vector3((Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 1.5, (Math.random() - 0.5) * 1.5),
+                life: 0.4,
+                elapsed: 0,
+                material: mat,
+                sharedGeo: true
+            });
         }
     }
 }

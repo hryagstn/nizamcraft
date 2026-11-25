@@ -29,6 +29,13 @@ import {
     setAllCharactersEnabled,
     countEnabledCharacters,
     getEligibleSpawnTypes,
+    GAME_MODES,
+    ONE_BLOCK_POS,
+    ONE_BLOCK_PHASES,
+    getOneBlockPhase,
+    rollOneBlockType,
+    rollOneBlockBonusItem,
+    getModeStorageKeys,
     selectOrAssignHotbarSlot,
     CRAFTING_RECIPES,
     canCraftRecipeFromSlots,
@@ -1330,12 +1337,12 @@ test('Senapan Nuklir deals massive AoE nuclear damage to hostiles without hurtin
     }
 });
 
-test('Character roster switch helpers default all 26 characters to OFF and filter spawns safely', () => {
-    assert.equal(CHARACTER_ROSTER.length, 26);
+test('Character roster switch helpers default all 30 characters to OFF and filter spawns safely', () => {
+    assert.equal(CHARACTER_ROSTER.length, 30);
     const rosterTypes = CHARACTER_ROSTER.map(c => c.type);
-    assert.equal(new Set(rosterTypes).size, 26, 'Expected 26 unique character types in CHARACTER_ROSTER');
+    assert.equal(new Set(rosterTypes).size, 30, 'Expected 30 unique character types in CHARACTER_ROSTER');
 
-    for (const id of ['bananakid', 'carrie', 'buu', 'cookie', 'penduduk']) {
+    for (const id of ['bananakid', 'carrie', 'buu', 'cookie', 'penduduk', 'steve', 'alex', 'sandworm', 'optimus']) {
         assert.ok(rosterTypes.includes(id), `Expected ${id} in CHARACTER_ROSTER`);
     }
 
@@ -1362,7 +1369,181 @@ test('Character roster switch helpers default all 26 characters to OFF and filte
     assert.equal(eligibleBefore.includes('penduduk'), true, 'Non-unique enabled character can still spawn');
 
     const allOn = setAllCharactersEnabled(defaults, true);
-    assert.equal(countEnabledCharacters(allOn), 26);
+    assert.equal(countEnabledCharacters(allOn), 30);
     const allOff = setAllCharactersEnabled(allOn, false);
     assert.equal(countEnabledCharacters(allOff), 0);
+});
+
+test('Steve, Alex, Sandworm, and Optimus register factions, textures, eggs, and combat AI cleanly', async () => {
+    assert.equal(HOSTILE_MOBS.has('sandworm'), true);
+    for (const friendlyId of ['steve', 'alex', 'optimus']) {
+        assert.equal(HOSTILE_MOBS.has(friendlyId), false, `Expected ${friendlyId} NOT in HOSTILE_MOBS`);
+    }
+
+    const expectedEggs = ['spawn_steve', 'spawn_alex', 'spawn_sandworm', 'spawn_optimus'];
+    const { ITEM_CATALOG } = await import('../src/utils/icons.js');
+    const { textures } = await import('../src/utils/textures.js');
+    const hotbarByType = new Map(HOTBAR_ITEMS.map(item => [item.type, item]));
+    for (const eggType of expectedEggs) {
+        assert.ok(hotbarByType.has(eggType), `Expected ${eggType} in HOTBAR_ITEMS`);
+        assert.ok(ITEM_CATALOG[eggType], `Expected ${eggType} in ITEM_CATALOG`);
+        assert.equal(/[<>&]/.test(hotbarByType.get(eggType).key), false);
+    }
+    const keys = HOTBAR_ITEMS.map(item => item.key.toLowerCase());
+    assert.equal(new Set(keys).size, keys.length, 'Expected unique hotbar shortcut keys');
+
+    for (const texKey of [
+        'steveHairSide',
+        'steveTorsoFront',
+        'alexHairSide',
+        'alexTorsoFront',
+        'sandwormSkin',
+        'sandwormMaw',
+        'optimusChest',
+        'optimusGrill'
+    ]) {
+        assert.ok(textures[texKey], `Expected textures.${texKey} to exist`);
+    }
+
+    const THREE = await import('three');
+    const { World } = await import('../src/world/world.js');
+    const { Steve, Alex, Sandworm, Optimus, Arrow } = await import('../src/entities/mob.js');
+
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+    let playerHitCount = 0;
+    const mockGame = {
+        player: {
+            position: new THREE.Vector3(0, 7, 0),
+            velocity: new THREE.Vector3(),
+            width: 0.6,
+            height: 1.8,
+            takeDamage() { playerHitCount++; }
+        },
+        mobs: [],
+        particles: [],
+        arrows: [],
+        showNotification() {},
+        onMobDefeated() {}
+    };
+
+    const steve = new Steve(1, 7, 1, scene, world, mockGame);
+    const alex = new Alex(-1, 7, 1, scene, world, mockGame);
+    const optimus = new Optimus(0, 7, 2.2, scene, world, mockGame);
+    const sandworm = new Sandworm(0.5, 7, 2.6, scene, world, mockGame);
+    mockGame.mobs.push(steve, alex, optimus, sandworm);
+
+    assert.equal(sandworm.wormSegments.length, 5);
+    assert.ok(sandworm.mawGroup);
+    assert.ok(optimus.blasterGroup);
+    assert.ok(optimus.height > 2.5);
+    assert.equal(steve.isFriendly, true);
+    assert.equal(alex.isFriendly, true);
+    assert.equal(optimus.isFriendly, true);
+
+    const prevWormHp = sandworm.hp;
+    const prevSteveHp = steve.hp;
+    const prevAlexHp = alex.hp;
+    const prevOptimusHp = optimus.hp;
+
+    for (let i = 0; i < 14; i++) {
+        steve.update(0.08);
+        alex.update(0.08);
+        optimus.update(0.08);
+    }
+
+    assert.ok(sandworm.hp < prevWormHp, 'Expected Steve, Alex, and Optimus to damage hostile Sandworm');
+    assert.equal(playerHitCount, 0, 'Expected friendly characters never to damage player');
+
+    for (let i = 0; i < 6; i++) {
+        sandworm.update(0.08);
+    }
+    assert.ok(playerHitCount > 0, 'Expected hostile Sandworm boss to attack nearby player');
+
+    for (const friend of [steve, alex, optimus]) {
+        const beforeHp = friend.hp;
+        const shot = new Arrow(
+            new THREE.Vector3(friend.position.x, friend.position.y + 0.9, friend.position.z - 0.5),
+            new THREE.Vector3(friend.position.x, friend.position.y + 0.9, friend.position.z + 1.5),
+            scene, world, mockGame, 'player', getBowStats(null)
+        );
+        for (let i = 0; i < 6; i++) {
+            shot.update(0.05);
+        }
+        shot.destroy();
+        assert.equal(friend.hp, beforeHp, `Expected Senapan Nuklir never to hurt ${friend.type}`);
+    }
+    assert.ok(prevSteveHp > 0 && prevAlexHp > 0 && prevOptimusHp > 0);
+
+    for (const m of mockGame.mobs) m.cleanupMesh();
+    for (const p of mockGame.particles) {
+        scene.remove(p.mesh);
+        p.material?.dispose();
+    }
+});
+
+test('Game Mode selector & Minecraft One Block Survival helpers isolate saves and progress phases', async () => {
+    const freeKeys = getModeStorageKeys(GAME_MODES.FREEPLAY);
+    const survKeys = getModeStorageKeys(GAME_MODES.SURVIVAL);
+    assert.equal(freeKeys.world, 'nizamcraft-save');
+    assert.equal(survKeys.world, 'nizamcraft-save-survival');
+    assert.notEqual(freeKeys.player, survKeys.player);
+    assert.notEqual(freeKeys.chests, survKeys.chests);
+
+    assert.equal(ONE_BLOCK_PHASES.length, 5);
+    assert.equal(getOneBlockPhase(0).name, 'Dataran');
+    assert.equal(getOneBlockPhase(0).nextThreshold, 15);
+    assert.equal(getOneBlockPhase(15).name, 'Tambang Batu');
+    assert.equal(getOneBlockPhase(35).name, 'Gua Mulia');
+    assert.equal(getOneBlockPhase(60).name, 'Nether & Magma');
+    assert.equal(getOneBlockPhase(90).name, 'End & Master');
+    assert.equal(getOneBlockPhase(90).nextThreshold, null);
+
+    const THREE = await import('three');
+    const { World, BLOCK_TYPES } = await import('../src/world/world.js');
+
+    for (const count of [0, 15, 35, 60, 90]) {
+        for (const r of [0, 0.25, 0.5, 0.75, 0.99]) {
+            const rolled = rollOneBlockType(count, () => r);
+            assert.ok(BLOCK_TYPES[rolled], `Expected valid BLOCK_TYPES entry for rolled One Block ${rolled}`);
+        }
+    }
+
+    assert.equal(rollOneBlockBonusItem(0), null);
+    assert.equal(rollOneBlockBonusItem(7), null);
+    const bonus12 = rollOneBlockBonusItem(12, () => 0);
+    assert.ok(bonus12 && bonus12.type && bonus12.count > 0);
+
+    const storage = new Map();
+    const prevLS = globalThis.localStorage;
+    globalThis.localStorage = {
+        getItem: (k) => storage.has(k) ? storage.get(k) : null,
+        setItem: (k, v) => storage.set(k, String(v)),
+        removeItem: (k) => storage.delete(k)
+    };
+
+    try {
+        const scene = new THREE.Scene();
+        const world = new World(scene);
+        world.save(freeKeys.world);
+
+        world.generateOneBlockTerrain('grass');
+        assert.equal(world.getBlockAt(ONE_BLOCK_POS.x, ONE_BLOCK_POS.y, ONE_BLOCK_POS.z), 'grass');
+        assert.equal(world.getBlockAt(1, 6, 0), null);
+        assert.equal(world.getBlockAt(0, 5, 0), null);
+        assert.equal(world.getBlockAt(0, 6, 1), null);
+        world.save(survKeys.world);
+
+        // Reloading Free Play must still have full terrain, untouched by Survival One Block save
+        assert.equal(world.load(freeKeys.world), true);
+        assert.equal(world.getBlockAt(1, 6, 0), 'grass');
+        assert.equal(world.getBlockAt(0, 0, 0), 'obsidian');
+
+        // Reloading Survival returns strictly the One Block
+        assert.equal(world.load(survKeys.world), true);
+        assert.equal(world.getBlockAt(ONE_BLOCK_POS.x, ONE_BLOCK_POS.y, ONE_BLOCK_POS.z), 'grass');
+        assert.equal(world.getBlockAt(1, 6, 0), null);
+    } finally {
+        globalThis.localStorage = prevLS;
+    }
 });

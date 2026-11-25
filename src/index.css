@@ -179,6 +179,50 @@ body:not(.in-game) #mobile-actions-container {
     flex-wrap: wrap;
 }
 
+.mode-selector {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid var(--border-subtle);
+}
+
+.mode-pill-btn {
+    font-family: var(--font-main);
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.mode-pill-btn:hover {
+    color: var(--text-primary);
+    background: rgba(30, 41, 59, 0.65);
+}
+
+.mode-pill-btn.active {
+    background: var(--accent-blue);
+    border-color: rgba(147, 197, 253, 0.42);
+    color: #ffffff;
+}
+
+.mode-pill-btn.survival-active {
+    background: var(--accent-emerald);
+    border-color: rgba(52, 211, 153, 0.48);
+    color: #ffffff;
+}
+
 .characters-trigger-btn {
     padding: 13px 18px;
     font-size: 0.96rem;
@@ -548,7 +592,8 @@ body:not(.in-game) #mobile-actions-container {
 #health-bar-container,
 #armor-bar-container,
 #xp-bar-container,
-#held-item-badge {
+#held-item-badge,
+#oneblock-badge {
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -559,6 +604,14 @@ body:not(.in-game) #mobile-actions-container {
     padding: 6px 12px;
     border-radius: 10px;
     box-shadow: 0 8px 22px rgba(2, 6, 23, 0.42);
+}
+
+#oneblock-badge {
+    border-color: rgba(52, 211, 153, 0.45);
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #a7f3d0;
+    white-space: nowrap;
 }
 
 #held-item-badge {
@@ -731,6 +784,22 @@ body:not(.in-game) #mobile-actions-container {
 
 .hotbar-slot.active .block-name {
     color: var(--text-primary);
+}
+
+.hotbar-slot.empty-slot {
+    opacity: 0.55;
+    border-color: rgba(148, 163, 184, 0.14);
+}
+
+.hotbar-slot .slot-count {
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #fde047;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+    font-variant-numeric: tabular-nums;
 }
 
 #open-block-picker-btn {

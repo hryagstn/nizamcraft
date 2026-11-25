@@ -117,7 +117,8 @@ export const HOSTILE_MOBS = new Set([
     'infectedsky',
     'redsun',
     'lunarmoon',
-    'cursedthomas'
+    'cursedthomas',
+    'sandworm'
 ]);
 
 /**
@@ -972,6 +973,10 @@ export const HOTBAR_ITEMS = [
     { type: 'spawn_buu', label: 'Buu', key: '|', category: 'special', nameId: 'Telur Buu' },
     { type: 'spawn_cookie', label: 'Cookie', key: '?', category: 'special', nameId: 'Telur Cookie' },
     { type: 'spawn_penduduk', label: 'Penduduk', key: '"', category: 'special', nameId: 'Telur Penduduk' },
+    { type: 'spawn_steve', label: 'Steve', key: 'F6', category: 'special', nameId: 'Telur Steve' },
+    { type: 'spawn_alex', label: 'Alex', key: 'F7', category: 'special', nameId: 'Telur Alex' },
+    { type: 'spawn_sandworm', label: 'Sandworm', key: 'F8', category: 'special', nameId: 'Telur Sandworm' },
+    { type: 'spawn_optimus', label: 'Optimus', key: 'F9', category: 'special', nameId: 'Telur Optimus' },
     { type: 'coal_ore', label: 'Coal Ore', key: 'K', category: 'mineral', nameId: 'Bijih Batu Bara' },
     { type: 'iron_ore', label: 'Iron Ore', key: 'J', category: 'mineral', nameId: 'Bijih Besi' },
     { type: 'gold_ore', label: 'Gold Ore', key: 'N', category: 'mineral', nameId: 'Bijih Emas' },
@@ -2619,11 +2624,14 @@ export const CHARACTER_ROSTER = [
     { type: 'buu', name: 'Buu', group: 'maizen', role: 'Teman', color: '#14b8a6', isUnique: true, isFriendly: true },
     { type: 'cookie', name: 'Cookie', group: 'maizen', role: 'Teman', color: '#8b5cf6', isUnique: true, isFriendly: true },
     { type: 'penduduk', name: 'Penduduk', group: 'maizen', role: 'Warga', color: '#a67758', isUnique: false, isFriendly: true },
+    { type: 'steve', name: 'Steve', group: 'maizen', role: 'Teman', color: '#14b8b8', isUnique: true, isFriendly: true },
+    { type: 'alex', name: 'Alex', group: 'maizen', role: 'Teman', color: '#f97316', isUnique: true, isFriendly: true },
 
     // Penjaga / Golem
     { type: 'irongolem', name: 'Iron Golem', group: 'golem', role: 'Penjaga', color: '#e2e8f0', isUnique: false, isFriendly: false },
     { type: 'snowgolem', name: 'Snow Golem', group: 'golem', role: 'Penjaga', color: '#fb923c', isUnique: false, isFriendly: false },
     { type: 'giantirongolem', name: 'Giant Iron Golem', group: 'golem', role: 'Penjaga', color: '#cbd5e1', isUnique: true, isFriendly: false },
+    { type: 'optimus', name: 'Optimus', group: 'golem', role: 'Penjaga', color: '#dc2626', isUnique: true, isFriendly: true },
 
     // Hewan
     { type: 'chicken', name: 'Ayam', group: 'animal', role: 'Hewan', color: '#fef08a', isUnique: false, isFriendly: false },
@@ -2645,7 +2653,8 @@ export const CHARACTER_ROSTER = [
     { type: 'infectedsky', name: 'Infected Sky', group: 'boss', role: 'Boss', color: '#e11d48', isUnique: true, isFriendly: false },
     { type: 'redsun', name: 'Red Sun', group: 'boss', role: 'Boss', color: '#ff2a6d', isUnique: true, isFriendly: false },
     { type: 'lunarmoon', name: 'Lunar Moon', group: 'boss', role: 'Boss', color: '#a8a29e', isUnique: true, isFriendly: false },
-    { type: 'cursedthomas', name: 'Cursed Thomas', group: 'boss', role: 'Boss', color: '#0ea5e9', isUnique: true, isFriendly: false }
+    { type: 'cursedthomas', name: 'Cursed Thomas', group: 'boss', role: 'Boss', color: '#0ea5e9', isUnique: true, isFriendly: false },
+    { type: 'sandworm', name: 'Sandworm', group: 'boss', role: 'Boss', color: '#a16207', isUnique: true, isFriendly: false }
 ];
 
 export function createDefaultCharacterSettings() {
@@ -2695,4 +2704,110 @@ export function getEligibleSpawnTypes(settings, activeMobTypes = []) {
         eligible.push(entry.type);
     }
     return eligible;
+}
+
+// ==========================================
+// GAME MODE & ONE BLOCK SURVIVAL HELPERS
+// ==========================================
+
+export const GAME_MODES = {
+    FREEPLAY: 'freeplay',
+    SURVIVAL: 'survival'
+};
+
+export const ONE_BLOCK_POS = { x: 0, y: 6, z: 0 };
+
+export const ONE_BLOCK_PHASES = [
+    {
+        index: 1,
+        name: 'Dataran',
+        minBlocks: 0,
+        blocks: ['grass', 'dirt', 'dirt', 'wood', 'wood', 'leaf', 'sand', 'lucky']
+    },
+    {
+        index: 2,
+        name: 'Tambang Batu',
+        minBlocks: 15,
+        blocks: ['stone', 'stone', 'coal_ore', 'iron_ore', 'dirt', 'wood', 'sand', 'brick', 'lucky']
+    },
+    {
+        index: 3,
+        name: 'Gua Mulia',
+        minBlocks: 35,
+        blocks: ['stone', 'iron_ore', 'gold_ore', 'lapis_ore', 'diamond', 'emerald', 'bookshelf', 'quartz', 'wood', 'lucky']
+    },
+    {
+        index: 4,
+        name: 'Nether & Magma',
+        minBlocks: 60,
+        blocks: ['obsidian', 'magma', 'quartz', 'gold_ore', 'diamond', 'tnt', 'redstone', 'iron_ore', 'lucky']
+    },
+    {
+        index: 5,
+        name: 'End & Master',
+        minBlocks: 90,
+        blocks: ['ender', 'obsidian', 'diamond', 'emerald', 'lapis_ore', 'enchanting_table', 'iron_ore', 'wood', 'lucky']
+    }
+];
+
+export function getOneBlockPhase(minedCount = 0) {
+    const safeCount = Math.max(0, Math.floor(minedCount));
+    let activeIdx = 0;
+    for (let i = ONE_BLOCK_PHASES.length - 1; i >= 0; i--) {
+        if (safeCount >= ONE_BLOCK_PHASES[i].minBlocks) {
+            activeIdx = i;
+            break;
+        }
+    }
+    const phase = ONE_BLOCK_PHASES[activeIdx];
+    const next = ONE_BLOCK_PHASES[activeIdx + 1];
+    return {
+        ...phase,
+        nextThreshold: next ? next.minBlocks : null
+    };
+}
+
+export function rollOneBlockType(minedCount = 0, randFn = Math.random) {
+    const phase = getOneBlockPhase(minedCount);
+    const r = Math.min(0.999999, Math.max(0, randFn()));
+    const idx = Math.floor(r * phase.blocks.length);
+    return phase.blocks[idx] || 'grass';
+}
+
+export function rollOneBlockBonusItem(minedCount, randFn = Math.random) {
+    if (!Number.isFinite(minedCount) || minedCount <= 0 || minedCount % 12 !== 0) {
+        return null;
+    }
+    const phase = getOneBlockPhase(minedCount);
+    const pool = phase.index >= 3
+        ? [
+            { type: 'iron_ingot', count: 3 },
+            { type: 'lapis', count: 4 },
+            { type: 'golden_apple', count: 1 },
+            { type: 'diamond', count: 1 },
+            { type: 'wood', count: 4 }
+        ]
+        : [
+            { type: 'wood', count: 4 },
+            { type: 'crop', count: 4 },
+            { type: 'golden_apple', count: 1 },
+            { type: 'coal', count: 4 }
+        ];
+    const r = Math.min(0.999999, Math.max(0, randFn()));
+    return { ...pool[Math.floor(r * pool.length)] };
+}
+
+export function getModeStorageKeys(mode) {
+    if (mode === GAME_MODES.SURVIVAL) {
+        return {
+            world: 'nizamcraft-save-survival',
+            player: 'nizamcraft-player-survival',
+            chests: 'nizamcraft-chests-survival'
+        };
+    }
+    return {
+        world: 'nizamcraft-save',
+        player: 'nizamcraft-player',
+        chests: 'nizamcraft-chests'
+    };
 }

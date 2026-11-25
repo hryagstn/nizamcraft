@@ -592,6 +592,16 @@ export class World {
         this.updateMesh();
     }
 
+    generateOneBlockTerrain(initialBlock = 'grass') {
+        this.loadedFromSave = false;
+        this.grid = new Array(this.width * this.height * this.depth);
+        const idx = this.getGridIndex(0, 6, 0);
+        if (idx !== -1) {
+            this.grid[idx] = initialBlock || 'grass';
+        }
+        this.updateMesh();
+    }
+
     spawnTree(startX, startY, startZ) {
         const trunkH = 4 + Math.floor(Math.random() * 2);
         for (let dy = 0; dy < trunkH; dy++) {
@@ -1121,7 +1131,7 @@ export class World {
         }
     }
 
-    save() {
+    save(storageKey = 'nizamcraft-save') {
         try {
             const entries = [];
             for (let idx = 0; idx < this.grid.length; idx++) {
@@ -1137,7 +1147,7 @@ export class World {
                 height: this.height,
                 depth: this.depth
             };
-            localStorage.setItem('nizamcraft-save', JSON.stringify(data));
+            localStorage.setItem(storageKey, JSON.stringify(data));
             return true;
         } catch (e) {
             console.error('Failed to save game:', e);
@@ -1145,9 +1155,9 @@ export class World {
         }
     }
 
-    load() {
+    load(storageKey = 'nizamcraft-save') {
         try {
-            const saved = localStorage.getItem('nizamcraft-save');
+            const saved = localStorage.getItem(storageKey);
             if (!saved) {
                 this.loadedFromSave = false;
                 return false;
@@ -1155,9 +1165,11 @@ export class World {
 
             const data = JSON.parse(saved);
             if (!data || data.version !== WORLD_SAVE_VERSION) {
-                localStorage.removeItem?.('nizamcraft-save');
-                localStorage.removeItem?.('nizamcraft-player');
-                localStorage.removeItem?.('nizamcraft-chests');
+                localStorage.removeItem?.(storageKey);
+                if (storageKey === 'nizamcraft-save') {
+                    localStorage.removeItem?.('nizamcraft-player');
+                    localStorage.removeItem?.('nizamcraft-chests');
+                }
                 this.loadedFromSave = false;
                 return false;
             }
@@ -1190,8 +1202,12 @@ export class World {
         }
     }
 
-    reset() {
-        this.generateTerrain();
-        this.save();
+    reset(mode = 'freeplay', storageKey = 'nizamcraft-save') {
+        if (mode === 'survival') {
+            this.generateOneBlockTerrain('grass');
+        } else {
+            this.generateTerrain();
+        }
+        this.save(storageKey);
     }
 }

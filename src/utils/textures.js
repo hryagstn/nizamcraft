@@ -1857,6 +1857,151 @@ textures.villagerRobe = createPixelTexture((ctx) => {
     ctx.fillRect(0, 14, 16, 2);
 });
 
+// 66. Steve Classic Hair Side & Cyan V-Neck Shirt
+textures.steveHairSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#b58567';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#432d1c';
+    ctx.fillRect(0, 0, 16, 5);
+    ctx.fillRect(0, 5, 5, 5);
+    ctx.fillRect(0, 10, 3, 2);
+    ctx.fillStyle = '#312013';
+    ctx.fillRect(2, 2, 4, 2);
+    ctx.fillRect(10, 1, 3, 2);
+});
+
+textures.steveTorsoFront = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#14b8b8';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#0f9a9a';
+    ctx.fillRect(0, 0, 2, 16);
+    ctx.fillRect(14, 0, 2, 16);
+    ctx.fillStyle = '#25cccc';
+    ctx.fillRect(4, 5, 8, 3);
+    // V-neck skin collar
+    ctx.fillStyle = '#b58567';
+    ctx.fillRect(5, 0, 6, 2);
+    ctx.fillRect(6, 2, 4, 1);
+    // Asymmetrical indigo pants tuck
+    ctx.fillStyle = '#4736a8';
+    ctx.fillRect(0, 13, 6, 3);
+    ctx.fillRect(12, 14, 4, 2);
+});
+
+// 67. Alex Ginger Hair Side & Sage-Green Tunic
+textures.alexHairSide = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#f8d7be';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#ea7a26';
+    ctx.fillRect(0, 0, 16, 4);
+    ctx.fillRect(0, 4, 6, 8);
+    ctx.fillRect(0, 12, 4, 4);
+    ctx.fillStyle = '#f5983d';
+    ctx.fillRect(2, 2, 5, 2);
+    ctx.fillRect(1, 7, 3, 4);
+});
+
+textures.alexTorsoFront = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#73b06b';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#5f9658';
+    ctx.fillRect(0, 0, 2, 14);
+    ctx.fillRect(14, 0, 2, 14);
+    // Fair collar + cascading ginger hair lock on left shoulder
+    ctx.fillStyle = '#f8d7be';
+    ctx.fillRect(5, 0, 6, 2);
+    ctx.fillRect(6, 2, 4, 1);
+    ctx.fillStyle = '#ea7a26';
+    ctx.fillRect(10, 0, 4, 5);
+    ctx.fillRect(11, 5, 2, 2);
+    // Dark forest-green belt
+    ctx.fillStyle = '#1f4d28';
+    ctx.fillRect(0, 11, 16, 2);
+    // Lower brown trouser waistband edge
+    ctx.fillStyle = '#5c3c24';
+    ctx.fillRect(0, 14, 16, 2);
+});
+
+// 68. Sandworm Earthy Ribbed Hide & Crimson Funnel Maw
+textures.sandwormSkin = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#6b4c35';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let y = 0; y < 16; y += 4) {
+        ctx.fillStyle = '#4f3624';
+        ctx.fillRect(0, y, 16, 1);
+        ctx.fillStyle = '#856347';
+        ctx.fillRect(0, y + 2, 16, 1);
+    }
+    ctx.fillStyle = '#5c402c';
+    ctx.fillRect(3, 1, 2, 1);
+    ctx.fillRect(11, 5, 3, 1);
+    ctx.fillRect(6, 9, 2, 1);
+    ctx.fillRect(12, 13, 2, 1);
+});
+
+textures.sandwormMaw = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#991b1b';
+    ctx.fillRect(2, 2, 12, 12);
+    ctx.fillStyle = '#5c0a0e';
+    ctx.fillRect(4, 4, 8, 8);
+    ctx.fillStyle = '#180608';
+    ctx.fillRect(6, 6, 4, 4);
+    // Pale grey fang flecks around inner maw
+    ctx.fillStyle = '#d4d4d8';
+    ctx.fillRect(2, 7, 1, 2);
+    ctx.fillRect(13, 7, 1, 2);
+    ctx.fillRect(7, 2, 2, 1);
+    ctx.fillRect(7, 13, 2, 1);
+    ctx.fillRect(4, 4, 1, 1);
+    ctx.fillRect(11, 4, 1, 1);
+    ctx.fillRect(4, 11, 1, 1);
+    ctx.fillRect(11, 11, 1, 1);
+});
+
+// 69. Optimus Prime Red Cab Chest & Silver Radiator Grill
+textures.optimusChest = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#991b1b';
+    ctx.fillRect(0, 0, 16, 2);
+    ctx.fillRect(7, 2, 2, 9);
+    // Two glowing cyan-blue truck windshields
+    ctx.fillStyle = '#1e3a8a';
+    ctx.fillRect(1, 2, 5, 5);
+    ctx.fillRect(10, 2, 5, 5);
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fillRect(2, 3, 3, 3);
+    ctx.fillRect(11, 3, 3, 3);
+    ctx.fillStyle = '#7dd3fc';
+    ctx.fillRect(2, 3, 1, 2);
+    ctx.fillRect(11, 3, 1, 2);
+    // White truck bumper stripes & silver center grill
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 8, 5, 2);
+    ctx.fillRect(11, 8, 5, 2);
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(5, 10, 6, 6);
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(5, 12, 6, 1);
+    ctx.fillRect(5, 14, 6, 1);
+});
+
+textures.optimusGrill = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#9ca3af';
+    ctx.fillRect(0, 0, 16, 16);
+    for (let y = 1; y < 16; y += 3) {
+        ctx.fillStyle = '#6b7280';
+        ctx.fillRect(2, y, 12, 1);
+        ctx.fillStyle = '#d1d5db';
+        ctx.fillRect(3, y + 1, 10, 1);
+    }
+    ctx.fillStyle = '#4b5563';
+    ctx.fillRect(0, 0, 2, 16);
+    ctx.fillRect(14, 0, 2, 16);
+});
+
 const BLOCK_TEXTURE_KEY = {
     grass: 'grassSide',
     dirt: 'dirt',

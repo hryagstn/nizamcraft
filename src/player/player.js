@@ -101,6 +101,7 @@ export class Player {
         this.swingTimer = 0;
         this.swingDuration = 0.2;
         this.toastTimer = null;
+        this.onBeforeRespawn = null;
 
         this.setupInput();
 
@@ -148,7 +149,18 @@ export class Player {
         this.inventory[23] = { type: 'sand', count: 16 };
     }
 
+    resetSurvivalInventory() {
+        this.xp = 0;
+        this.xpLevel = 0;
+        this.enchantSeed = Math.floor(Math.random() * 100000) + 1;
+        this.inventory = Array(24).fill(null);
+        this.inventory[0] = { type: 'pickaxe_wood', count: 1 };
+        this.inventory[1] = { type: 'golden_apple', count: 1 };
+        this.armor = { helmet: null, chestplate: null, leggings: null, boots: null };
+    }
+
     respawn() {
+        this.onBeforeRespawn?.();
         const startX = 0;
         const startZ = 0;
         let topY = 6;
@@ -869,7 +881,11 @@ export class Player {
                 spawn_carrie: { shell: 0xf8fafc, spot: 0xb91c1c },
                 spawn_buu: { shell: 0x14b8a6, spot: 0x52478c },
                 spawn_cookie: { shell: 0x635042, spot: 0x8b5cf6 },
-                spawn_penduduk: { shell: 0x6d4c3d, spot: 0x16a34a }
+                spawn_penduduk: { shell: 0x6d4c3d, spot: 0x16a34a },
+                spawn_steve: { shell: 0x14b8b8, spot: 0x4736a8 },
+                spawn_alex: { shell: 0xea7a26, spot: 0x73b06b },
+                spawn_sandworm: { shell: 0x6b4c35, spot: 0xdc2626 },
+                spawn_optimus: { shell: 0xdc2626, spot: 0x1d4ed8 }
             };
             const eggColors = SPAWN_EGG_COLORS[type] || { shell: 0xdcdcdc, spot: 0x990000 };
             const eggGroup = new THREE.Group();

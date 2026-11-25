@@ -62,12 +62,22 @@
             <div class="overlay-left">
                 <h1>NizamCraft x Maizen World</h1>
                 <p id="overlay-subtitle" class="overlay-subtitle">Tambang bijih, rakit persenjataan, dan tempa Buku Enchant di dunia voxel 3D.</p>
+                <div id="game-mode-switch" class="mode-selector" role="group" aria-label="Pilih Mode Permainan">
+                    <button type="button" class="mode-pill-btn active" data-mode="freeplay" aria-pressed="true">
+                        <span data-icon="box"></span>
+                        <span>Free Play</span>
+                    </button>
+                    <button type="button" class="mode-pill-btn" data-mode="survival" aria-pressed="false">
+                        <span data-icon="pickaxe"></span>
+                        <span>Survival · 1 Blok</span>
+                    </button>
+                </div>
                 <div class="overlay-cta-row">
                     <button id="play-button" type="button">Mulai Permainan</button>
                     <button id="overlay-characters-btn" type="button" class="overlay-btn characters-trigger-btn">
                         <span data-icon="users"></span>
                         <span>Karakter</span>
-                        <span id="overlay-characters-count" class="char-count-pill">0/26</span>
+                        <span id="overlay-characters-count" class="char-count-pill">0/30</span>
                     </button>
                 </div>
             </div>
@@ -224,6 +234,11 @@
         <div id="held-item-badge" style="display: none;">
             <span id="held-item-badge-icon"></span>
             <span id="held-item-badge-name"></span>
+        </div>
+
+        <div id="oneblock-badge" style="display: none;">
+            <span class="stat-icon" data-icon="layers"></span>
+            <span id="oneblock-badge-text">1 Blok · Dataran (0)</span>
         </div>
     </div>
 
@@ -492,7 +507,7 @@
                 <div class="modal-title-group">
                     <span class="header-icon" data-icon="users"></span>
                     <h2 id="characters-title">Switch Karakter</h2>
-                    <span id="characters-active-badge" class="station-badge">0 / 26 Aktif</span>
+                    <span id="characters-active-badge" class="station-badge">0 / 30 Aktif</span>
                 </div>
                 <button id="close-characters-btn" type="button" class="close-btn" aria-label="Tutup Pengaturan Karakter">
                     <span data-icon="x"></span>

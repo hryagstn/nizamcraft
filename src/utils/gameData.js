@@ -118,7 +118,9 @@ export const HOSTILE_MOBS = new Set([
     'redsun',
     'lunarmoon',
     'cursedthomas',
-    'sandworm'
+    'sandworm',
+    'bloop',
+    'whaleeater'
 ]);
 
 /**
@@ -939,6 +941,7 @@ export const HOTBAR_ITEMS = [
     { type: 'grass', label: 'Grass', key: '1', category: 'nature', nameId: 'Rumput' },
     { type: 'dirt', label: 'Dirt', key: '2', category: 'nature', nameId: 'Tanah' },
     { type: 'stone', label: 'Stone', key: '3', category: 'nature', nameId: 'Batu' },
+    { type: 'cobblestone', label: 'Cobble', key: 'F11', category: 'nature', nameId: 'Cobblestone' },
     { type: 'obsidian', label: 'Obsidian', key: '4', category: 'mineral', nameId: 'Obsidian' },
     { type: 'wood', label: 'Wood', key: '5', category: 'nature', nameId: 'Kayu Gelondongan' },
     { type: 'planks', label: 'Planks', key: '`', category: 'nature', nameId: 'Papan Kayu' },
@@ -977,6 +980,8 @@ export const HOTBAR_ITEMS = [
     { type: 'spawn_alex', label: 'Alex', key: 'F7', category: 'special', nameId: 'Telur Alex' },
     { type: 'spawn_sandworm', label: 'Sandworm', key: 'F8', category: 'special', nameId: 'Telur Sandworm' },
     { type: 'spawn_optimus', label: 'Optimus', key: 'F9', category: 'special', nameId: 'Telur Optimus' },
+    { type: 'spawn_bloop', label: 'Bloop', key: 'F10', category: 'special', nameId: 'Telur Bloop' },
+    { type: 'spawn_whaleeater', label: 'Whale Eater', key: 'F12', category: 'special', nameId: 'Telur Whale Eater' },
     { type: 'coal_ore', label: 'Coal Ore', key: 'K', category: 'mineral', nameId: 'Bijih Batu Bara' },
     { type: 'iron_ore', label: 'Iron Ore', key: 'J', category: 'mineral', nameId: 'Bijih Besi' },
     { type: 'gold_ore', label: 'Gold Ore', key: 'N', category: 'mineral', nameId: 'Bijih Emas' },
@@ -1461,6 +1466,12 @@ function cellCount(cell) {
     return typeof cell === 'string' ? 1 : (cell.count || 0);
 }
 
+export function isRecipeIngredientMatch(expected, actual) {
+    if (!expected || !actual) return expected === actual;
+    if (expected === actual) return true;
+    return expected === 'stone' && actual === 'cobblestone';
+}
+
 /**
  * Matches a 2x2 (length 4) or 3x3 (length 9) crafting grid against Minecraft shaped (bounding-box
  * offset + horizontal mirror invariant) and shapeless recipes.
@@ -1510,7 +1521,7 @@ export function matchCraftingGrid(gridCells, size = 3) {
                     const patChar = rawRow[mirrored ? (patW - 1 - c) : c];
                     const expected = patChar === ' ' ? null : recipe.key[patChar];
                     const actual = cellType(gridCells[(minR + r) * size + (minC + c)]);
-                    if (actual !== expected) {
+                    if (!isRecipeIngredientMatch(expected, actual)) {
                         matches = false;
                         break;
                     }
@@ -1523,12 +1534,15 @@ export function matchCraftingGrid(gridCells, size = 3) {
     }
 
     // 2. Check Shapeless Recipes (exact multiset of 1-per-slot items)
-    const sortedOccupied = [...occupiedTypes].sort().join('|');
     for (const recipe of CRAFTING_RECIPES) {
         if (!recipe.shapeless || recipe.gridSize > size) continue;
         if (recipe.shapeless.length !== occupiedTypes.length) continue;
+        const normalizedOccupied = occupiedTypes
+            .map(t => (recipe.ingredients?.stone && t === 'cobblestone' ? 'stone' : t))
+            .sort()
+            .join('|');
         const sortedReq = [...recipe.shapeless].sort().join('|');
-        if (sortedOccupied === sortedReq) {
+        if (normalizedOccupied === sortedReq) {
             return { recipe, maxBatches };
         }
     }
@@ -1591,6 +1605,26 @@ export function getRecipePatternCells(recipe, size = 3) {
     return cells;
 }
 
+function takeOneMatchingFromSlots(slots, expectedType, preferredType = null) {
+    const order = [expectedType];
+    if (expectedType === 'stone') order.push('cobblestone');
+    if (preferredType && order.includes(preferredType)) {
+        order.splice(order.indexOf(preferredType), 1);
+        order.unshift(preferredType);
+    }
+    for (const targetType of order) {
+        for (let i = 0; i < slots.length; i++) {
+            const slot = slots[i];
+            if (slot && slot.type === targetType && isStackableItem(slot) && slot.count > 0) {
+                slot.count -= 1;
+                if (slot.count <= 0) slots[i] = null;
+                return targetType;
+            }
+        }
+    }
+    return null;
+}
+
 export function populateGridForRecipe(inventorySlots, gridCells, size, recipe) {
     if (!recipe || recipe.gridSize > size) {
         return { ok: false, reason: 'Resep ini membutuhkan Grid 3x3 di Meja Crafting.' };
@@ -1598,11 +1632,15 @@ export function populateGridForRecipe(inventorySlots, gridCells, size, recipe) {
     const targetCells = getRecipePatternCells(recipe, size);
     if (!targetCells) return { ok: false, reason: 'Pola tidak muat di grid saat ini.' };
 
+    const bagCountsBefore = countInventoryMaterials(inventorySlots);
     const matchesExistingLayout = targetCells.every((expectedType, i) => {
         const cur = gridCells[i];
         if (expectedType === null) return cur === null;
-        return cur === null || (cur.type === expectedType && cur.count < 64);
-    }) && gridCells.every((cur, i) => cur === null || targetCells[i] === cur.type);
+        if (cur === null) return true;
+        return isRecipeIngredientMatch(expectedType, cur.type) &&
+            cur.count < 64 &&
+            (bagCountsBefore[cur.type] || 0) > 0;
+    }) && gridCells.every((cur, i) => cur === null || isRecipeIngredientMatch(targetCells[i], cur.type));
 
     if (!matchesExistingLayout) {
         if (!returnGridToInventory(gridCells, inventorySlots)) {
@@ -1619,14 +1657,15 @@ export function populateGridForRecipe(inventorySlots, gridCells, size, recipe) {
         return { ok: false, reason: 'Tumpukan di grid sudah penuh (64).' };
     }
 
-    deductRecipeFromSlots(inventorySlots, recipe);
     for (let i = 0; i < targetCells.length; i++) {
         const t = targetCells[i];
         if (!t) continue;
-        if (gridCells[i]) {
+        const pickedType = takeOneMatchingFromSlots(inventorySlots, t, gridCells[i]?.type || null);
+        if (!pickedType) continue;
+        if (gridCells[i] && gridCells[i].type === pickedType) {
             gridCells[i].count += 1;
         } else {
-            gridCells[i] = { type: t, count: 1 };
+            gridCells[i] = { type: pickedType, count: 1 };
         }
     }
     return { ok: true };
@@ -1646,7 +1685,10 @@ export function countInventoryMaterials(slots) {
 export function canCraftRecipeFromSlots(slots, recipe) {
     const counts = countInventoryMaterials(slots);
     for (const [ing, req] of Object.entries(recipe.ingredients)) {
-        if ((counts[ing] || 0) < req) return false;
+        const avail = ing === 'stone'
+            ? (counts.stone || 0) + (counts.cobblestone || 0)
+            : (counts[ing] || 0);
+        if (avail < req) return false;
     }
     return true;
 }
@@ -1657,7 +1699,7 @@ export function deductRecipeFromSlots(slots, recipe) {
         let rem = req;
         for (let i = 0; i < slots.length && rem > 0; i++) {
             const slot = slots[i];
-            if (slot && slot.type === ing && isStackableItem(slot)) {
+            if (slot && isRecipeIngredientMatch(ing, slot.type) && isStackableItem(slot)) {
                 const take = Math.min(rem, slot.count);
                 slot.count -= take;
                 rem -= take;
@@ -2654,7 +2696,9 @@ export const CHARACTER_ROSTER = [
     { type: 'redsun', name: 'Red Sun', group: 'boss', role: 'Boss', color: '#ff2a6d', isUnique: true, isFriendly: false },
     { type: 'lunarmoon', name: 'Lunar Moon', group: 'boss', role: 'Boss', color: '#a8a29e', isUnique: true, isFriendly: false },
     { type: 'cursedthomas', name: 'Cursed Thomas', group: 'boss', role: 'Boss', color: '#0ea5e9', isUnique: true, isFriendly: false },
-    { type: 'sandworm', name: 'Sandworm', group: 'boss', role: 'Boss', color: '#a16207', isUnique: true, isFriendly: false }
+    { type: 'sandworm', name: 'Sandworm', group: 'boss', role: 'Boss', color: '#a16207', isUnique: true, isFriendly: false },
+    { type: 'bloop', name: 'Bloop', group: 'boss', role: 'Boss', color: '#47687c', isUnique: true, isFriendly: false },
+    { type: 'whaleeater', name: 'Whale Eater', group: 'boss', role: 'Boss', color: '#dc2626', isUnique: true, isFriendly: false }
 ];
 
 export function createDefaultCharacterSettings() {
@@ -2712,10 +2756,30 @@ export function getEligibleSpawnTypes(settings, activeMobTypes = []) {
 
 export const GAME_MODES = {
     FREEPLAY: 'freeplay',
-    SURVIVAL: 'survival'
+    SURVIVAL: 'survival',
+    SKYBLOCK: 'skyblock'
 };
 
+export function isSurvivalLikeMode(mode) {
+    return mode === GAME_MODES.SURVIVAL || mode === GAME_MODES.SKYBLOCK;
+}
+
 export const ONE_BLOCK_POS = { x: 0, y: 6, z: 0 };
+export const SKYBLOCK_TREE_POS = { x: -2, y: 7, z: -3 };
+export const SKYBLOCK_CHEST_POS = { x: 2, y: 7, z: -2 };
+
+export function createSkyblockStarterChestItems() {
+    const slots = Array(18).fill(null);
+    slots[0] = { type: 'lava', count: 2 };
+    slots[1] = { type: 'water', count: 2 };
+    slots[2] = { type: 'wood', count: 4 };
+    slots[3] = { type: 'dirt', count: 8 };
+    slots[4] = { type: 'crop', count: 4 };
+    slots[5] = { type: 'golden_apple', count: 2 };
+    slots[6] = { type: 'coal', count: 4 };
+    slots[7] = { type: 'iron_ingot', count: 3 };
+    return slots;
+}
 
 export const ONE_BLOCK_PHASES = [
     {
@@ -2728,7 +2792,7 @@ export const ONE_BLOCK_PHASES = [
         index: 2,
         name: 'Tambang Batu',
         minBlocks: 15,
-        blocks: ['stone', 'stone', 'coal_ore', 'iron_ore', 'dirt', 'wood', 'sand', 'brick', 'lucky']
+        blocks: ['stone', 'cobblestone', 'coal_ore', 'iron_ore', 'dirt', 'wood', 'sand', 'brick', 'lucky']
     },
     {
         index: 3,
@@ -2803,6 +2867,13 @@ export function getModeStorageKeys(mode) {
             world: 'nizamcraft-save-survival',
             player: 'nizamcraft-player-survival',
             chests: 'nizamcraft-chests-survival'
+        };
+    }
+    if (mode === GAME_MODES.SKYBLOCK) {
+        return {
+            world: 'nizamcraft-save-skyblock',
+            player: 'nizamcraft-player-skyblock',
+            chests: 'nizamcraft-chests-skyblock'
         };
     }
     return {

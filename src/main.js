@@ -9,7 +9,7 @@ import {
     TrainEater, SeaEater, Charles, InfectedOcean, InfectedSky,
     JJ, Mikey, BananaKid, Carrie, Buu, Cookie, Penduduk,
     RedSun, LunarMoon, CursedThomas,
-    Steve, Alex, Sandworm, Optimus
+    Steve, Alex, Sandworm, Optimus, Bloop, WhaleEater
 } from './entities/mob.js';
 import { PrimedTNT } from './entities/tnt.js';
 import { FallingBlock } from './entities/fallingBlock.js';
@@ -60,7 +60,10 @@ import {
     getMiningStats,
     getBowStats,
     GAME_MODES,
+    isSurvivalLikeMode,
     ONE_BLOCK_POS,
+    SKYBLOCK_CHEST_POS,
+    createSkyblockStarterChestItems,
     getOneBlockPhase,
     rollOneBlockType,
     rollOneBlockBonusItem,
@@ -124,7 +127,9 @@ const game = {
             redsun: { xp: 55, apex: true, bonusItem: 'gold_ingot', bonusCount: 3 },
             lunarmoon: { xp: 55, apex: true, bonusItem: 'gold_ingot', bonusCount: 3 },
             cursedthomas: { xp: 48, apex: true, bonusItem: 'iron_ingot', bonusCount: 4 },
-            sandworm: { xp: 60, apex: true, bonusItem: 'gold_ingot', bonusCount: 4 }
+            sandworm: { xp: 60, apex: true, bonusItem: 'gold_ingot', bonusCount: 4 },
+            bloop: { xp: 65, apex: true, bonusItem: 'emerald', bonusCount: 4 },
+            whaleeater: { xp: 68, apex: true, bonusItem: 'emerald', bonusCount: 4 }
         };
         const reward = bossRewards[mobType];
         if (reward) {
@@ -176,13 +181,15 @@ const player = new Player(camera, renderer.domElement, world);
 game.player = player;
 player.initHand(scene);
 
-// Game Mode State: 'freeplay' vs 'survival' (Minecraft One Block)
+// Game Mode State: 'freeplay' | 'survival' (One Block) | 'skyblock'
 const GAME_MODE_STORAGE_KEY = 'nizamcraft-mode';
 
 function loadSavedGameMode() {
     try {
         const saved = localStorage.getItem(GAME_MODE_STORAGE_KEY);
-        return saved === GAME_MODES.SURVIVAL ? GAME_MODES.SURVIVAL : GAME_MODES.FREEPLAY;
+        if (saved === GAME_MODES.SURVIVAL) return GAME_MODES.SURVIVAL;
+        if (saved === GAME_MODES.SKYBLOCK) return GAME_MODES.SKYBLOCK;
+        return GAME_MODES.FREEPLAY;
     } catch {
         return GAME_MODES.FREEPLAY;
     }
@@ -191,12 +198,20 @@ function loadSavedGameMode() {
 let gameMode = loadSavedGameMode();
 let oneBlockMined = 0;
 
-function isSurvivalMode() {
+function isOneBlockMode() {
     return gameMode === GAME_MODES.SURVIVAL;
 }
 
+function isSkyblockMode() {
+    return gameMode === GAME_MODES.SKYBLOCK;
+}
+
+function isSurvivalRulesMode() {
+    return isSurvivalLikeMode(gameMode);
+}
+
 function ensureOneBlockExists() {
-    if (!isSurvivalMode()) return;
+    if (!isOneBlockMode()) return;
     const block = world.getBlockAt(ONE_BLOCK_POS.x, ONE_BLOCK_POS.y, ONE_BLOCK_POS.z);
     if (!isSolidBlock(block)) {
         world.addBlock(
@@ -209,9 +224,23 @@ function ensureOneBlockExists() {
     }
 }
 
+function ensureSkyblockSpawnSafe() {
+    if (!isSkyblockMode()) return;
+    for (let dx = -6; dx <= 6; dx++) {
+        for (let dz = -6; dz <= 6; dz++) {
+            for (let y = world.height - 1; y >= 1; y--) {
+                if (isSolidBlock(world.getBlockAt(dx, y, dz))) return;
+            }
+        }
+    }
+    world.addBlock(0, 6, 0, 'grass', true);
+}
+
 player.onBeforeRespawn = () => {
-    if (isSurvivalMode()) {
+    if (isOneBlockMode()) {
         ensureOneBlockExists();
+    } else if (isSkyblockMode()) {
+        ensureSkyblockSpawnSafe();
     }
 };
 
@@ -251,7 +280,7 @@ function getVisibleHotbarCount() {
 }
 
 function getActiveHeldItem() {
-    if (isSurvivalMode()) {
+    if (isSurvivalRulesMode()) {
         const slotIdx = equippedBagSlot !== null ? equippedBagSlot : activeHotbarIndex;
         const bagItem = player.inventory[slotIdx];
         if (bagItem) return bagItem;
@@ -479,7 +508,7 @@ function restorePlayerAndChests(keys = getModeStorageKeys(gameMode)) {
             }
             player.health = data.health !== undefined ? data.health : 100;
             player.xp = data.xp !== undefined ? data.xp : 0;
-            player.xpLevel = data.xpLevel !== undefined ? data.xpLevel : (isSurvivalMode() ? 0 : 5);
+            player.xpLevel = data.xpLevel !== undefined ? data.xpLevel : (isSurvivalRulesMode() ? 0 : 5);
             player.enchantSeed = data.enchantSeed || (Math.floor(Math.random() * 100000) + 1);
             player.velocity.set(0, 0, 0);
             player.isGrounded = false;
@@ -511,15 +540,21 @@ function updateOneBlockBadgeUI() {
     const badge = document.getElementById('oneblock-badge');
     const text = document.getElementById('oneblock-badge-text');
     if (!badge || !text) return;
-    if (!isSurvivalMode()) {
+    if (isOneBlockMode()) {
+        const phase = getOneBlockPhase(oneBlockMined);
+        badge.classList.remove('skyblock-mode');
+        badge.style.display = 'inline-flex';
+        text.textContent = phase.nextThreshold !== null
+            ? `1 Blok · ${phase.name} (${oneBlockMined}/${phase.nextThreshold})`
+            : `1 Blok · ${phase.name} (${oneBlockMined})`;
+    } else if (isSkyblockMode()) {
+        badge.classList.add('skyblock-mode');
+        badge.style.display = 'inline-flex';
+        text.textContent = 'SkyBlock · Pulau Melayang';
+    } else {
+        badge.classList.remove('skyblock-mode');
         badge.style.display = 'none';
-        return;
     }
-    const phase = getOneBlockPhase(oneBlockMined);
-    badge.style.display = 'inline-flex';
-    text.textContent = phase.nextThreshold !== null
-        ? `1 Blok · ${phase.name} (${oneBlockMined}/${phase.nextThreshold})`
-        : `1 Blok · ${phase.name} (${oneBlockMined})`;
 }
 
 function syncModeUI() {
@@ -528,17 +563,20 @@ function syncModeUI() {
         const isCurrent = btnMode === gameMode;
         btn.classList.toggle('active', isCurrent && btnMode === GAME_MODES.FREEPLAY);
         btn.classList.toggle('survival-active', isCurrent && btnMode === GAME_MODES.SURVIVAL);
+        btn.classList.toggle('skyblock-active', isCurrent && btnMode === GAME_MODES.SKYBLOCK);
         btn.setAttribute('aria-pressed', isCurrent ? 'true' : 'false');
     });
 
     const pickerBtn = document.getElementById('open-block-picker-btn');
     if (pickerBtn) {
-        pickerBtn.style.display = isSurvivalMode() ? 'none' : 'flex';
+        pickerBtn.style.display = isSurvivalRulesMode() ? 'none' : 'flex';
     }
 
     if (overlaySubtitle) {
-        if (isSurvivalMode()) {
+        if (isOneBlockMode()) {
             overlaySubtitle.textContent = 'Mode Survival 1 Blok: tambang 1 blok melayang untuk mengumpulkan sumber daya, bangun pulau, dan bertahan hidup!';
+        } else if (isSkyblockMode()) {
+            overlaySubtitle.textContent = 'Mode SkyBlock: pulau melayang dengan pohon & peti Air+Lava untuk membuat Generator Cobblestone.';
         } else if (hasGameStarted) {
             overlaySubtitle.textContent = 'Permainan dijeda. Simpan progres, atur layar penuh, atau lanjutkan petualangan.';
         } else {
@@ -561,22 +599,28 @@ function loadModeState(mode) {
     player.ridingMinecart = null;
 
     if (world.load(keys.world)) {
-        if (mode === GAME_MODES.SURVIVAL) {
+        if (isSurvivalLikeMode(mode)) {
             player.resetSurvivalInventory();
-            ensureOneBlockExists();
+            if (mode === GAME_MODES.SURVIVAL) ensureOneBlockExists();
         } else {
             player.resetDefaultInventory();
             hotbarLoadout = [...DEFAULT_HOTBAR_LOADOUT];
         }
         restorePlayerAndChests(keys);
-        if (mode === GAME_MODES.SURVIVAL) {
-            ensureOneBlockExists();
+        if (isSurvivalLikeMode(mode)) {
+            if (mode === GAME_MODES.SURVIVAL) ensureOneBlockExists();
             selectedBlockType = player.inventory[0]?.type || null;
         }
     } else {
         game.chests = {};
         if (mode === GAME_MODES.SURVIVAL) {
             world.generateOneBlockTerrain('grass');
+            player.resetSurvivalInventory();
+            selectedBlockType = player.inventory[0]?.type || null;
+        } else if (mode === GAME_MODES.SKYBLOCK) {
+            world.generateSkyblockTerrain();
+            const chestKey = `${SKYBLOCK_CHEST_POS.x},${SKYBLOCK_CHEST_POS.y},${SKYBLOCK_CHEST_POS.z}`;
+            game.chests[chestKey] = createSkyblockStarterChestItems();
             player.resetSurvivalInventory();
             selectedBlockType = player.inventory[0]?.type || null;
         } else {
@@ -591,7 +635,11 @@ function loadModeState(mode) {
 }
 
 function switchGameMode(nextMode) {
-    if (nextMode !== GAME_MODES.FREEPLAY && nextMode !== GAME_MODES.SURVIVAL) return;
+    if (
+        nextMode !== GAME_MODES.FREEPLAY &&
+        nextMode !== GAME_MODES.SURVIVAL &&
+        nextMode !== GAME_MODES.SKYBLOCK
+    ) return;
     if (nextMode === gameMode) return;
 
     if (hasGameStarted) {
@@ -626,9 +674,11 @@ function switchGameMode(nextMode) {
     updateXpUI();
     updateInventoryUI();
     game.showNotification(
-        isSurvivalMode()
+        isOneBlockMode()
             ? 'Mode Survival · 1 Blok aktif!'
-            : 'Mode Free Play aktif!'
+            : isSkyblockMode()
+                ? 'Mode SkyBlock aktif! Buka peti untuk Air & Lava.'
+                : 'Mode Free Play aktif!'
     );
 }
 
@@ -639,7 +689,7 @@ function handleLoad() {
         game.fallingBlocks.forEach(fb => fb.cleanup?.());
         game.fallingBlocks = [];
         restorePlayerAndChests(keys);
-        if (isSurvivalMode()) {
+        if (isOneBlockMode()) {
             ensureOneBlockExists();
         }
         syncLaserBeams();
@@ -656,9 +706,11 @@ function handleLoad() {
 }
 
 function handleReset() {
-    const promptMsg = isSurvivalMode()
+    const promptMsg = isOneBlockMode()
         ? 'Atur ulang dunia Survival 1 Blok ke kondisi awal dan kosongkan Tas?'
-        : 'Atur ulang seluruh dunia menjadi rata tanpa pohon dan kembali ke perlengkapan awal?';
+        : isSkyblockMode()
+            ? 'Atur ulang pulau SkyBlock ke kondisi awal dan isi ulang peti pemula?'
+            : 'Atur ulang seluruh dunia menjadi rata tanpa pohon dan kembali ke perlengkapan awal?';
     if (!confirm(promptMsg)) return;
 
     game.mobs.forEach(mob => mob.cleanupMesh?.());
@@ -678,9 +730,14 @@ function handleReset() {
     equippedBagSlot = null;
 
     const keys = getModeStorageKeys(gameMode);
-    if (isSurvivalMode()) {
+    if (isOneBlockMode()) {
         player.resetSurvivalInventory();
         world.reset(GAME_MODES.SURVIVAL, keys.world);
+    } else if (isSkyblockMode()) {
+        player.resetSurvivalInventory();
+        world.reset(GAME_MODES.SKYBLOCK, keys.world);
+        const chestKey = `${SKYBLOCK_CHEST_POS.x},${SKYBLOCK_CHEST_POS.y},${SKYBLOCK_CHEST_POS.z}`;
+        game.chests[chestKey] = createSkyblockStarterChestItems();
     } else {
         player.resetDefaultInventory();
         hotbarLoadout = [...DEFAULT_HOTBAR_LOADOUT];
@@ -703,9 +760,11 @@ function handleReset() {
     updateInventoryUI();
     saveAllState(true);
     game.showNotification(
-        isSurvivalMode()
+        isOneBlockMode()
             ? 'Dunia Survival 1 Blok baru berhasil dibuat.'
-            : 'Dunia rata baru berhasil dibuat.'
+            : isSkyblockMode()
+                ? 'Pulau SkyBlock baru berhasil dibuat.'
+                : 'Dunia rata baru berhasil dibuat.'
     );
 }
 
@@ -751,7 +810,7 @@ function buildHotbarDOM() {
     if (!hotbarContainer) return;
     hotbarContainer.innerHTML = '';
 
-    if (isSurvivalMode()) {
+    if (isSurvivalRulesMode()) {
         const slotCount = getVisibleHotbarCount();
         for (let index = 0; index < slotCount; index++) {
             const item = player.inventory[index];
@@ -814,7 +873,7 @@ function syncHeldVisual() {
     if (heldBadge && heldBadgeIcon && heldBadgeName) {
         const showBadge =
             (equippedBagSlot !== null && player.inventory[equippedBagSlot]) ||
-            (isSurvivalMode() && held.type && enchanted);
+            (isSurvivalRulesMode() && held.type && enchanted);
         if (showBadge) {
             const enchText = formatEnchantList(held).join(', ');
             heldBadge.style.display = 'inline-flex';
@@ -833,7 +892,7 @@ function selectHotbarSlot(index) {
     if (index < 0 || index >= visibleCount) return;
     activeHotbarIndex = index;
     equippedBagSlot = null;
-    selectedBlockType = isSurvivalMode()
+    selectedBlockType = isSurvivalRulesMode()
         ? (player.inventory[index]?.type || null)
         : hotbarLoadout[index];
 
@@ -910,8 +969,12 @@ function renderBlockPicker() {
 }
 
 function toggleBlockPicker() {
-    if (isSurvivalMode()) {
-        game.showNotification('Mode Survival: kumpulkan blok dari 1 Blok & buka Tas [E].');
+    if (isSurvivalRulesMode()) {
+        game.showNotification(
+            isSkyblockMode()
+                ? 'Mode SkyBlock: kumpulkan blok & bahan dari pulau lalu buka Tas [E].'
+                : 'Mode Survival: kumpulkan blok dari 1 Blok & buka Tas [E].'
+        );
         return;
     }
     const modal = document.getElementById('block-picker-modal');
@@ -1356,7 +1419,7 @@ function performAttack(mob) {
 
 function shootPlayerArrow() {
     const bowItem = findPlayerBowItem();
-    if (isSurvivalMode() && !bowItem) {
+    if (isSurvivalRulesMode() && !bowItem) {
         sounds.playClickSound();
         game.showNotification('Rakit Senapan Nuklir di Meja Crafting terlebih dahulu.');
         return;
@@ -1584,7 +1647,7 @@ function handleBlockDig(targetPos) {
     onWorldTopologyChanged(tx, ty, tz);
 
     if (
-        isSurvivalMode() &&
+        isOneBlockMode() &&
         tx === ONE_BLOCK_POS.x &&
         ty === ONE_BLOCK_POS.y &&
         tz === ONE_BLOCK_POS.z
@@ -1629,6 +1692,8 @@ const SPAWN_EGG_DEFS = {
     spawn_alex: { mobType: 'alex', cls: Alex, yOffset: 0.5, roar: null, color: 0xf97316, message: 'Alex (Teman) dipanggil!' },
     spawn_sandworm: { mobType: 'sandworm', cls: Sandworm, yOffset: 0.5, roar: 'sea', color: 0xa16207, message: 'Sandworm raksasa muncul!' },
     spawn_optimus: { mobType: 'optimus', cls: Optimus, yOffset: 0.5, roar: null, color: 0xdc2626, message: 'Optimus (Penjaga) dipanggil!' },
+    spawn_bloop: { mobType: 'bloop', cls: Bloop, yOffset: 0.5, roar: 'sea', color: 0x47687c, message: 'Bloop raksasa muncul di lautan!' },
+    spawn_whaleeater: { mobType: 'whaleeater', cls: WhaleEater, yOffset: 0.5, roar: 'sea', color: 0xdc2626, message: 'Whale Eater raksasa muncul!' },
     spawn_redsun: { mobType: 'redsun', cls: RedSun, skyMinY: 12.0, roar: 'celestial', color: 0xff2a6d, message: 'Red Sun muncul di langit!' },
     spawn_lunarmoon: { mobType: 'lunarmoon', cls: LunarMoon, skyMinY: 12.0, roar: 'celestial', color: 0xef4444, message: 'Lunar Moon muncul di langit!' },
     spawn_cursedthomas: { mobType: 'cursedthomas', cls: CursedThomas, yOffset: 0.5, roar: 'train', color: 0x0ea5e9, message: 'Cursed Thomas dipanggil!' }
@@ -1673,7 +1738,7 @@ function handleSecondaryAction() {
     const held = getActiveHeldItem();
     const heldSlotIdx = equippedBagSlot !== null
         ? equippedBagSlot
-        : (isSurvivalMode() ? activeHotbarIndex : null);
+        : (isSurvivalRulesMode() ? activeHotbarIndex : null);
 
     if (held && held.type === 'golden_apple' && heldSlotIdx !== null) {
         eatGoldenApple(heldSlotIdx);
@@ -1849,7 +1914,7 @@ function handleSecondaryAction() {
         return;
     }
 
-    if (isSurvivalMode()) {
+    if (isSurvivalRulesMode()) {
         if (!held || !held.type || (held.count || 0) <= 0) {
             sounds.playClickSound();
             return;
@@ -1905,7 +1970,7 @@ function handleSecondaryAction() {
     }
 
     world.addBlock(buildX, buildY, buildZ, finalBlockState);
-    if (isSurvivalMode() && heldSlotIdx !== null) {
+    if (isSurvivalRulesMode() && heldSlotIdx !== null) {
         const slotItem = player.inventory[heldSlotIdx];
         if (slotItem && slotItem.type === blockToPlace) {
             slotItem.count--;
@@ -2029,7 +2094,7 @@ window.addEventListener('keydown', (e) => {
     }
 
     if (DIRECT_BLOCK_KEY_MAP[e.key]) {
-        if (!isSurvivalMode()) {
+        if (!isSurvivalRulesMode()) {
             pickBlockIntoLoadout(DIRECT_BLOCK_KEY_MAP[e.key]);
         }
         return;
@@ -2097,6 +2162,7 @@ const LAND_MOB_CLASSES = {
     charles: Charles,
     cursedthomas: CursedThomas,
     sandworm: Sandworm,
+    whaleeater: WhaleEater,
     jj: JJ,
     mikey: Mikey,
     bananakid: BananaKid,
@@ -2139,10 +2205,10 @@ function findSurvivalIslandSpawnSpot() {
 }
 
 function spawnMob(type) {
-    if (type === 'seaeater' || type === 'infectedocean') {
-        if (isSurvivalMode()) {
+    if (type === 'seaeater' || type === 'infectedocean' || type === 'bloop') {
+        const SeaCls = type === 'bloop' ? Bloop : (type === 'infectedocean' ? InfectedOcean : SeaEater);
+        if (isSurvivalRulesMode()) {
             const spot = findSurvivalIslandSpawnSpot();
-            const SeaCls = type === 'infectedocean' ? InfectedOcean : SeaEater;
             game.mobs.push(new SeaCls(spot.x, spot.y, spot.z, scene, world, game));
             return;
         }
@@ -2150,8 +2216,8 @@ function spawnMob(type) {
         const minSeaZ = SEA_START_Z + 8;
         const maxSeaZ = Math.floor(world.depth / 2) - 8;
         const z = minSeaZ + Math.floor(Math.random() * Math.max(1, maxSeaZ - minSeaZ + 1));
-        const SeaCls = type === 'infectedocean' ? InfectedOcean : SeaEater;
-        game.mobs.push(new SeaCls(x, 2.6, z, scene, world, game));
+        const seaY = type === 'bloop' ? 3.2 : 2.6;
+        game.mobs.push(new SeaCls(x, seaY, z, scene, world, game));
         return;
     }
 
@@ -2168,7 +2234,7 @@ function spawnMob(type) {
         return;
     }
 
-    if (isSurvivalMode()) {
+    if (isSurvivalRulesMode()) {
         const spot = findSurvivalIslandSpawnSpot();
         const MobCls = LAND_MOB_CLASSES[type];
         if (MobCls) {
@@ -2189,6 +2255,14 @@ function spawnMob(type) {
             if (Math.hypot(x, z) >= 4 && z <= maxLandZ) break;
         }
         z = Math.min(z, maxLandZ);
+    } else if (type === 'whaleeater') {
+        const minBeachZ = SEA_BEACH_START_Z - 3;
+        const maxBeachZ = SEA_BEACH_START_Z + 2;
+        for (let attempt = 0; attempt < 12; attempt++) {
+            x = Math.floor((Math.random() - 0.5) * (world.width - 14));
+            z = minBeachZ + Math.floor(Math.random() * Math.max(1, maxBeachZ - minBeachZ + 1));
+            if (Math.hypot(x, z) >= 16) break;
+        }
     } else if (type === 'traineater' || type === 'charles' || type === 'cursedthomas' || type === 'sandworm') {
         const minClear = type === 'traineater' ? 16 : 20;
         for (let attempt = 0; attempt < 12 && Math.hypot(x, z) < minClear; attempt++) {
@@ -2366,7 +2440,7 @@ function updateInventoryUI() {
     }
 
     updateArmorUI();
-    if (isSurvivalMode()) {
+    if (isSurvivalRulesMode()) {
         buildHotbarDOM();
         syncHeldVisual();
     }
@@ -3554,11 +3628,11 @@ function syncLaserBeams() {
 
 function triggerGravityBlocksAround(cx, cy, cz, radius = 1) {
     let unsupported = collectUnsupportedGravityBlocks(world.boundGetBlockAt, cx, cy, cz, radius, world.height - 1);
-    if (isSurvivalMode()) {
-        // In One Block Survival, sky-island bridges stay floating; only sand falls (except at One Block core)
+    if (isSurvivalRulesMode()) {
+        // In One Block Survival & SkyBlock, sky-island bridges stay floating; only sand falls (except at One Block core)
         unsupported = unsupported.filter(
             b => normalizeBlockType(b.type) === 'sand' &&
-                !(b.x === ONE_BLOCK_POS.x && b.y === ONE_BLOCK_POS.y && b.z === ONE_BLOCK_POS.z)
+                !(isOneBlockMode() && b.x === ONE_BLOCK_POS.x && b.y === ONE_BLOCK_POS.y && b.z === ONE_BLOCK_POS.z)
         );
     }
     if (unsupported.length === 0) return false;
@@ -3753,7 +3827,7 @@ function refreshRedstoneAround(cx, cy, cz) {
 }
 
 function onWorldTopologyChanged(x, y, z, radius = 1) {
-    if (isSurvivalMode()) {
+    if (isOneBlockMode()) {
         ensureOneBlockExists();
     }
     cleanUnsupportedAttachmentsAround(x, y, z, Math.max(2, radius));
@@ -3959,8 +4033,8 @@ function updateXpUI() {
     xpText.textContent = `Lv. ${player.xpLevel}`;
 }
 
-if (isSurvivalMode()) {
-    loadModeState(GAME_MODES.SURVIVAL);
+if (isSurvivalRulesMode()) {
+    loadModeState(gameMode);
 } else if (world.loadedFromSave) {
     restorePlayerAndChests(getModeStorageKeys(GAME_MODES.FREEPLAY));
 }

@@ -6,9 +6,12 @@ import {
     parseBlockState,
     checkGridAABB,
     rollUndergroundBlock,
+    isSolidBlock,
     LASER_DIRECTION_VECTORS,
     SEA_BEACH_START_Z,
-    SEA_START_Z
+    SEA_START_Z,
+    SKYBLOCK_TREE_POS,
+    SKYBLOCK_CHEST_POS
 } from '../utils/gameData.js';
 
 const AXIS_X = new THREE.Vector3(1, 0, 0);
@@ -94,7 +97,8 @@ export const BLOCK_TYPES = {
     piston_head: { id: 36, name: 'Piston Head', color: 0xa06a42 },
     redstone: { id: 37, name: 'Redstone', color: 0xdc2626 },
     laser: { id: 38, name: 'Laser', color: 0xef4444 },
-    saw: { id: 39, name: 'Saw', color: 0x94a3b8 }
+    saw: { id: 39, name: 'Saw', color: 0x94a3b8 },
+    cobblestone: { id: 40, name: 'Cobblestone', color: 0x7a7a7a }
 };
 
 const TRANSPARENT_BASE_TYPES = new Set([
@@ -130,7 +134,7 @@ export class World {
         this.auxMeshMap = new Map();
         this.loadedFromSave = false;
         this.blockTypesList = [
-            'grass', 'dirt', 'stone', 'obsidian', 'wood', 'planks', 'leaf', 'brick',
+            'grass', 'dirt', 'stone', 'cobblestone', 'obsidian', 'wood', 'planks', 'leaf', 'brick',
             'emerald', 'diamond', 'ender', 'tnt', 'water', 'lava', 'quartz',
             'sand', 'farmland', 'lucky', 'magma', 'crop', 'coal_ore',
             'iron_ore', 'gold_ore', 'lapis_ore', 'bookshelf', 'chest', 'crafting',
@@ -173,6 +177,7 @@ export class World {
         const grassTopMat = new THREE.MeshLambertMaterial({ map: textures.grassTop });
         const dirtMat = new THREE.MeshLambertMaterial({ map: textures.dirt });
         const stoneMat = new THREE.MeshLambertMaterial({ map: textures.stone });
+        const cobblestoneMat = new THREE.MeshLambertMaterial({ map: textures.cobblestone });
         const obsidianMat = new THREE.MeshLambertMaterial({ map: textures.obsidian });
         const woodSideMat = new THREE.MeshLambertMaterial({ map: textures.woodSide });
         const woodTopMat = new THREE.MeshLambertMaterial({ map: textures.woodTop });
@@ -402,6 +407,7 @@ export class World {
 
         const maxCounts = {
             stone: 45000,
+            cobblestone: 15000,
             dirt: 25000,
             grass: 14000,
             obsidian: 14000,
@@ -445,6 +451,7 @@ export class World {
             grass: [grassSideMat, grassSideMat, grassTopMat, dirtMat, grassSideMat, grassSideMat],
             dirt: dirtMat,
             stone: stoneMat,
+            cobblestone: cobblestoneMat,
             obsidian: obsidianMat,
             wood: [woodSideMat, woodSideMat, woodTopMat, woodTopMat, woodSideMat, woodSideMat],
             planks: planksMat,
@@ -599,6 +606,46 @@ export class World {
         if (idx !== -1) {
             this.grid[idx] = initialBlock || 'grass';
         }
+        this.updateMesh();
+    }
+
+    generateSkyblockTerrain() {
+        this.loadedFromSave = false;
+        this.grid = new Array(this.width * this.height * this.depth);
+
+        // Classic L-shaped floating sky island (6x6 minus 3x3 corner cutout)
+        for (let x = -2; x <= 3; x++) {
+            for (let z = -3; z <= 2; z++) {
+                if (x >= 1 && z >= 0) continue;
+                for (const [y, type] of [[4, 'dirt'], [5, 'dirt'], [6, 'grass']]) {
+                    const idx = this.getGridIndex(x, y, z);
+                    if (idx !== -1) this.grid[idx] = type;
+                }
+            }
+        }
+
+        // Oak tree on the far corner
+        const { x: tx, y: ty, z: tz } = SKYBLOCK_TREE_POS;
+        for (let dy = 0; dy < 4; dy++) {
+            const tIdx = this.getGridIndex(tx, ty + dy, tz);
+            if (tIdx !== -1) this.grid[tIdx] = 'wood';
+        }
+        for (const [dy, radius, trimCorners] of [[2, 2, false], [3, 2, true], [4, 1, true]]) {
+            for (let lx = -radius; lx <= radius; lx++) {
+                for (let lz = -radius; lz <= radius; lz++) {
+                    if (trimCorners && Math.abs(lx) === radius && Math.abs(lz) === radius) continue;
+                    const lIdx = this.getGridIndex(tx + lx, ty + dy, tz + lz);
+                    if (lIdx !== -1 && this.grid[lIdx] === undefined) {
+                        this.grid[lIdx] = 'leaf';
+                    }
+                }
+            }
+        }
+
+        // Starter chest opposite the tree
+        const cIdx = this.getGridIndex(SKYBLOCK_CHEST_POS.x, SKYBLOCK_CHEST_POS.y, SKYBLOCK_CHEST_POS.z);
+        if (cIdx !== -1) this.grid[cIdx] = 'chest';
+
         this.updateMesh();
     }
 
@@ -1010,8 +1057,47 @@ export class World {
 
     tickLiquids() {
         let changed = false;
-        const newAdditions = [];
-        const toRemove = [];
+        const proposedAdditions = new Map();
+        const toRemove = new Set();
+        const steamCoords = [];
+        const strideX = this.height * this.depth;
+        const strideY = this.depth;
+
+        const liquidPriority = (type) => {
+            if (type === 'obsidian') return 30;
+            if (type === 'cobblestone' || type === 'stone') return 20;
+            if (type.startsWith('water_') || type.startsWith('lava_')) {
+                const suf = type.slice(type.indexOf('_') + 1);
+                return suf === 'source' ? 5 : (parseInt(suf, 10) || 1);
+            }
+            return 0;
+        };
+
+        const propose = (targetIdx, nextType) => {
+            const existing = proposedAdditions.get(targetIdx);
+            if (!existing) {
+                proposedAdditions.set(targetIdx, nextType);
+                return;
+            }
+            const exIsLiquid = existing.startsWith('water_') || existing.startsWith('lava_');
+            const nextIsLiquid = nextType.startsWith('water_') || nextType.startsWith('lava_');
+            if (exIsLiquid && nextIsLiquid && existing[0] !== nextType[0]) {
+                // Opposite flowing streams colliding in an empty block form Cobblestone
+                proposedAdditions.set(targetIdx, 'cobblestone');
+                return;
+            }
+            if (liquidPriority(nextType) > liquidPriority(existing)) {
+                proposedAdditions.set(targetIdx, nextType);
+            }
+        };
+
+        const decodeIdx = (targetIdx) => {
+            const lx = Math.floor(targetIdx / strideX);
+            const rem = targetIdx - lx * strideX;
+            const wy = Math.floor(rem / strideY);
+            const lz = rem - wy * strideY;
+            return { x: lx + this.xOffset, y: wy, z: lz + this.zOffset };
+        };
 
         let idx = 0;
         for (let x = 0; x < this.width; x++) {
@@ -1019,29 +1105,44 @@ export class World {
                 for (let z = 0; z < this.depth; z++) {
                     const type = this.grid[idx];
                     if (type && type.startsWith('lava_')) {
-                        let hasWaterNeighbor = false;
-                        const adj = [];
-                        if (x > 0) adj.push(idx - this.height * this.depth);
-                        if (x < this.width - 1) adj.push(idx + this.height * this.depth);
-                        if (z > 0) adj.push(idx - 1);
-                        if (z < this.depth - 1) adj.push(idx + 1);
-                        if (y > 0) adj.push(idx - this.depth);
-                        if (y < this.height - 1) adj.push(idx + this.depth);
+                        const adjHorizAndUp = [];
+                        if (x > 0) adjHorizAndUp.push(idx - strideX);
+                        if (x < this.width - 1) adjHorizAndUp.push(idx + strideX);
+                        if (z > 0) adjHorizAndUp.push(idx - 1);
+                        if (z < this.depth - 1) adjHorizAndUp.push(idx + 1);
+                        if (y < this.height - 1) adjHorizAndUp.push(idx + strideY);
 
-                        for (const nIdx of adj) {
+                        let hasWaterTouch = false;
+                        for (const nIdx of adjHorizAndUp) {
                             const nBlock = this.grid[nIdx];
                             if (nBlock && nBlock.startsWith('water_')) {
-                                hasWaterNeighbor = true;
+                                hasWaterTouch = true;
                                 break;
                             }
                         }
 
-                        if (hasWaterNeighbor) {
-                            toRemove.push(idx);
-                            newAdditions.push({ idx, type: 'obsidian' });
+                        if (hasWaterTouch) {
+                            const formed = type === 'lava_source' ? 'obsidian' : 'cobblestone';
+                            toRemove.add(idx);
+                            propose(idx, formed);
+                            steamCoords.push(idx);
                             changed = true;
                             idx++;
                             continue;
+                        }
+
+                        if (y > 0) {
+                            const belowIdx = idx - strideY;
+                            const belowBlock = this.grid[belowIdx];
+                            if (belowBlock && belowBlock.startsWith('water_')) {
+                                const formed = belowBlock === 'water_source' ? 'stone' : 'cobblestone';
+                                toRemove.add(belowIdx);
+                                propose(belowIdx, formed);
+                                steamCoords.push(belowIdx);
+                                changed = true;
+                                idx++;
+                                continue;
+                            }
                         }
                     }
 
@@ -1051,28 +1152,23 @@ export class World {
                         const suffix = type.slice(baseType.length + 1);
                         const isSource = suffix === 'source';
                         const level = isSource ? 4 : parseInt(suffix, 10);
+                        const belowIdx = y > 0 ? idx - strideY : -1;
+                        const belowBlock = belowIdx !== -1 ? this.grid[belowIdx] : null;
 
-                        if (y > 0) {
-                            const belowIdx = idx - this.depth;
-                            const belowBlock = this.grid[belowIdx];
-                            if (!belowBlock) {
-                                newAdditions.push({ idx: belowIdx, type: `${baseType}_4` });
-                                changed = true;
-                                idx++;
-                                continue;
-                            }
-                        }
-
-                        if (level > 1) {
+                        if (y > 0 && !belowBlock) {
+                            propose(belowIdx, `${baseType}_4`);
+                            changed = true;
+                        } else if (level > 1 && y > 0 && (isSolidBlock(belowBlock) || (isSource && belowBlock === `${baseType}_source`))) {
+                            // Only spread horizontally over solid support (or ocean surface), keeping step-down generator pits intact
                             const neighbors = [];
-                            if (x > 0) neighbors.push(idx - this.height * this.depth);
-                            if (x < this.width - 1) neighbors.push(idx + this.height * this.depth);
+                            if (x > 0) neighbors.push(idx - strideX);
+                            if (x < this.width - 1) neighbors.push(idx + strideX);
                             if (z > 0) neighbors.push(idx - 1);
                             if (z < this.depth - 1) neighbors.push(idx + 1);
 
                             for (const nIdx of neighbors) {
                                 if (!this.grid[nIdx]) {
-                                    newAdditions.push({ idx: nIdx, type: `${baseType}_${level - 1}` });
+                                    propose(nIdx, `${baseType}_${level - 1}`);
                                     changed = true;
                                 }
                             }
@@ -1081,15 +1177,15 @@ export class World {
                         if (!isSource) {
                             let hasSource = false;
                             if (y < this.height - 1) {
-                                const aboveBlock = this.grid[idx + this.depth];
+                                const aboveBlock = this.grid[idx + strideY];
                                 if (aboveBlock && aboveBlock.startsWith(baseType)) {
                                     hasSource = true;
                                 }
                             }
                             if (!hasSource) {
                                 const adjacents = [];
-                                if (x > 0) adjacents.push(idx - this.height * this.depth);
-                                if (x < this.width - 1) adjacents.push(idx + this.height * this.depth);
+                                if (x > 0) adjacents.push(idx - strideX);
+                                if (x < this.width - 1) adjacents.push(idx + strideX);
                                 if (z > 0) adjacents.push(idx - 1);
                                 if (z < this.depth - 1) adjacents.push(idx + 1);
 
@@ -1107,7 +1203,7 @@ export class World {
                             }
 
                             if (!hasSource) {
-                                toRemove.push(idx);
+                                toRemove.add(idx);
                                 changed = true;
                             }
                         }
@@ -1120,14 +1216,26 @@ export class World {
         for (const rIdx of toRemove) {
             this.grid[rIdx] = undefined;
         }
-        for (const { idx: aIdx, type } of newAdditions) {
-            if (this.grid[aIdx] === undefined) {
-                this.grid[aIdx] = type;
+        for (const [aIdx, nextType] of proposedAdditions.entries()) {
+            const isSolidConversion = nextType === 'cobblestone' || nextType === 'obsidian' || nextType === 'stone';
+            if (isSolidConversion || this.grid[aIdx] === undefined) {
+                this.grid[aIdx] = nextType;
+                if (nextType === 'cobblestone') {
+                    steamCoords.push(aIdx);
+                }
+                changed = true;
             }
         }
 
         if (changed) {
             this.updateMesh();
+            if (this.game?.particles && steamCoords.length > 0) {
+                const limit = Math.min(4, steamCoords.length);
+                for (let i = 0; i < limit; i++) {
+                    const pt = decodeIdx(steamCoords[i]);
+                    this.spawnCropParticles(pt.x, pt.y + 0.5, pt.z, 0xe2e8f0);
+                }
+            }
         }
     }
 
@@ -1205,6 +1313,8 @@ export class World {
     reset(mode = 'freeplay', storageKey = 'nizamcraft-save') {
         if (mode === 'survival') {
             this.generateOneBlockTerrain('grass');
+        } else if (mode === 'skyblock') {
+            this.generateSkyblockTerrain();
         } else {
             this.generateTerrain();
         }

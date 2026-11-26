@@ -5233,5 +5233,404 @@ export class Sandworm extends Mob {
     }
 }
 
+// 27. BLOOP (Colossal Slate-Blue Deep-Sea Whale Leviathan Boss)
+export class Bloop extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('bloop', x, y, z, scene, world, game);
+        this.hp = 750;
+        this.maxHp = 750;
+        this.width = 3.4;
+        this.height = 4.4;
+        this.speed = 2.9;
+        this.attackCooldown = 0;
+        this.attackAnimTimer = 0;
+        this.swimPhase = Math.random() * Math.PI * 2;
+    }
+
+    initMesh() {
+        const skinMat = createTrackedTexMat(this, textures.bloopSkin);
+        const bellyMat = createTrackedColorMat(this, 0x334857);
+        const mawMat = createTrackedTexMat(this, textures.bloopMaw);
+        const toothMat = createTrackedColorMat(this, 0xe5e7eb);
+        const eyeMat = createTrackedColorMat(this, 0x090d12);
+
+        // Colossal boxy whale head & dark underside
+        const upperCranium = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.15, 3.6), skinMat);
+        upperCranium.position.set(0, 3.35, 0.2);
+        upperCranium.castShadow = true;
+        this.mesh.add(upperCranium);
+
+        const browRidge = new THREE.Mesh(new THREE.BoxGeometry(3.15, 0.48, 3.3), skinMat);
+        browRidge.position.set(0, 4.02, 0.12);
+        browRidge.castShadow = true;
+        this.mesh.add(browRidge);
+
+        for (const xSign of [-1, 1]) {
+            const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.62, 2.0, 3.45), skinMat);
+            cheek.position.set(xSign * 1.39, 1.95, 0.2);
+            cheek.castShadow = true;
+            this.mesh.add(cheek);
+
+            const eye = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.24), eyeMat);
+            eye.position.set(xSign * 1.48, 3.55, 1.85);
+            this.mesh.add(eye);
+        }
+
+        const mawBack = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.45, 0.6), mawMat);
+        mawBack.position.set(0, 2.1, -0.8);
+        this.mesh.add(mawBack);
+
+        // Gaping articulated jaws + 16 sharp white teeth
+        this.mawGroup = new THREE.Group();
+        this.mawGroup.position.set(0, 1.2, 0.45);
+
+        const lowerJaw = new THREE.Mesh(new THREE.BoxGeometry(3.25, 0.68, 3.1), bellyMat);
+        lowerJaw.position.set(0, -0.25, 0.15);
+        lowerJaw.castShadow = true;
+        this.mawGroup.add(lowerJaw);
+
+        const innerLower = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.16, 2.2), mawMat);
+        innerLower.position.set(0, 0.12, 0.1);
+        this.mawGroup.add(innerLower);
+
+        for (let i = 0; i < 8; i++) {
+            const angle = -Math.PI * 0.42 + (i / 7) * Math.PI * 0.84;
+            const lx = Math.sin(angle) * 1.05;
+            const lz = 1.45 - Math.abs(Math.cos(angle) * 0.18) + Math.cos(angle) * 0.25;
+
+            const upperTooth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.44, 0.18), toothMat);
+            upperTooth.position.set(lx, 2.66, lz + 0.35);
+            upperTooth.rotation.x = 0.16;
+            this.mesh.add(upperTooth);
+
+            const lowerTooth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.18), toothMat);
+            lowerTooth.position.set(lx, 0.28, lz);
+            lowerTooth.rotation.x = -0.18;
+            this.mawGroup.add(lowerTooth);
+        }
+
+        this.mesh.add(this.mawGroup);
+
+        // Wide sweeping pectoral fins
+        const buildFin = (xSign) => {
+            const pivot = new THREE.Group();
+            pivot.position.set(xSign * 1.55, 1.45, -1.2);
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.34, 1.35), skinMat);
+            blade.position.set(xSign * 1.35, 0, -0.25);
+            blade.rotation.y = xSign * -0.35;
+            blade.castShadow = true;
+            pivot.add(blade);
+            this.mesh.add(pivot);
+            return pivot;
+        };
+        this.leftFin = buildFin(-1);
+        this.rightFin = buildFin(1);
+
+        // 3 articulated tapering whale body & tail fluke segments
+        this.tailSegments = [];
+        const bodySpecs = [
+            { w: 2.9, h: 2.8, l: 2.5, y: 2.2, z: -2.45 },
+            { w: 2.1, h: 2.1, l: 2.3, y: 2.1, z: -4.65 },
+            { w: 1.35, h: 1.4, l: 2.1, y: 2.0, z: -6.65 }
+        ];
+        for (let i = 0; i < bodySpecs.length; i++) {
+            const spec = bodySpecs[i];
+            const seg = new THREE.Group();
+            seg.position.set(0, spec.y, spec.z);
+            const bodyBox = new THREE.Mesh(new THREE.BoxGeometry(spec.w, spec.h, spec.l), skinMat);
+            bodyBox.castShadow = true;
+            seg.add(bodyBox);
+
+            const bellyStripe = new THREE.Mesh(
+                new THREE.BoxGeometry(spec.w * 0.88, spec.h * 0.28, spec.l * 0.96),
+                bellyMat
+            );
+            bellyStripe.position.set(0, -spec.h * 0.38, 0);
+            seg.add(bellyStripe);
+
+            if (i === 2) {
+                const fluke = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.28, 1.35), skinMat);
+                fluke.position.set(0, 0, -1.25);
+                fluke.castShadow = true;
+                seg.add(fluke);
+            }
+            this.mesh.add(seg);
+            this.tailSegments.push(seg);
+        }
+    }
+
+    update(dt) {
+        const feetBlock = this.world.getBlockAt(this.position.x, this.position.y, this.position.z);
+        const midBlock = this.world.getBlockAt(this.position.x, this.position.y + 1.5, this.position.z);
+        const upperBlock = this.world.getBlockAt(this.position.x, this.position.y + 2.8, this.position.z);
+        const inWater = Boolean(
+            (feetBlock && feetBlock.startsWith('water')) ||
+            (midBlock && midBlock.startsWith('water')) ||
+            (upperBlock && upperBlock.startsWith('water'))
+        );
+        this.gravity = inWater ? 0 : -25.0;
+        super.update(dt);
+    }
+
+    updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        this.swimPhase += dt * (isLiquid ? 3.2 : 1.8);
+
+        if (this.attackAnimTimer > 0) {
+            this.attackAnimTimer -= dt;
+            const snap = Math.sin((this.attackAnimTimer / 0.5) * Math.PI);
+            if (this.mawGroup) this.mawGroup.rotation.x = snap * 0.48;
+        } else if (this.mawGroup) {
+            this.mawGroup.rotation.x = Math.max(0, Math.sin(this.swimPhase * 0.65) * 0.14);
+        }
+
+        if (this.leftFin && this.rightFin) {
+            this.leftFin.rotation.z = Math.sin(this.swimPhase) * 0.22;
+            this.rightFin.rotation.z = -Math.sin(this.swimPhase) * 0.22;
+        }
+
+        if (this.tailSegments) {
+            for (let i = 0; i < this.tailSegments.length; i++) {
+                this.tailSegments[i].position.x = Math.sin(this.swimPhase - i * 0.85) * (0.2 + i * 0.14);
+                this.tailSegments[i].rotation.y = Math.cos(this.swimPhase - i * 0.85) * 0.12;
+            }
+        }
+
+        const hasOcean = Boolean(this.world.getBlockAt(0, 5, SEA_START_Z + 2)?.startsWith('water'));
+        const { target } = findNearestBossTarget(this, 36.0, { seaOnly: hasOcean && isLiquid, includeMinecarts: !hasOcean });
+        const activeSpeed = isLiquid ? this.speed : this.speed * 0.5;
+
+        if (target) {
+            const tPos = target.position;
+            const angle = Math.atan2(tPos.x - this.position.x, tPos.z - this.position.z);
+            this.mesh.rotation.y = angle;
+            this.velocity.x = Math.sin(angle) * activeSpeed;
+            this.velocity.z = Math.cos(angle) * activeSpeed;
+
+            if (isLiquid) {
+                this.velocity.y = THREE.MathUtils.clamp((3.2 - this.position.y) * 2.2, -2.5, 2.5);
+                if (Math.random() < 0.2) {
+                    spawnMobBurstParticle(
+                        this,
+                        0x7dd3fc,
+                        this.position.x + (Math.random() - 0.5) * 3.0,
+                        6.2,
+                        this.position.z + (Math.random() - 0.5) * 2.6,
+                        (Math.random() - 0.5) * 2.2,
+                        2.5,
+                        (Math.random() - 0.5) * 2.2,
+                        0.45
+                    );
+                }
+            }
+
+            const horizDist = Math.hypot(tPos.x - this.position.x, tPos.z - this.position.z);
+            if (horizDist < 4.4 && this.attackCooldown <= 0) {
+                this.attackCooldown = 1.2;
+                this.attackAnimTimer = 0.5;
+                sounds.playMonsterRoarSound('sea');
+                applyBossMeleeHit(this, target, 38, 56, 9.0, 6.0);
+            }
+        } else {
+            this.wanderTimer -= dt;
+            if (hasOcean && this.position.z < SEA_START_Z + 3) {
+                this.wanderAngle = (Math.random() - 0.5) * 0.9;
+                this.wanderTimer = 1.6;
+            } else if (this.wanderTimer <= 0) {
+                this.wanderTimer = 2.2 + Math.random() * 3.0;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (activeSpeed * 0.55);
+            this.velocity.z = Math.cos(this.wanderAngle) * (activeSpeed * 0.55);
+            this.mesh.rotation.y = this.wanderAngle;
+
+            if (isLiquid) {
+                const patrolY = 3.2 + Math.sin(this.swimPhase * 0.35) * 0.25;
+                this.velocity.y = THREE.MathUtils.clamp((patrolY - this.position.y) * 2.0, -2.0, 2.0);
+            }
+        }
+    }
+}
+
+// 28. WHALE EATER (Colossal Mottled Crimson-Red Octopus/Kraken Boss with Yellow-Banded Eyes & 8 Tentacles)
+export class WhaleEater extends Mob {
+    constructor(x, y, z, scene, world, game) {
+        super('whaleeater', x, y, z, scene, world, game);
+        this.hp = 760;
+        this.maxHp = 760;
+        this.width = 3.4;
+        this.height = 4.2;
+        this.speed = 2.85;
+        this.attackCooldown = 0;
+        this.attackAnimTimer = 0;
+        this.swimPhase = Math.random() * Math.PI * 2;
+    }
+
+    initMesh() {
+        const skinMat = createTrackedTexMat(this, textures.whaleEaterSkin);
+        const eyeMat = createTrackedTexMat(this, textures.whaleEaterEye);
+        const darkSkinMat = createTrackedColorMat(this, 0x7f1d1d);
+        const beakMat = createTrackedColorMat(this, 0x5c1111);
+
+        // Upright crimson octopus head & bulky rear mantle dome
+        this.headGroup = new THREE.Group();
+        this.headGroup.position.set(0, 2.0, 0);
+
+        const headCore = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.3, 2.2), skinMat);
+        headCore.position.set(0, 0.35, 0.05);
+        headCore.castShadow = true;
+        this.headGroup.add(headCore);
+
+        const rearDome = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.3, 2.6), skinMat);
+        rearDome.position.set(0, 0.75, -1.25);
+        rearDome.rotation.x = -0.22;
+        rearDome.castShadow = true;
+        this.headGroup.add(rearDome);
+
+        const crownCrest = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.55, 2.1), darkSkinMat);
+        crownCrest.position.set(0, 1.55, -0.55);
+        this.headGroup.add(crownCrest);
+
+        // Prominent protruding yellow-and-brown banded octopus eyes on upper-front corners
+        for (const xSign of [-1, 1]) {
+            const eye = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.85, 0.72), [
+                skinMat, skinMat, skinMat, skinMat, eyeMat, skinMat
+            ]);
+            eye.position.set(xSign * 1.05, 1.05, 0.92);
+            eye.rotation.y = xSign * 0.2;
+            eye.castShadow = true;
+            this.headGroup.add(eye);
+        }
+
+        const beak = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.55, 0.95), beakMat);
+        beak.position.set(0, -0.68, 0.88);
+        this.headGroup.add(beak);
+
+        this.mesh.add(this.headGroup);
+
+        // 8 long articulated spreading crimson tentacles fanning forward, sideways, and back
+        this.tentacles = [];
+        const tentacleAngles = [-0.72, -0.26, 0.26, 0.72, -1.25, 1.25, -1.95, 1.95];
+        for (let i = 0; i < tentacleAngles.length; i++) {
+            const ang = tentacleAngles[i];
+            const pivot = new THREE.Group();
+            pivot.position.set(Math.sin(ang) * 0.95, 0.9, Math.cos(ang) * 0.95);
+            pivot.rotation.y = ang;
+            pivot.userData.baseAngle = ang;
+
+            const innerSeg = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.68, 2.2), skinMat);
+            innerSeg.position.set(0, -0.25, 1.05);
+            innerSeg.rotation.x = 0.24;
+            innerSeg.castShadow = true;
+            pivot.add(innerSeg);
+
+            const outerSeg = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.56, 2.9), skinMat);
+            outerSeg.position.set(0, -0.55, 3.25);
+            outerSeg.castShadow = true;
+            pivot.add(outerSeg);
+
+            const suckerStrip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 2.75), darkSkinMat);
+            suckerStrip.position.set(0, -0.8, 3.25);
+            pivot.add(suckerStrip);
+
+            const tipSeg = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.44, 1.15), skinMat);
+            tipSeg.position.set(0, -0.6, 5.15);
+            tipSeg.castShadow = true;
+            pivot.add(tipSeg);
+
+            this.mesh.add(pivot);
+            this.tentacles.push(pivot);
+        }
+    }
+
+    update(dt) {
+        const feetBlock = this.world.getBlockAt(this.position.x, this.position.y, this.position.z);
+        const midBlock = this.world.getBlockAt(this.position.x, this.position.y + 1.4, this.position.z);
+        const upperBlock = this.world.getBlockAt(this.position.x, this.position.y + 2.6, this.position.z);
+        const inWater = Boolean(
+            (feetBlock && feetBlock.startsWith('water')) ||
+            (midBlock && midBlock.startsWith('water')) ||
+            (upperBlock && upperBlock.startsWith('water'))
+        );
+        this.gravity = inWater ? 0 : -25.0;
+        super.update(dt);
+    }
+
+    updateAI(dt, isLiquid) {
+        if (this.attackCooldown > 0) this.attackCooldown -= dt;
+        if (this.attackAnimTimer > 0) this.attackAnimTimer -= dt;
+        this.swimPhase += dt * (isLiquid ? 3.1 : 2.1);
+
+        const lunge = this.attackAnimTimer > 0
+            ? Math.sin((this.attackAnimTimer / 0.5) * Math.PI)
+            : 0;
+
+        if (this.headGroup) {
+            this.headGroup.position.y = 2.0 + Math.sin(this.swimPhase * 0.8) * 0.14 + lunge * 0.25;
+            this.headGroup.rotation.x = lunge * 0.22;
+        }
+
+        if (this.tentacles) {
+            for (let i = 0; i < this.tentacles.length; i++) {
+                const tent = this.tentacles[i];
+                const wave = Math.sin(this.swimPhase * 1.15 + i * 0.8);
+                tent.rotation.x = wave * 0.08 - lunge * 0.18;
+                tent.rotation.y = tent.userData.baseAngle + Math.cos(this.swimPhase * 0.9 + i * 0.7) * 0.09;
+            }
+        }
+
+        const { target } = findNearestBossTarget(this, 36.0, { landOnly: false, includeMinecarts: true });
+        const activeSpeed = isLiquid ? this.speed : this.speed * 0.9;
+
+        if (target) {
+            const tPos = target.position;
+            const angle = Math.atan2(tPos.x - this.position.x, tPos.z - this.position.z);
+            this.mesh.rotation.y = angle;
+            this.velocity.x = Math.sin(angle) * activeSpeed;
+            this.velocity.z = Math.cos(angle) * activeSpeed;
+
+            if (isLiquid) {
+                this.velocity.y = THREE.MathUtils.clamp((3.0 - this.position.y) * 2.2, -2.4, 2.4);
+            }
+
+            const horizDist = Math.hypot(tPos.x - this.position.x, tPos.z - this.position.z);
+            if (horizDist < 4.6 && this.attackCooldown <= 0) {
+                this.attackCooldown = 1.15;
+                this.attackAnimTimer = 0.5;
+                sounds.playMonsterRoarSound('sea');
+                applyBossMeleeHit(this, target, 38, 56, 8.5, 6.5);
+                if (Math.random() < 0.85) {
+                    spawnMobBurstParticle(
+                        this,
+                        0xdc2626,
+                        this.position.x + (Math.random() - 0.5) * 2.6,
+                        this.position.y + 1.2,
+                        this.position.z + (Math.random() - 0.5) * 2.6,
+                        (Math.random() - 0.5) * 2.4,
+                        2.6,
+                        (Math.random() - 0.5) * 2.4,
+                        0.45
+                    );
+                }
+            }
+        } else {
+            this.wanderTimer -= dt;
+            if (this.wanderTimer <= 0) {
+                this.wanderTimer = 2.4 + Math.random() * 2.8;
+                this.wanderAngle = Math.random() * Math.PI * 2;
+            }
+            this.velocity.x = Math.sin(this.wanderAngle) * (activeSpeed * 0.5);
+            this.velocity.z = Math.cos(this.wanderAngle) * (activeSpeed * 0.5);
+            this.mesh.rotation.y = this.wanderAngle;
+
+            if (isLiquid) {
+                const patrolY = 3.0 + Math.sin(this.swimPhase * 0.35) * 0.2;
+                this.velocity.y = THREE.MathUtils.clamp((patrolY - this.position.y) * 2.0, -2.0, 2.0);
+            }
+        }
+    }
+}
+
+
 
 

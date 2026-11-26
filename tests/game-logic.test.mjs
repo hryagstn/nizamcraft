@@ -30,7 +30,11 @@ import {
     countEnabledCharacters,
     getEligibleSpawnTypes,
     GAME_MODES,
+    isSurvivalLikeMode,
     ONE_BLOCK_POS,
+    SKYBLOCK_TREE_POS,
+    SKYBLOCK_CHEST_POS,
+    createSkyblockStarterChestItems,
     ONE_BLOCK_PHASES,
     getOneBlockPhase,
     rollOneBlockType,
@@ -385,7 +389,7 @@ test('World starts completely flat without trees, invalidates legacy pre-v2 save
     assert.equal(storageMap.has('nizamcraft-player'), false);
 
     // 2. Surface is flat grass land (z < 22), sandy beach (22..24), and deep sea (z >= 25) with zero trees
-    assert.equal(world.blockTypesList.length, 38);
+    assert.equal(world.blockTypesList.length, 39);
     for (let x = -world.width / 2; x < world.width / 2; x++) {
         for (let z = -world.depth / 2; z < world.depth / 2; z++) {
             assert.equal(world.getBlockAt(x, 0, z), 'obsidian');
@@ -1337,12 +1341,12 @@ test('Senapan Nuklir deals massive AoE nuclear damage to hostiles without hurtin
     }
 });
 
-test('Character roster switch helpers default all 30 characters to OFF and filter spawns safely', () => {
-    assert.equal(CHARACTER_ROSTER.length, 30);
+test('Character roster switch helpers default all 32 characters to OFF and filter spawns safely', () => {
+    assert.equal(CHARACTER_ROSTER.length, 32);
     const rosterTypes = CHARACTER_ROSTER.map(c => c.type);
-    assert.equal(new Set(rosterTypes).size, 30, 'Expected 30 unique character types in CHARACTER_ROSTER');
+    assert.equal(new Set(rosterTypes).size, 32, 'Expected 32 unique character types in CHARACTER_ROSTER');
 
-    for (const id of ['bananakid', 'carrie', 'buu', 'cookie', 'penduduk', 'steve', 'alex', 'sandworm', 'optimus']) {
+    for (const id of ['bananakid', 'carrie', 'buu', 'cookie', 'penduduk', 'steve', 'alex', 'sandworm', 'optimus', 'bloop', 'whaleeater']) {
         assert.ok(rosterTypes.includes(id), `Expected ${id} in CHARACTER_ROSTER`);
     }
 
@@ -1369,7 +1373,7 @@ test('Character roster switch helpers default all 30 characters to OFF and filte
     assert.equal(eligibleBefore.includes('penduduk'), true, 'Non-unique enabled character can still spawn');
 
     const allOn = setAllCharactersEnabled(defaults, true);
-    assert.equal(countEnabledCharacters(allOn), 30);
+    assert.equal(countEnabledCharacters(allOn), 32);
     const allOff = setAllCharactersEnabled(allOn, false);
     assert.equal(countEnabledCharacters(allOff), 0);
 });
@@ -1545,5 +1549,257 @@ test('Game Mode selector & Minecraft One Block Survival helpers isolate saves an
         assert.equal(world.getBlockAt(1, 6, 0), null);
     } finally {
         globalThis.localStorage = prevLS;
+    }
+});
+
+test('Bloop character registers as hostile deep-sea boss with mesh and combat AI', async () => {
+    assert.equal(HOSTILE_MOBS.has('bloop'), true);
+    const { ITEM_CATALOG } = await import('../src/utils/icons.js');
+    const { textures } = await import('../src/utils/textures.js');
+    const hotbarByType = new Map(HOTBAR_ITEMS.map(item => [item.type, item]));
+    assert.ok(hotbarByType.has('spawn_bloop'));
+    assert.ok(ITEM_CATALOG.spawn_bloop);
+    assert.ok(textures.bloopSkin);
+    assert.ok(textures.bloopMaw);
+
+    const THREE = await import('three');
+    const { World } = await import('../src/world/world.js');
+    const { Bloop, Optimus } = await import('../src/entities/mob.js');
+
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+    let playerHitCount = 0;
+    const mockGame = {
+        player: {
+            position: new THREE.Vector3(0, 7, 0),
+            velocity: new THREE.Vector3(),
+            width: 0.6,
+            height: 1.8,
+            takeDamage() { playerHitCount++; }
+        },
+        mobs: [],
+        particles: [],
+        arrows: [],
+        showNotification() {},
+        onMobDefeated() {}
+    };
+
+    const bloop = new Bloop(0, 7, 2.5, scene, world, mockGame);
+    const optimus = new Optimus(0, 7, 0.8, scene, world, mockGame);
+    mockGame.mobs.push(bloop, optimus);
+
+    assert.ok(bloop.mawGroup);
+    assert.ok(bloop.leftFin && bloop.rightFin);
+    assert.equal(bloop.tailSegments.length, 3);
+
+    const prevBloopHp = bloop.hp;
+    for (let i = 0; i < 14; i++) {
+        optimus.update(0.08);
+    }
+    assert.ok(bloop.hp < prevBloopHp, 'Expected friendly protector to fight hostile Bloop');
+
+    for (let i = 0; i < 8; i++) {
+        bloop.update(0.08);
+    }
+    assert.ok(playerHitCount > 0, 'Expected Bloop to attack nearby player');
+
+    for (const m of mockGame.mobs) m.cleanupMesh();
+    for (const p of mockGame.particles) {
+        scene.remove(p.mesh);
+        p.material?.dispose();
+    }
+});
+
+test('Cobblestone block, classic generator physics, obsidian rule, and stone-substitute crafting', async () => {
+    const { ITEM_CATALOG } = await import('../src/utils/icons.js');
+    const { textures } = await import('../src/utils/textures.js');
+    const hotbarByType = new Map(HOTBAR_ITEMS.map(item => [item.type, item]));
+    assert.ok(hotbarByType.has('cobblestone'));
+    assert.ok(ITEM_CATALOG.cobblestone);
+    assert.ok(textures.cobblestone);
+
+    const THREE = await import('three');
+    const { World, BLOCK_TYPES } = await import('../src/world/world.js');
+    assert.ok(BLOCK_TYPES.cobblestone);
+
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+
+    // 1. Classic 4-block step-down SkyBlock Cobblestone Generator at y=12 (air above regular world):
+    // Water(0,12,0) -> Pit(1,12,0 with pit at 1,11,0) -> Gap(2,12,0) <- Lava(3,12,0)
+    world.generateSkyblockTerrain();
+    for (let x = -1; x <= 4; x++) {
+        for (let z = -1; z <= 1; z++) {
+            for (let y = 10; y <= 14; y++) {
+                world.removeBlock(x, y, z, true, true);
+            }
+            world.addBlock(x, 10, z, 'dirt', true, true);
+            const isBoundary = x === -1 || x === 4 || z === -1 || z === 1;
+            if (isBoundary) {
+                world.addBlock(x, 11, z, 'dirt', true, true);
+                world.addBlock(x, 12, z, 'dirt', true, true);
+            } else if (x !== 1) {
+                world.addBlock(x, 11, z, 'dirt', true, true);
+            }
+        }
+    }
+    world.addBlock(0, 12, 0, 'water_source', true, true);
+    world.addBlock(3, 12, 0, 'lava_source', true, true);
+    world.updateMesh();
+
+    for (let tick = 0; tick < 6; tick++) {
+        world.tickLiquids();
+    }
+    assert.equal(world.getBlockAt(2, 12, 0), 'cobblestone', 'Expected 4-block generator to form cobblestone');
+    assert.equal(world.getBlockAt(3, 12, 0), 'lava_source', 'Expected lava_source to stay intact');
+    assert.equal(world.getBlockAt(0, 12, 0), 'water_source', 'Expected water_source to stay intact');
+
+    // Mine generated cobblestone and verify it regenerates cleanly without turning lava into obsidian
+    world.removeBlock(2, 12, 0, true);
+    for (let tick = 0; tick < 4; tick++) {
+        world.tickLiquids();
+    }
+    assert.equal(world.getBlockAt(2, 12, 0), 'cobblestone', 'Expected generator to regenerate cobblestone after mining');
+    assert.equal(world.getBlockAt(3, 12, 0), 'lava_source');
+
+    // 2. 3-block same-tick stream collision (lava_source | air | water_source) -> cobblestone
+    for (let x = 8; x <= 12; x++) {
+        for (let z = -1; z <= 1; z++) {
+            world.addBlock(x, 11, z, 'dirt', true, true);
+            if (x === 8 || x === 12 || z === -1 || z === 1) {
+                world.addBlock(x, 12, z, 'dirt', true, true);
+            }
+        }
+    }
+    world.addBlock(9, 12, 0, 'lava_source', true, true);
+    world.addBlock(11, 12, 0, 'water_source', true, true);
+    world.updateMesh();
+    world.tickLiquids();
+    assert.equal(world.getBlockAt(10, 12, 0), 'cobblestone', 'Expected opposing streams colliding to form cobblestone');
+    assert.equal(world.getBlockAt(9, 12, 0), 'lava_source');
+
+    // 3. Direct water touching lava_source -> obsidian
+    world.addBlock(20, 11, 0, 'dirt', true, true);
+    world.addBlock(21, 11, 0, 'dirt', true, true);
+    world.addBlock(20, 12, 0, 'lava_source', true, true);
+    world.addBlock(21, 12, 0, 'water_source', true, true);
+    world.updateMesh();
+    world.tickLiquids();
+    assert.equal(world.getBlockAt(20, 12, 0), 'obsidian', 'Expected water touching lava_source to form obsidian');
+
+    // 4. Crafting stone tools with cobblestone
+    const stonePick = CRAFTING_RECIPES.find(r => r.id === 'pickaxe_stone');
+    const cobbleGrid = [
+        'cobblestone', 'cobblestone', 'cobblestone',
+        null, 'stick', null,
+        null, 'stick', null
+    ];
+    const matched = matchCraftingGrid(cobbleGrid, 3);
+    assert.equal(matched?.recipe.id, 'pickaxe_stone');
+
+    const bag = [{ type: 'cobblestone', count: 3 }, { type: 'stick', count: 2 }, null, null];
+    assert.equal(canCraftRecipeFromSlots(bag, stonePick), true);
+    const gridOut = Array(9).fill(null);
+    const populated = populateGridForRecipe(bag, gridOut, 3, stonePick);
+    assert.equal(populated.ok, true);
+    assert.equal(gridOut[0]?.type, 'cobblestone');
+    assert.equal(matchCraftingGrid(gridOut, 3)?.recipe.id, 'pickaxe_stone');
+    returnGridToInventory(gridOut, bag);
+    assert.equal(deductRecipeFromSlots(bag, stonePick), true);
+});
+
+test('SkyBlock mode generates L-shaped island, tree, starter chest with Lava+Water, and isolated storage', async () => {
+    assert.equal(GAME_MODES.SKYBLOCK, 'skyblock');
+    assert.equal(isSurvivalLikeMode(GAME_MODES.SKYBLOCK), true);
+    assert.equal(isSurvivalLikeMode(GAME_MODES.SURVIVAL), true);
+    assert.equal(isSurvivalLikeMode(GAME_MODES.FREEPLAY), false);
+
+    const skyKeys = getModeStorageKeys(GAME_MODES.SKYBLOCK);
+    assert.equal(skyKeys.world, 'nizamcraft-save-skyblock');
+    assert.equal(skyKeys.player, 'nizamcraft-player-skyblock');
+    assert.equal(skyKeys.chests, 'nizamcraft-chests-skyblock');
+
+    const starterItems = createSkyblockStarterChestItems();
+    assert.equal(starterItems.length, 18);
+    assert.equal(starterItems[0]?.type, 'lava');
+    assert.ok(starterItems[0].count >= 1);
+    assert.equal(starterItems[1]?.type, 'water');
+    assert.ok(starterItems[1].count >= 1);
+
+    const THREE = await import('three');
+    const { World } = await import('../src/world/world.js');
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+    world.generateSkyblockTerrain();
+
+    // Grass top on L-island, dirt beneath, cutout corner empty, void below y=4
+    assert.equal(world.getBlockAt(0, 6, 0), 'grass');
+    assert.equal(world.getBlockAt(0, 5, 0), 'dirt');
+    assert.equal(world.getBlockAt(0, 4, 0), 'dirt');
+    assert.equal(world.getBlockAt(0, 3, 0), null);
+    assert.equal(world.getBlockAt(1, 6, 0), null, 'Expected L-shaped cutout corner at (1,6,0) to be air');
+    assert.equal(world.getBlockAt(SKYBLOCK_TREE_POS.x, SKYBLOCK_TREE_POS.y, SKYBLOCK_TREE_POS.z), 'wood');
+    assert.equal(world.getBlockAt(SKYBLOCK_TREE_POS.x, SKYBLOCK_TREE_POS.y + 4, SKYBLOCK_TREE_POS.z), 'leaf');
+    assert.equal(world.getBlockAt(SKYBLOCK_CHEST_POS.x, SKYBLOCK_CHEST_POS.y, SKYBLOCK_CHEST_POS.z), 'chest');
+});
+
+test('Whale Eater character registers as hostile crimson kraken boss with 8 tentacles and combat AI', async () => {
+    assert.equal(HOSTILE_MOBS.has('whaleeater'), true);
+    const { ITEM_CATALOG } = await import('../src/utils/icons.js');
+    const { textures } = await import('../src/utils/textures.js');
+    const hotbarByType = new Map(HOTBAR_ITEMS.map(item => [item.type, item]));
+    assert.ok(hotbarByType.has('spawn_whaleeater'));
+    assert.equal(hotbarByType.get('spawn_whaleeater')?.key, 'F12');
+    assert.ok(ITEM_CATALOG.spawn_whaleeater);
+    assert.ok(textures.whaleEaterSkin);
+    assert.ok(textures.whaleEaterEye);
+
+    const keys = HOTBAR_ITEMS.map(item => item.key.toLowerCase());
+    assert.equal(new Set(keys).size, keys.length, 'Expected unique hotbar shortcut keys');
+
+    const THREE = await import('three');
+    const { World } = await import('../src/world/world.js');
+    const { WhaleEater, Optimus } = await import('../src/entities/mob.js');
+
+    const scene = new THREE.Scene();
+    const world = new World(scene);
+    let playerHitCount = 0;
+    const mockGame = {
+        player: {
+            position: new THREE.Vector3(0, 7, 0),
+            velocity: new THREE.Vector3(),
+            width: 0.6,
+            height: 1.8,
+            takeDamage() { playerHitCount++; }
+        },
+        mobs: [],
+        particles: [],
+        arrows: [],
+        showNotification() {},
+        onMobDefeated() {}
+    };
+
+    const whaleEater = new WhaleEater(0, 7, 2.5, scene, world, mockGame);
+    const optimus = new Optimus(0, 7, 0.8, scene, world, mockGame);
+    mockGame.mobs.push(whaleEater, optimus);
+
+    assert.ok(whaleEater.headGroup);
+    assert.equal(whaleEater.tentacles.length, 8);
+
+    const prevHp = whaleEater.hp;
+    for (let i = 0; i < 14; i++) {
+        optimus.update(0.08);
+    }
+    assert.ok(whaleEater.hp < prevHp, 'Expected friendly protector to fight hostile Whale Eater');
+
+    for (let i = 0; i < 8; i++) {
+        whaleEater.update(0.08);
+    }
+    assert.ok(playerHitCount > 0, 'Expected Whale Eater to attack nearby player');
+
+    for (const m of mockGame.mobs) m.cleanupMesh();
+    for (const p of mockGame.particles) {
+        scene.remove(p.mesh);
+        p.material?.dispose();
     }
 });

@@ -161,16 +161,32 @@ export class Player {
 
     respawn() {
         this.onBeforeRespawn?.();
-        const startX = 0;
-        const startZ = 0;
-        let topY = 6;
+        let startX = 0;
+        let startZ = 0;
+        let topY = null;
         for (let y = this.world.height - 1; y >= 0; y--) {
-            const b = this.world.getBlockAt(startX, y, startZ);
-            if (isSolidBlock(b)) {
+            if (isSolidBlock(this.world.getBlockAt(startX, y, startZ))) {
                 topY = y + 0.5;
                 break;
             }
         }
+        if (topY === null) {
+            outer: for (let r = 1; r <= 6; r++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    for (let dz = -r; dz <= r; dz++) {
+                        for (let y = this.world.height - 1; y >= 0; y--) {
+                            if (isSolidBlock(this.world.getBlockAt(dx, y, dz))) {
+                                startX = dx;
+                                startZ = dz;
+                                topY = y + 0.5;
+                                break outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (topY === null) topY = 6;
 
         this.position.set(startX, topY + 1.5, startZ);
         this.velocity.set(0, 0, 0);
@@ -885,7 +901,9 @@ export class Player {
                 spawn_steve: { shell: 0x14b8b8, spot: 0x4736a8 },
                 spawn_alex: { shell: 0xea7a26, spot: 0x73b06b },
                 spawn_sandworm: { shell: 0x6b4c35, spot: 0xdc2626 },
-                spawn_optimus: { shell: 0xdc2626, spot: 0x1d4ed8 }
+                spawn_optimus: { shell: 0xdc2626, spot: 0x1d4ed8 },
+                spawn_bloop: { shell: 0x5a7384, spot: 0xf8fafc },
+                spawn_whaleeater: { shell: 0xb91c1c, spot: 0xfacc15 }
             };
             const eggColors = SPAWN_EGG_COLORS[type] || { shell: 0xdcdcdc, spot: 0x990000 };
             const eggGroup = new THREE.Group();

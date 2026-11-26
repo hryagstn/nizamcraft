@@ -97,6 +97,39 @@ textures.grassSide = createPixelTexture((ctx) => {
     }
 });
 
+// 4b. Cobblestone (interlocking grey stones with crisp dark crevices)
+textures.cobblestone = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#4e4e4e';
+    ctx.fillRect(0, 0, 16, 16);
+
+    const stones = [
+        [0, 0, 6, 4, '#888888', '#a3a3a3'],
+        [7, 0, 5, 3, '#727272', '#909090'],
+        [13, 0, 3, 4, '#848484', '#9e9e9e'],
+        [0, 5, 4, 4, '#6e6e6e', '#8b8b8b'],
+        [5, 4, 6, 4, '#929292', '#b0b0b0'],
+        [12, 5, 4, 4, '#757575', '#919191'],
+        [0, 10, 5, 3, '#8b8b8b', '#a8a8a8'],
+        [6, 9, 5, 4, '#707070', '#8d8d8d'],
+        [12, 10, 4, 3, '#8c8c8c', '#a9a9a9'],
+        [1, 14, 5, 2, '#7b7b7b', '#989898'],
+        [7, 14, 6, 2, '#8a8a8a', '#a6a6a6'],
+        [14, 14, 2, 2, '#6c6c6c', '#868686']
+    ];
+    for (const [sx, sy, sw, sh, fill, hi] of stones) {
+        ctx.fillStyle = fill;
+        ctx.fillRect(sx, sy, sw, sh);
+        ctx.fillStyle = hi;
+        ctx.fillRect(sx, sy, Math.max(1, sw - 1), 1);
+        ctx.fillRect(sx, sy, 1, Math.max(1, sh - 1));
+    }
+    ctx.fillStyle = '#5c5c5c';
+    ctx.fillRect(3, 2, 2, 1);
+    ctx.fillRect(8, 6, 2, 1);
+    ctx.fillRect(2, 11, 2, 1);
+    ctx.fillRect(13, 7, 2, 1);
+});
+
 // 4. Stone
 textures.stone = createPixelTexture((ctx) => {
     ctx.fillStyle = '#7c7c7c'; // Base gray
@@ -2002,10 +2035,102 @@ textures.optimusGrill = createPixelTexture((ctx) => {
     ctx.fillRect(14, 0, 2, 16);
 });
 
+// 70. Bloop Colossal Slate-Blue Leviathan Skin & Cavernous Mouth
+textures.bloopSkin = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#627c91';
+    ctx.fillRect(0, 0, 16, 16);
+    const patches = [
+        [1, 1, 4, 3, '#51697d'],
+        [8, 2, 5, 3, '#7490a6'],
+        [2, 7, 5, 3, '#4c6375'],
+        [10, 8, 4, 3, '#546d80'],
+        [0, 12, 6, 3, '#728da3'],
+        [8, 12, 5, 3, '#485e70']
+    ];
+    for (const [x, y, w, h, c] of patches) {
+        ctx.fillStyle = c;
+        ctx.fillRect(x, y, w, h);
+    }
+    ctx.fillStyle = '#3b4e5e';
+    ctx.fillRect(0, 5, 16, 1);
+    ctx.fillRect(0, 11, 16, 1);
+    ctx.fillRect(6, 0, 1, 6);
+    ctx.fillRect(11, 6, 1, 5);
+});
+
+textures.bloopMaw = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#18222e';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = '#0c1118';
+    ctx.fillRect(2, 2, 12, 12);
+    ctx.fillStyle = '#05070a';
+    ctx.fillRect(4, 4, 8, 8);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(2, 1, 2, 1);
+    ctx.fillRect(6, 1, 2, 1);
+    ctx.fillRect(11, 1, 2, 1);
+    ctx.fillRect(3, 14, 2, 1);
+    ctx.fillRect(8, 14, 2, 1);
+    ctx.fillRect(12, 14, 2, 1);
+});
+
+// 71. Whale Eater Crimson Mottled Octopus Hide & Yellow-Brown Banded Eye
+textures.whaleEaterSkin = createPixelTexture((ctx) => {
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillRect(0, 0, 16, 16);
+
+    const brightPatches = [
+        [1, 1, 4, 3, '#dc2626'],
+        [7, 0, 5, 3, '#dc2626'],
+        [13, 2, 3, 3, '#ea580c'],
+        [2, 5, 4, 4, '#ea580c'],
+        [8, 6, 4, 3, '#dc2626'],
+        [0, 10, 5, 3, '#dc2626'],
+        [7, 11, 5, 3, '#ea580c'],
+        [13, 9, 3, 4, '#dc2626']
+    ];
+    for (const [x, y, w, h, c] of brightPatches) {
+        ctx.fillStyle = c;
+        ctx.fillRect(x, y, w, h);
+    }
+
+    const darkPatches = [
+        [5, 2, 2, 3, '#7f1d1d'],
+        [12, 5, 2, 3, '#991b1b'],
+        [0, 5, 2, 3, '#7f1d1d'],
+        [6, 8, 2, 3, '#991b1b'],
+        [5, 13, 3, 3, '#7f1d1d'],
+        [11, 14, 3, 2, '#991b1b']
+    ];
+    for (const [x, y, w, h, c] of darkPatches) {
+        ctx.fillStyle = c;
+        ctx.fillRect(x, y, w, h);
+    }
+});
+
+textures.whaleEaterEye = createPixelTexture((ctx) => {
+    // Top bright yellow band
+    ctx.fillStyle = '#fde047';
+    ctx.fillRect(0, 0, 16, 5);
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(0, 4, 16, 2);
+    // Horizontal dark brown-black pupil slit across center
+    ctx.fillStyle = '#2b1408';
+    ctx.fillRect(0, 6, 16, 5);
+    ctx.fillStyle = '#1c0c04';
+    ctx.fillRect(2, 7, 12, 3);
+    // Warm amber-gold lower band
+    ctx.fillStyle = '#eab308';
+    ctx.fillRect(0, 11, 16, 5);
+    ctx.fillStyle = '#ca8a04';
+    ctx.fillRect(0, 14, 16, 2);
+});
+
 const BLOCK_TEXTURE_KEY = {
     grass: 'grassSide',
     dirt: 'dirt',
     stone: 'stone',
+    cobblestone: 'cobblestone',
     obsidian: 'obsidian',
     wood: 'woodSide',
     planks: 'planks',
